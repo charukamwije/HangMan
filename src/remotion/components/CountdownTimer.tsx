@@ -6,7 +6,7 @@ import type { Theme } from "../themes";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 
 /**
- * Top-right neon clock "00:30" → "00:00". Visible from frame 0. Below 00:08 it
+ * Top-right neon clock "00:29" → "00:00" (1 Hz). Visible from frame 0. Below 00:08 it
  * enters stress mode: every tick it punches (scale + glow) on the exact frames
  * the vignette throbs, because both read the same `Stress` value.
  */

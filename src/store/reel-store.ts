@@ -6,6 +6,8 @@ import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "@/remotion/defaults";
 import type { ThemeId } from "@/remotion/themes";
 import { autoSchedule, clampTime, normalizeWord, parseLetters } from "@/remotion/timeline";
 import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
+import { FPS } from "@/remotion/constants";
+import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
 
 export type ReelState = {
   hookText: string;
@@ -33,6 +35,8 @@ type Actions = {
   addGuess: () => void;
   removeGuess: (index: number) => void;
   autoDistribute: () => void;
+  /** Load a HangmanPuzzleData payload (validated; throws on invalid input). */
+  loadPuzzle: (raw: unknown) => void;
   reset: () => void;
 };
 
@@ -96,6 +100,24 @@ export const useReelStore = create<ReelState & Actions>()(
       },
       removeGuess: (index) => set({ autoTiming: false, guesses: get().guesses.filter((_, i) => i !== index) }),
       autoDistribute: () => set({ autoTiming: true, guesses: schedule(get()) }),
+      loadPuzzle: (raw) => {
+        const puzzle = parsePuzzle(raw);
+        const t = calculateFrameTimeline(puzzle, FPS);
+        set({
+          hookText: puzzle.viralHookText,
+          category: puzzle.topic,
+          subtitle: puzzle.hint,
+          word: t.word,
+          hintLetter: puzzle.prefilledLetter ?? "",
+          wrongLetters: puzzle.wrongGuesses.join(", "),
+          holdBack: puzzle.holdBack ?? get().holdBack,
+          finalRevealAt: t.reelProps.finalRevealAt,
+          themeId: t.reelProps.themeId,
+          audio: t.reelProps.audio,
+          guesses: t.reelProps.guesses,
+          autoTiming: t.mode === "auto",
+        });
+      },
       reset: () => set(INITIAL),
     }),
     {
@@ -126,3 +148,27 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   audio: s.audio,
   showSafeZones: s.showSafeZones,
 });
+
+/**
+ * Maps editor state to a HangmanPuzzleData payload for /api/render-reel or
+ * `npm run batch`. Manual timings are exported as frames; auto timing exports
+ * an empty revealSequence so the server recomputes the beat grid.
+ */
+export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
+  const word = normalizeWord(s.word);
+  const letters = new Set(word.replace(/ /g, ""));
+  return {
+    topic: s.category,
+    hint: s.subtitle,
+    secretWord: word,
+    wrongGuesses: parseLetters(s.wrongLetters).filter((l) => !letters.has(l)),
+    revealSequence: s.autoTiming
+      ? []
+      : s.guesses.map((g) => ({ frame: Math.round(g.time * FPS), letter: g.letter, status: letters.has(g.letter) ? ("correct" as const) : ("wrong" as const) })),
+    viralHookText: s.hookText,
+    ...(s.hintLetter ? { prefilledLetter: s.hintLetter } : {}),
+    holdBack: s.holdBack,
+    themeId: s.themeId,
+    audio: s.audio,
+  };
+};

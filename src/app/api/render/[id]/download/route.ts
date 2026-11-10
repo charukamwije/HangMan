@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 import { getJob } from "@/lib/render-jobs";
@@ -19,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     headers: {
       "Content-Type": "video/mp4",
       "Content-Length": String(stat.size),
-      "Content-Disposition": `attachment; filename="hangman-reel-4k-${id.slice(0, 8)}.mp4"`,
+      "Content-Disposition": `attachment; filename="${path.basename(job.outputPath)}"`,
     },
   });
 }

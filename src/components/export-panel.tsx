@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Copy, Download, FileJson, Film, Loader2, XCircle } from "lucide-react";
+import { Check, Copy, Download, FileJson, Film, Loader2, Upload, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ReelProps } from "@/remotion/types";
 import type { RenderJobPublic } from "@/lib/render-jobs";
+import { toPuzzleData, useReelStore } from "@/store/reel-store";
 
 const CLI = `npx remotion render src/remotion/index.ts HangmanReel renders/hangman-reel-4k.mp4 --props=./reel-props.json`;
 
@@ -42,11 +43,26 @@ export function ExportPanel({ inputProps }: { inputProps: ReelProps }) {
     poll(body.id);
   };
 
-  const downloadProps = () => {
-    const blob = new Blob([JSON.stringify({ ...inputProps, showSafeZones: false }, null, 2)], { type: "application/json" });
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "reel-props.json" });
+  const saveJson = (data: unknown, name: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
     a.click();
     URL.revokeObjectURL(a.href);
+  };
+  const downloadProps = () => saveJson({ ...inputProps, showSafeZones: false }, "reel-props.json");
+  const downloadPuzzle = () => saveJson(toPuzzleData(useReelStore.getState()), "puzzle.json");
+
+  const fileInput = useRef<HTMLInputElement>(null);
+  const importPuzzle = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      useReelStore.getState().loadPuzzle(JSON.parse(await file.text()));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read puzzle JSON");
+    } finally {
+      if (fileInput.current) fileInput.current.value = "";
+    }
   };
 
   const busy = job && (job.status === "queued" || job.status === "bundling" || job.status === "rendering");
@@ -95,6 +111,13 @@ export function ExportPanel({ inputProps }: { inputProps: ReelProps }) {
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       <div className="grid grid-cols-2 gap-2">
+        <Button size="sm" variant="outline" onClick={downloadPuzzle} title="HangmanPuzzleData for /api/render-reel or npm run batch">
+          <FileJson /> puzzle.json
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}>
+          <Upload /> Import puzzle
+        </Button>
+        <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={(e) => importPuzzle(e.target.files?.[0])} />
         <Button size="sm" variant="outline" onClick={downloadProps}>
           <FileJson /> props.json
         </Button>

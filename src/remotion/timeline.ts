@@ -179,7 +179,10 @@ export function resolveTimeline(
   }
 
   // Letters not guessed before the reveal pop in one after another at the reveal.
-  const stagger = finalRevealStagger(fps);
+  // The stagger shrinks if needed so the last pop still lands inside the reel.
+  const hidden = [...new Set(word.replace(/ /g, ""))].filter((c) => !correctKeyFrames.has(c));
+  const room = durationFrames - 1 - finalRevealFrame;
+  const stagger = hidden.length > 1 ? Math.max(0, Math.min(finalRevealStagger(fps), Math.floor(room / (hidden.length - 1)))) : 0;
   let k = 0;
   const finalOrder = new Map<string, number>();
   for (const c of word) {
@@ -208,7 +211,7 @@ export function resolveTimeline(
   };
 }
 
-/** Seconds shown on the clock at a frame: 30 → 0, reaching 0 at COUNTDOWN_ENDS_AT and holding. */
+/** Seconds shown on the clock at a frame: COUNTDOWN_FROM → 0, reaching 0 at COUNTDOWN_ENDS_AT and holding. */
 export const countdownAt = (frame: number, fps: number) =>
   Math.max(0, COUNTDOWN_FROM - Math.floor(((frame / fps) * COUNTDOWN_FROM) / COUNTDOWN_ENDS_AT + 1e-6));
 

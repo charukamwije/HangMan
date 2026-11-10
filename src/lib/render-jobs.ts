@@ -27,7 +27,20 @@ export type RenderJobPublic = {
   finishedAt?: number;
 };
 
-type RenderJob = RenderJobPublic & { outputPath: string; inputProps: ReelProps };
+type RenderJob = RenderJobPublic & {
+  outputPath: string;
+  inputProps: ReelProps;
+  compositionId: string;
+  /** Resolves when the job finishes (done or error); never rejects. */
+  finished: Promise<RenderJob>;
+};
+
+export type RenderJobOptions = {
+  /** Composition to render (default: 4K HangmanReel). */
+  compositionId?: string;
+  /** Output file name without extension; sanitised. Default: hangman-<id>. */
+  fileName?: string;
+};
 
 const ROOT = process.cwd();
 const OUT_DIR = path.join(ROOT, "renders");
@@ -51,14 +64,19 @@ function getServeUrl(): Promise<string> {
   return g.__reelBundle;
 }
 
-export const toPublic = ({ outputPath: _o, inputProps: _i, ...rest }: RenderJob): RenderJobPublic => rest;
+export const toPublic = ({ outputPath: _o, inputProps: _i, compositionId: _c, finished: _f, ...rest }: RenderJob): RenderJobPublic => rest;
+
+const safeName = (s: string) => s.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "hangman";
 
 export function getJob(id: string) {
   return jobs.get(id);
 }
 
-export function createRenderJob(inputProps: ReelProps): RenderJob {
+export function createRenderJob(inputProps: ReelProps, options: RenderJobOptions = {}): RenderJob {
   const id = crypto.randomUUID();
+  const base = options.fileName ? `${safeName(options.fileName)}-${id.slice(0, 6)}` : `hangman-${id.slice(0, 8)}`;
+  let resolveFinished!: (job: RenderJob) => void;
+  const finished = new Promise<RenderJob>((r) => (resolveFinished = r));
   const job: RenderJob = {
     id,
     status: "queued",
@@ -66,12 +84,14 @@ export function createRenderJob(inputProps: ReelProps): RenderJob {
     renderedFrames: 0,
     totalFrames: 0,
     createdAt: Date.now(),
-    outputPath: path.join(OUT_DIR, `hangman-${id.slice(0, 8)}.mp4`),
+    outputPath: path.join(OUT_DIR, `${base}.mp4`),
     inputProps: { ...inputProps, showSafeZones: false },
+    compositionId: options.compositionId ?? COMPOSITION_ID,
+    finished,
   };
   jobs.set(id, job);
   // Serialize renders: a 4K render saturates the machine on its own.
-  g.__reelQueue = (g.__reelQueue ?? Promise.resolve()).then(() => runJob(job));
+  g.__reelQueue = (g.__reelQueue ?? Promise.resolve()).then(() => runJob(job)).then(() => resolveFinished(job));
   return job;
 }
 
@@ -81,7 +101,7 @@ async function runJob(job: RenderJob) {
     job.status = "bundling";
     const serveUrl = await getServeUrl();
 
-    const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: job.inputProps });
+    const composition = await selectComposition({ serveUrl, id: job.compositionId, inputProps: job.inputProps });
     job.totalFrames = composition.durationInFrames;
     job.status = "rendering";
 

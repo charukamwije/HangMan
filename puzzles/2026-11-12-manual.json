@@ -1,0 +1,22 @@
+{
+  "id": "2026-11-12-chess",
+  "topic": "CHESS OPENINGS",
+  "hint": "AN AGGRESSIVE FIRST MOVE",
+  "secretWord": "KINGS GAMBIT",
+  "wrongGuesses": ["E", "O"],
+  "viralHookText": "ONLY GRANDMASTERS GET THIS",
+  "prefilledLetter": "G",
+  "revealSequence": [
+    { "frame": 60, "letter": "I", "status": "correct" },
+    { "frame": 129, "letter": "E", "status": "wrong" },
+    { "frame": 198, "letter": "N", "status": "correct" },
+    { "frame": 267, "letter": "S", "status": "correct" },
+    { "frame": 336, "letter": "O", "status": "wrong" },
+    { "frame": 405, "letter": "A", "status": "correct" },
+    { "frame": 474, "letter": "R", "status": "wrong" },
+    { "frame": 543, "letter": "M", "status": "correct" },
+    { "frame": 612, "letter": "U", "status": "wrong" },
+    { "frame": 681, "letter": "B", "status": "correct" },
+    { "frame": 750, "letter": "P", "status": "wrong" }
+  ]
+}

@@ -95,41 +95,139 @@ function clock(freq, seed) {
   return out;
 }
 
-/** Chess-piece click on wood + bright bell chime. */
-function correct() {
-  const out = buf(1.4), rnd = mulberry32(7);
+/** Low-frequency hardwood gavel strike with a small rebound and a short room tail (frame-0 impact). */
+function gavel() {
+  const out = buf(1.3), rnd = mulberry32(31);
   const [l, r] = out;
-  const partials = [[1318.5, 1, 0.55], [1975.5, 0.6, 0.45], [2637, 0.35, 0.3], [3951, 0.15, 0.18]];
+  const modes = [[176, 0.55, 0.11], [409, 0.34, 0.055], [688, 0.2, 0.032], [1127, 0.12, 0.018]];
+  const strike = (t, gain) => {
+    if (t < 0) return 0;
+    let wood = 0;
+    for (const [f, a, d] of modes) wood += Math.sin(TAU * f * t) * a * env(t, 0.0004, d);
+    const sub = Math.sin(TAU * (46 * t + (70 / 22) * (1 - Math.exp(-t * 22)))) * env(t, 0.0015, 0.2);
+    return gain * (sub * 1.1 + wood);
+  };
+  let room = 0;
   for (let i = 0; i < l.length; i++) {
     const t = i / SR;
-    const click = (rnd() * 2 - 1) * env(t, 0.0002, 0.003) * 0.9 + Math.sin(TAU * 3400 * t) * env(t, 0.0002, 0.012) * 0.4;
-    let bell = 0;
-    for (const [f, a, d] of partials) bell += Math.sin(TAU * f * t + Math.sin(TAU * 5 * t) * 0.02) * a * env(t - 0.012, 0.004, d);
-    l[i] = click + bell * 0.55;
-    r[i] = click + bell * 0.55 * (1 + 0.04 * Math.sin(TAU * 3 * t)); // gentle stereo shimmer
+    const crack = (rnd() * 2 - 1) * env(t, 0.0002, 0.005) * 0.9;
+    room += 0.02 * ((rnd() * 2 - 1) - room);
+    const tail = room * env(t, 0.012, 0.28) * 0.9;
+    const v = strike(t, 1) + strike(t - 0.092, 0.22) + crack;
+    l[i] = v + tail;
+    r[i] = v * 0.97 - tail;
   }
+  lowpass(l, 5200); lowpass(r, 5200);
+  fade(out, 0, 0.08);
+  normalize(out, 0.95);
+  return out;
+}
+
+/** Mechanical clock tick (bright) / tock (woody); `pitch` in semitones for the final-seconds ticks. */
+function tick(freq, seed, pitch = 0, weight = 0) {
+  const out = clock(freq * 2 ** (pitch / 12), seed);
+  if (weight) {
+    // Heavier escapement thunk under the urgent ticks.
+    const [l, r] = out;
+    for (let i = 0; i < l.length; i++) {
+      const t = i / SR;
+      const thunk = Math.sin(TAU * 160 * t) * env(t, 0.0008, 0.02) * weight;
+      l[i] += thunk; r[i] += thunk;
+    }
+    normalize(out, 0.85);
+  }
+  return out;
+}
+
+/** Typewriter key: hard strike transient, metallic typebar ping, platen thunk, then the key return. */
+function typewriter() {
+  const out = buf(0.16), rnd = mulberry32(41);
+  const [l, r] = out;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const hit = (rnd() * 2 - 1) * env(t, 0.0001, 0.0025);
+    const ping = (Math.sin(TAU * 2870 * t) * 0.5 + Math.sin(TAU * 4130 * t) * 0.3) * env(t, 0.0002, 0.009);
+    const body = Math.sin(TAU * 235 * t) * env(t, 0.0006, 0.014) * 0.6;
+    const ret = (rnd() * 2 - 1) * env(t - 0.021, 0.0002, 0.003) * 0.45;
+    l[i] = hit + ping + body + ret;
+    r[i] = hit * 0.9 + ping * 1.05 + body + ret * 0.8;
+  }
+  highpass(l, 120); highpass(r, 120);
   normalize(out, 0.9);
   return out;
 }
 
-/** Low buzzer + sharp wooden thud. */
-function wrong() {
-  const out = buf(0.75), rnd = mulberry32(13);
+/** Subtle metallic chime: inharmonic bell partials with a soft attack. */
+function chime() {
+  const out = buf(1.3);
   const [l, r] = out;
-  let thudPhase = 0;
+  const partials = [[1760, 1, 0.5], [4083, 0.42, 0.26], [7480, 0.16, 0.12], [2640, 0.22, 0.38]];
   for (let i = 0; i < l.length; i++) {
     const t = i / SR;
-    const f = 150 * Math.exp(-t * 18) + 55;
-    thudPhase += (TAU * f) / SR;
-    const thud = Math.sin(thudPhase) * env(t, 0.001, 0.09) * 1.0 + (rnd() * 2 - 1) * env(t, 0.0005, 0.012) * 0.5;
-    let buzz = 0;
-    for (let h = 1; h <= 9; h += 2) buzz += Math.sin(TAU * 98 * h * t) / h; // square-ish
-    const buzzEnv = t < 0.02 ? 0 : t < 0.03 ? (t - 0.02) / 0.01 : t < 0.42 ? 1 : Math.exp(-(t - 0.42) / 0.06);
-    l[i] = thud + buzz * buzzEnv * 0.32;
-    r[i] = thud + buzz * buzzEnv * 0.3;
+    let v = 0;
+    for (const [f, a, d] of partials) v += Math.sin(TAU * f * t + 0.015 * Math.sin(TAU * 4.5 * t)) * a * env(t, 0.0025, d);
+    l[i] = v;
+    r[i] = v * (1 + 0.05 * Math.sin(TAU * 2.2 * t));
   }
-  lowpass(l, 2600); lowpass(r, 2600);
-  normalize(out, 0.9);
+  fade(out, 0, 0.1);
+  normalize(out, 0.7);
+  return out;
+}
+
+/** Deep mahogany thud: falling sub, low wood body modes, dull felt transient. */
+function thud() {
+  const out = buf(0.65), rnd = mulberry32(53);
+  const [l, r] = out;
+  const modes = [[138, 0.6, 0.07], [257, 0.35, 0.045], [391, 0.18, 0.03]];
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const sub = Math.sin(TAU * (52 * t + (60 / 16) * (1 - Math.exp(-t * 16)))) * env(t, 0.002, 0.16);
+    let wood = 0;
+    for (const [f, a, d] of modes) wood += Math.sin(TAU * f * t) * a * env(t, 0.0008, d);
+    const felt = (rnd() * 2 - 1) * env(t, 0.0004, 0.008) * 0.5;
+    l[i] = r[i] = sub * 1.1 + wood + felt;
+  }
+  lowpass(l, 1700); lowpass(r, 1700);
+  fade(out, 0, 0.06);
+  normalize(out, 0.92);
+  return out;
+}
+
+/**
+ * Dark brass swell in D minor: detuned saw ensemble through an opening
+ * two-pole filter. Crescendo over 3 s to a peak, then a 1.5 s tail.
+ */
+function swell() {
+  const PEAK = 3, LEN = 4.5;
+  const out = buf(LEN);
+  const [l, r] = out;
+  const voices = [73.42, 110, 146.83, 174.61, 220].flatMap((f, k) => [
+    { f: f * 0.997, ph: k * 0.13, pan: 0.3 },
+    { f: f * 1.003, ph: k * 0.29, pan: 0.7 },
+  ]);
+  let l1 = 0, l2 = 0, r1 = 0, r2 = 0;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const vib = 1 + 0.004 * Math.min(1, t / PEAK) * Math.sin(TAU * 5.2 * t);
+    let sl = 0, sr = 0;
+    for (const v of voices) {
+      v.ph = (v.ph + (v.f * vib) / SR) % 1;
+      const s = v.ph * 2 - 1;
+      sl += s * (1 - v.pan);
+      sr += s * v.pan;
+    }
+    const rise = Math.min(1, t / PEAK);
+    const amp = t < PEAK ? rise ** 2.2 : Math.exp(-(t - PEAK) / 0.55);
+    const cutoff = 140 + 1700 * (t < PEAK ? rise ** 1.6 : Math.exp(-(t - PEAK) / 0.8));
+    const a = 1 - Math.exp((-TAU * cutoff) / SR);
+    l1 += a * (sl - l1); l2 += a * (l1 - l2);
+    r1 += a * (sr - r1); r2 += a * (r1 - r2);
+    const sub = Math.sin(TAU * 36.71 * t) * amp * 0.5;
+    l[i] = l2 * amp + sub;
+    r[i] = r2 * amp + sub;
+  }
+  fade(out, 0.05, 0.4);
+  normalize(out, 0.85);
   return out;
 }
 
@@ -151,25 +249,6 @@ function reveal() {
     r[i] = boom + arp * 0.92 + air;
   }
   normalize(out, 0.92);
-  return out;
-}
-
-/** Filtered-noise whoosh for the intro. */
-function whoosh() {
-  const out = buf(1.1), rnd = mulberry32(3);
-  const [l, r] = out;
-  let yl = 0, yr = 0;
-  for (let i = 0; i < l.length; i++) {
-    const t = i / SR, p = t / 1.1;
-    const cutoff = 300 + 5200 * Math.sin(Math.PI * p) ** 2;
-    const a = 1 - Math.exp((-TAU * cutoff) / SR);
-    const g = Math.sin(Math.PI * Math.min(1, p * 1.15)) ** 2;
-    yl += a * (rnd() * 2 - 1 - yl);
-    yr += a * (rnd() * 2 - 1 - yr);
-    l[i] = yl * g * (1 - p * 0.5);
-    r[i] = yr * g * (0.5 + p * 0.5); // pans left → right
-  }
-  normalize(out, 0.8);
   return out;
 }
 
@@ -221,10 +300,14 @@ function ambient(seconds = 30) {
 // ---------------------------------------------------------------- main
 fs.mkdirSync(OUT_DIR, { recursive: true });
 console.log(`Generating SFX → ${path.relative(process.cwd(), OUT_DIR)}`);
-writeWav("tick.wav", clock(2100, 1));
-writeWav("tock.wav", clock(1250, 2));
-writeWav("correct.wav", correct());
-writeWav("wrong.wav", wrong());
+writeWav("gavel.wav", gavel());
+writeWav("tick.wav", tick(2100, 1));
+writeWav("tock.wav", tick(1250, 2));
+// Final 5 seconds: each tick 2 semitones higher and a little heavier (00:05 → 00:01).
+for (let r = 5; r >= 1; r--) writeWav(`tick-final-${r}.wav`, tick(2100, 10 + r, 2 * (6 - r), 0.15 * (6 - r)));
+writeWav("typewriter.wav", typewriter());
+writeWav("chime.wav", chime());
+writeWav("thud.wav", thud());
+writeWav("swell.wav", swell());
 writeWav("reveal.wav", reveal());
-writeWav("whoosh.wav", whoosh());
 writeWav("ambient.wav", ambient());
