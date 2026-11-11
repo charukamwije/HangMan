@@ -3,7 +3,7 @@
  *
  * The math (all at `fps`, 30 by default, so D = 900 frames):
  *
- *   frame 0                  prefilled letter (every occurrence) + hook
+ *   frames 0–42              opening hook (hook.ts): 1 s of decoding, prefilled letter locks on 36
  *   frame F₁ = 2.0 s · fps   first guess
  *   Fₙ = F₁ + (n − 1) · S    S = step snapped to 0.1 s, 2.0 s ≤ S ≤ 2.5 s
  *                            (60–75 frames), chosen as the widest step that
@@ -19,6 +19,7 @@
  */
 import { COUNTDOWN_ENDS_AT, DURATION_SECONDS } from "../constants";
 import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "../defaults";
+import { HOOK_FRAMES_30, hookFrame } from "../hook";
 import { autoSchedule, normalizeWord, resolveHintLetter, resolveTimeline } from "../timeline";
 import type { Guess, ReelProps } from "../types";
 import type { FrameTimeline, HangmanPuzzleData, RevealEvent } from "./types";
@@ -60,8 +61,8 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
       seen.add(l);
       const actual = letters.has(l) ? "correct" : "wrong";
       if (actual !== e.status) warnings.push(`revealSequence: "${l}" is ${actual}, not ${e.status}.`);
-      // Guesses must land after frame 0 and before the reveal (a late correct letter would just merge into it).
-      const frame = Math.max(1, Math.min(finalRevealFrame - 1, Math.round(e.frame)));
+      // Guesses must land after the opening hook and before the reveal (a late correct letter would just merge into it).
+      const frame = Math.max(hookFrame(HOOK_FRAMES_30.end, fps), Math.min(finalRevealFrame - 1, Math.round(e.frame)));
       if (frame !== e.frame) warnings.push(`revealSequence: "${l}" moved from frame ${e.frame} to ${frame}.`);
       guesses.push({ letter: l, time: frame / fps });
     }
@@ -94,7 +95,7 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
   // ---- 3. Resolve with the same engine the composition renders with --------
   const tl = resolveTimeline(reelProps, fps);
   const revealSequence: RevealEvent[] = [];
-  if (prefilledLetter) revealSequence.push({ frame: 0, letter: prefilledLetter, status: "prefilled" });
+  if (prefilledLetter) revealSequence.push({ frame: tl.hook.lockFrame, letter: prefilledLetter, status: "prefilled" });
   for (const g of tl.guesses) {
     if (g.kind === "wrong") revealSequence.push({ frame: g.frame, letter: g.letter, status: "wrong" });
     else if (g.frame < tl.finalRevealFrame) revealSequence.push({ frame: g.frame, letter: g.letter, status: "correct" });

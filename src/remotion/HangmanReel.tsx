@@ -1,13 +1,14 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { DESIGN_HEIGHT, DESIGN_WIDTH, KEYBOX_SHAKE_PX_AT_1080, SAFE_ZONE } from "./constants";
-import { framesSinceLast, ramp, stressAt } from "./motion";
+import { framesSinceLast, NEVER, ramp, strikeShake, stressAt } from "./motion";
 import { getTheme } from "./themes";
 import { resolveTimeline } from "./timeline";
 import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
 import { CountdownTimer } from "./components/CountdownTimer";
+import { GuessCallouts } from "./components/GuessCallout";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
 import { LivesRow } from "./components/LivesRow";
@@ -16,7 +17,7 @@ import { measureWordBoard, WordBoard } from "./components/WordBoard";
 
 // Vertical layout on the 2160×3840 design canvas.
 const WORD_CENTER_Y = 1500;
-const KEYBOARD_BOTTOM = DESIGN_HEIGHT - SAFE_ZONE.bottom + 20; // bottom row clears platform captions
+const KEYBOARD_BOTTOM = DESIGN_HEIGHT - SAFE_ZONE.bottom - 20; // whole key box sits above platform captions
 /** 5 px at 1080 wide → 10 design px; the stage scale turns it back into 5 px / 10 px on output. */
 const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
 
@@ -25,7 +26,10 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  *
  * Retention structure:
  *  - Frame 0 is a complete frame: hook banner, category, every word slot, the
- *    pre-filled hint letter, clock and keys. No black frame, no fade-in.
+ *    first decoy mid-pop, clock and keys. No black frame, no fade-in.
+ *  - Frames 0–42 are the "machine gun" hook (hook.ts): a full second of
+ *    accelerating decoding over a tape-rewind of the music, then the hint
+ *    letter snaps in and locks on frame 36.
  *  - Background pushes in 1.00 → 1.08 (Ken Burns) for the whole reel.
  *  - A reveal or strike lands every 2.0–2.5 s (see autoSchedule).
  *  - Strikes kick the key box sideways with a spring.
@@ -73,22 +77,44 @@ const ReelStage: React.FC<ReelProps> = (props) => {
 
   // Impact overlays: red edge flash on a strike, accent bloom on a correct reveal.
   const sinceWrong = framesSinceLast(timeline.wrongFrames, frame) / fps;
-  const redFlash = ramp(sinceWrong, [0, 0.05, 0.43], [0, 0.55, 0]);
+  // Opening hook: every ✖ fires a short, sharp crimson edge flash (machine-gun strobe).
+  const sinceHookStrike = frame < timeline.hook.clearFrame ? framesSinceLast(timeline.hook.strikeFrames, frame) : NEVER;
+  const redFlash = Math.max(ramp(sinceWrong, [0, 0.03, 0.5], [0, 0.85, 0]), ramp(sinceHookStrike, [0, 2], [0.4, 0]));
+  // Full-frame crimson hit on the first 2 frames of a wrong guess.
+  const redHit = ramp(sinceWrong, [0, 0.067], [0.28, 0]);
   const correctFrames = useMemo(
-    () => timeline.guesses.filter((g) => g.kind === "correct" && g.frame < timeline.finalRevealFrame).map((g) => g.frame),
+    () => [
+      timeline.hook.lockFrame, // accent bloom as the hint locks in at the end of the hook
+      ...timeline.guesses.filter((g) => g.kind === "correct" && g.frame < timeline.finalRevealFrame).map((g) => g.frame),
+    ],
     [timeline],
   );
-  const bloom = ramp(framesSinceLast(correctFrames, frame) / fps, [0, 0.067, 0.5], [0, 0.22, 0]);
+  const sinceCorrect = framesSinceLast(correctFrames, frame);
+  const bloom = ramp(sinceCorrect / fps, [0, 0.05, 0.6], [0, 0.45, 0]);
+  // White exposure pop on the correct impact frame.
+  const whiteHit = ramp(sinceCorrect, [0, 2], [0.18, 0]);
+
+  // Camera: wrong guesses shake the whole stage (x + y, out of phase); correct ones punch in.
+  const wrongSince = framesSinceLast(timeline.wrongFrames, frame);
+  const camX = strikeShake(wrongSince, fps, 44);
+  const camY = strikeShake(wrongSince - 1, fps, -22);
+  const punch = ramp(sinceCorrect / fps, [0, 0.05, 0.4], [0, 1, 0]);
+  // Overscan just enough while shaking that the frame edge never shows.
+  // (origin is x centre / WORD_CENTER_Y, so the nearest edges are DESIGN_WIDTH/2 and WORD_CENTER_Y away)
+  const overscan = 1.1 * Math.max(Math.abs(camX) / (DESIGN_WIDTH / 2), Math.abs(camY) / WORD_CENTER_Y);
+  const camScale = 1 + 0.035 * punch + overscan;
+  const camera = camX || camY || punch ? `translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
   const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]);
 
   return (
     <AbsoluteFill style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }}>
+      <AbsoluteFill style={{ transform: camera, transformOrigin: `50% ${WORD_CENTER_Y}px` }}>
       <Background theme={theme} />
       <StressVignette stress={stress} />
 
-      <Header theme={theme} hookText={props.hookText} category={props.category} subtitle={props.subtitle} />
+      <Header theme={theme} hookText={props.hookText} category={props.category} subtitle={props.subtitle} bannerFlip={timeline.hook.bannerFrames} />
       <CountdownTimer theme={theme} tickFrames={timeline.tickFrames} stress={stress} />
-      <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} />
+      <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} finalRevealFrame={timeline.finalRevealFrame} top={livesTop} />
       <Keyboard
         theme={theme}
@@ -98,6 +124,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         wrongFrames={timeline.wrongFrames}
         shakePx={KEYBOX_SHAKE}
       />
+      <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} />
+      </AbsoluteFill>
 
       {redFlash > 0.001 && (
         <AbsoluteFill
@@ -109,6 +137,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
           }}
         />
       )}
+      {redHit > 0.001 && <AbsoluteFill style={{ pointerEvents: "none", background: theme.wrong, opacity: redHit, mixBlendMode: "screen" }} />}
+      {whiteHit > 0.001 && <AbsoluteFill style={{ pointerEvents: "none", background: "#ffffff", opacity: whiteHit, mixBlendMode: "screen" }} />}
       {Math.max(bloom, finalBloom) > 0.001 && (
         <AbsoluteFill
           style={{

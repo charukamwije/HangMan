@@ -292,8 +292,202 @@ function ambient(seconds = 30) {
     l[i] = fl * 0.9 + pad + pulse + pl;
     r[i] = fr * 0.9 + pad * 0.9 + pulse + pr;
   }
-  fade(out, 1.5, 1.2);
+  fade(out, 0.15, 1.2); // short fade-in: the drone sits under the 1 s opening hook
   normalize(out, 0.8);
+  return out;
+}
+
+/** Opening-hook click: geiger/typewriter tick — noise snap + bright ping, 50 ms. */
+function click() {
+  const out = buf(0.05), rnd = mulberry32(51);
+  const [l, r] = out;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const snap = (rnd() * 2 - 1) * env(t, 0.00005, 0.0012);
+    const ping = (Math.sin(TAU * 3500 * t) * 0.55 + Math.sin(TAU * 1800 * t) * 0.3) * env(t, 0.0001, 0.004);
+    l[i] = snap + ping;
+    r[i] = snap * 0.85 + ping * 1.05;
+  }
+  highpass(l, 300); highpass(r, 300);
+  fade(out, 0, 0.01);
+  normalize(out, 0.9);
+  return out;
+}
+
+/** Metallic mechanical lock: two inharmonic latch strikes 40 ms apart, a low thunk and a short ring. */
+function lock() {
+  const out = buf(0.5), rnd = mulberry32(61);
+  const [l, r] = out;
+  const partials = [[1850, 0.5, 0.05], [2930, 0.35, 0.035], [4410, 0.22, 0.02], [6120, 0.12, 0.012]];
+  const strike = (t, gain, detune) => {
+    if (t < 0) return 0;
+    let v = (rnd() * 2 - 1) * env(t, 0.00005, 0.002) * 0.8;
+    for (const [f, a, d] of partials) v += Math.sin(TAU * f * detune * t) * a * env(t, 0.0001, d);
+    return v * gain;
+  };
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const thunk = Math.sin(TAU * (95 * t + 2 * (1 - Math.exp(-t * 40)))) * env(t, 0.0008, 0.05) * 0.9;
+    const ring = Math.sin(TAU * 2450 * t) * env(t - 0.04, 0.002, 0.14) * 0.12;
+    const v = strike(t, 0.7, 1) + strike(t - 0.04, 1, 1.06) + thunk;
+    l[i] = v + ring;
+    r[i] = v * 0.96 - ring * 0.8;
+  }
+  fade(out, 0, 0.1);
+  normalize(out, 0.9);
+  return out;
+}
+
+// Keep in sync with HOOK_FRAMES_30 in src/remotion/hook.ts.
+/** The decode (and so the rewind) lasts the whole first second: frames 0 → clear (30). */
+const REWIND_SECONDS = 30 / 30;
+/** music.wav is placed on this frame (hook lock, musicIn[0]). */
+const MUSIC_START_FRAME_30 = 36;
+
+/**
+ * 120 BPM staccato pizzicato cello + woodblock bed (D minor: Dm · Bb · Gm · A).
+ * The grid is anchored so that, placed on MUSIC_START_FRAME_30, every bar
+ * downbeat lands on a clock tick (frame 60, 120, …; 120 BPM = 2 beats per
+ * tick). The 8ths before the first downbeat are an A-chord pickup into Dm.
+ */
+function music(seconds = 29) {
+  const out = buf(seconds), rnd = mulberry32(71);
+  const [l, r] = out;
+  const EIGHTH = 0.25;
+  const DOWNBEAT = (Math.ceil(MUSIC_START_FRAME_30 / 30) * 30 - MUSIC_START_FRAME_30) / 30; // 0.8 s
+  const roots = [146.83, 116.54, 98.0, 110.0];
+  const pattern = [1, 1, 1.5, 1, 2, 1.5, 1, 1.5]; // ratios over the root, one per 8th
+  const mod = (a, m) => ((a % m) + m) % m;
+  const cello = new Float32Array(l.length);
+  const wood = new Float32Array(l.length);
+  const notes = [];
+  for (let n = -Math.floor(DOWNBEAT / EIGHTH); DOWNBEAT + n * EIGHTH < seconds; n++) {
+    const at = DOWNBEAT + n * EIGHTH;
+    if (at < 0) continue;
+    const bar = Math.floor(n / 8);
+    notes.push({ at, f: roots[mod(bar, 4)] * pattern[mod(n, 8)], accent: mod(n, 8) === 0 ? 1 : mod(n, 2) === 0 ? 0.75 : 0.55, n });
+  }
+  for (const note of notes) {
+    const start = Math.floor(note.at * SR), len = Math.floor(0.22 * SR);
+    let phase = rnd();
+    for (let j = 0; j < len && start + j < cello.length; j++) {
+      const t = j / SR;
+      phase = (phase + note.f / SR) % 1;
+      // Plucked: saw + body sine, fast decay (staccato), little bow-scrape noise on the attack.
+      cello[start + j] += ((phase * 2 - 1) * 0.6 + Math.sin(TAU * note.f * t) * 0.5 + (rnd() * 2 - 1) * env(t, 0.0005, 0.004) * 0.3) * env(t, 0.004, 0.07) * note.accent;
+    }
+    // Woodblock on every 8th, brighter on the beat.
+    const on = mod(note.n, 2) === 0;
+    const wf = on ? 1180 : 900;
+    for (let j = 0; j < 0.06 * SR && start + j < wood.length; j++) {
+      const t = j / SR;
+      wood[start + j] += (Math.sin(TAU * wf * t) + 0.4 * Math.sin(TAU * wf * 2.73 * t)) * env(t, 0.0002, 0.012) * (on ? 0.32 : 0.2);
+    }
+  }
+  lowpass(cello, 1400);
+  highpass(cello, 50);
+  for (let i = 0; i < l.length; i++) {
+    l[i] = cello[i] * 0.9 + wood[i] * 0.8;
+    r[i] = cello[i] * 0.8 + wood[i] * 1.0;
+  }
+  fade(out, 0.02, 1.2);
+  normalize(out, 0.8);
+  return out;
+}
+
+/**
+ * Tape rewind of the music bed for the 1 s decode: the same cello/woodblock
+ * track read BACKWARDS, accelerating 3× → 14× (the decoy cadence accelerates
+ * 4 → 1 frame gaps on the same curve), with tape flutter, a motor whine that
+ * tracks the speed and hiss. Hard-stops at REWIND_SECONDS (the board clear).
+ */
+function rewind(source) {
+  const [sl, sr] = source;
+  const out = buf(REWIND_SECONDS), rnd = mulberry32(91);
+  const [l, r] = out;
+  const read = (ch, pos) => {
+    const i = Math.floor(pos), f = pos - i;
+    const a = ch[Math.max(0, Math.min(ch.length - 1, i))], b = ch[Math.max(0, Math.min(ch.length - 1, i + 1))];
+    return a + (b - a) * f;
+  };
+  let pos = 14 * SR; // start 14 s in and run backwards (≈ 8.5 s of music in 1 s)
+  let whine = 0;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR, p = t / REWIND_SECONDS;
+    const speed = (3 + 11 * p ** 1.3) * (1 + 0.06 * Math.sin(TAU * 7 * t) + 0.03 * Math.sin(TAU * 23 * t));
+    pos = Math.max(0, pos - speed);
+    whine += (95 * speed) / SR;
+    const hiss = (rnd() * 2 - 1) * 0.04;
+    const motor = Math.sin(TAU * whine) * 0.07 + Math.sin(TAU * whine * 2) * 0.03;
+    const g = 0.55 + 0.45 * p; // swells as it speeds up
+    l[i] = (read(sl, pos) + motor + hiss) * g;
+    r[i] = (read(sr, pos) + motor + hiss * 0.8) * g;
+  }
+  highpass(l, 140); highpass(r, 140);
+  lowpass(l, 9000); lowpass(r, 9000);
+  fade(out, 0.01, 0.004); // hard stop
+  normalize(out, 0.85);
+  return out;
+}
+
+/** Correct guess impact: sub drop + snare-ish crack, then a bright rising two-note pluck (E5 → B5) with shimmer. */
+function correct() {
+  const out = buf(0.9), rnd = mulberry32(101);
+  const [l, r] = out;
+  const pluck = (t, f) => (t < 0 ? 0 : (Math.sin(TAU * f * t) + 0.35 * Math.sin(TAU * f * 2 * t) + 0.15 * Math.sin(TAU * f * 3.01 * t)) * env(t, 0.002, 0.22));
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const sub = Math.sin(TAU * (55 * t + (90 / 18) * (1 - Math.exp(-t * 18)))) * env(t, 0.001, 0.16) * 1.1;
+    const crack = (rnd() * 2 - 1) * env(t, 0.0002, 0.025) * 0.5;
+    const notes = pluck(t - 0.01, 659.25) * 0.45 + pluck(t - 0.085, 987.77) * 0.5;
+    const shimmer = (Math.sin(TAU * 2637 * t) * Math.sin(TAU * 9 * t)) * env(t - 0.085, 0.01, 0.25) * 0.12;
+    l[i] = sub + crack + notes + shimmer;
+    r[i] = sub + crack * 0.9 + notes * 0.95 - shimmer;
+  }
+  fade(out, 0, 0.15);
+  normalize(out, 0.92);
+  return out;
+}
+
+/** Wrong guess: distorted low buzzer falling 120 → 70 Hz with a crunchy noise hit. */
+function wrong() {
+  const out = buf(0.55), rnd = mulberry32(111);
+  const [l, r] = out;
+  let phase = 0;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    phase += (120 - 50 * Math.min(1, t / 0.45)) / SR;
+    const saw = (phase % 1) * 2 - 1;
+    const sq = Math.sign(Math.sin(TAU * phase * 1.5));
+    const buzz = Math.tanh((saw * 0.7 + sq * 0.3) * 3) * env(t, 0.003, 0.22) * 0.8;
+    const hit = (rnd() * 2 - 1) * env(t, 0.0003, 0.04) * 0.7;
+    const sub = Math.sin(TAU * 48 * t) * env(t, 0.002, 0.12) * 0.7;
+    l[i] = buzz + hit + sub;
+    r[i] = buzz * 0.95 + hit * 0.85 + sub;
+  }
+  lowpass(l, 3200); lowpass(r, 3200);
+  fade(out, 0, 0.08);
+  normalize(out, 0.92);
+  return out;
+}
+
+/** Anticipation whoosh: 0.3 s rising filtered noise that peaks right at the end (placed so it lands on the guess). */
+function whoosh() {
+  const len = 0.3;
+  const out = buf(len), rnd = mulberry32(121);
+  const [l, r] = out;
+  let yl = 0, yr = 0;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR, p = t / len;
+    const a = 1 - Math.exp((-TAU * (400 + 6000 * p * p)) / SR);
+    yl += a * ((rnd() * 2 - 1) - yl);
+    yr += a * ((rnd() * 2 - 1) - yr);
+    const g = p ** 2.2;
+    l[i] = yl * g * (1 - 0.4 * p);
+    r[i] = yr * g * (0.6 + 0.4 * p);
+  }
+  fade(out, 0.02, 0.006);
+  normalize(out, 0.7);
   return out;
 }
 
@@ -311,3 +505,11 @@ writeWav("thud.wav", thud());
 writeWav("swell.wav", swell());
 writeWav("reveal.wav", reveal());
 writeWav("ambient.wav", ambient());
+writeWav("click.wav", click());
+writeWav("correct.wav", correct());
+writeWav("wrong.wav", wrong());
+writeWav("whoosh.wav", whoosh());
+writeWav("lock.wav", lock());
+const musicBed = music();
+writeWav("music.wav", musicBed);
+writeWav("rewind.wav", rewind(musicBed));

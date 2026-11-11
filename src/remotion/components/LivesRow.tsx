@@ -2,7 +2,7 @@ import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../themes";
 import { BODY_FONT } from "../fonts";
-import { MAX_LIVES } from "../constants";
+import { MAX_LIVES, SAFE_ZONE } from "../constants";
 import { Pawn } from "./ChessPieces";
 
 /**
@@ -23,7 +23,7 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
   const outro = spring({ frame: frame - finalRevealFrame - Math.round(0.33 * fps), fps, config: { damping: 14 } });
 
   return (
-    <div style={{ position: "absolute", left: 0, right: 0, top, height: 200 }}>
+    <div style={{ position: "absolute", left: SAFE_ZONE.left, right: SAFE_ZONE.right, top, height: 200 }}>
       <div
         style={{
           position: "absolute",

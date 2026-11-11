@@ -3,6 +3,7 @@ import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, ramp, strikeShake } from "../motion";
+import { SAFE_CENTER_X } from "../constants";
 
 /** 4-row alphabetical A–Z grid: 7 / 7 / 6 / 6. */
 export const KEY_ROWS = ["ABCDEFG", "HIJKLMN", "OPQRST", "UVWXYZ"];
@@ -37,7 +38,7 @@ export const Keyboard: React.FC<{
     <div
       style={{
         position: "absolute",
-        left: "50%",
+        left: SAFE_CENTER_X, // 1792px box → spans 114–1906, inside the 80–1940 safe band
         top,
         transform: `translateX(calc(-50% + ${shakeX.toFixed(2)}px))`,
         padding: PAD,
@@ -68,8 +69,10 @@ export const Keyboard: React.FC<{
 
 const Key: React.FC<{ letter: string; state: KeyState; since: number; theme: Theme; fps: number }> = ({ letter, state, since, theme, fps }) => {
   const s = since / fps;
-  const press = since >= 0 ? spring({ frame: since, fps, config: { damping: 10, stiffness: 220 } }) : 1;
-  const scale = since >= 0 ? interpolate(press, [0, 1], [0.82, 1]) : 1;
+  const press = since >= 0 ? spring({ frame: since, fps, config: { damping: 9, stiffness: 260 } }) : 1;
+  // Correct keys pop UP out of the box (1.45×); wrong keys get crushed (0.6×) and rattle.
+  const scale = since >= 0 ? interpolate(press, [0, 1], [state === "correct" ? 1.45 : 0.6, 1]) : 1;
+  const rattle = state === "wrong" && since >= 0 && since < fps * 0.35 ? Math.sin(since * 2.6) * 14 * (1 - since / (fps * 0.35)) : 0;
   const flash = since >= 0 ? ramp(s, [0, 0.067, 0.5], [0, 1, 0]) : 0;
   // 'X' strike draws itself over ~0.17 s.
   const strike = state === "wrong" ? ramp(s, [0.033, 0.2], [0, 1]) : 0;
@@ -86,7 +89,8 @@ const Key: React.FC<{ letter: string; state: KeyState; since: number; theme: The
     fontFamily: DISPLAY_FONT,
     fontSize: 118,
     lineHeight: 1,
-    transform: `scale(${scale})`,
+    transform: `translateX(${rattle.toFixed(2)}px) scale(${scale})`,
+    zIndex: since >= 0 && since < fps * 0.5 ? 2 : undefined,
   };
 
   const styles: Record<KeyState, React.CSSProperties> = {

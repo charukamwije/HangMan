@@ -4,6 +4,7 @@ import { countdownAt, formatClock } from "../timeline";
 import { framesSinceLast, ramp, type Stress } from "../motion";
 import type { Theme } from "../themes";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
+import { SAFE_ZONE } from "../constants";
 
 /**
  * Top-right neon clock "00:29" → "00:00" (1 Hz). Visible from frame 0. Below 00:08 it
@@ -31,7 +32,7 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
       style={{
         position: "absolute",
         top: 270,
-        right: 150,
+        right: SAFE_ZONE.right + 20,
         width: 620,
         padding: "28px 0 34px",
         borderRadius: 48,

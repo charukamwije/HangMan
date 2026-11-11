@@ -13,6 +13,7 @@ import {
   DURATION_SECONDS,
   MAX_LIVES,
 } from "./constants";
+import { resolveHook, type HookPlan } from "./hook";
 import type { Guess, ReelProps } from "./types";
 
 export type GuessKind = "correct" | "wrong";
@@ -119,10 +120,12 @@ export function autoSchedule({
 
 export type Timeline = {
   word: string;
-  /** Pre-filled on frame 0 (already settled — no pop animation, no SFX). */
+  /** Snapped into place during the opening hook (see hook.ts), settled by frame 30. */
   hintLetter: string;
+  /** Opening "machine gun" hook: decoys, hint snap frames, lock + music handover. */
+  hook: HookPlan;
   guesses: ResolvedGuess[];
-  /** Per character of `word`: frame it becomes visible (Infinity for spaces, negative for the hint). */
+  /** Per character of `word`: frame it becomes visible (Infinity for spaces, hook snap frame for the hint). */
   charRevealFrames: number[];
   /** Per letter: frame its key lights up as correct (incl. hint + final reveal) / strikes as wrong. */
   correctKeyFrames: Map<string, number>;
@@ -150,8 +153,7 @@ export function resolveTimeline(
   const durationFrames = Math.round(DURATION_SECONDS * fps);
   const toFrame = (s: number) => Math.max(0, Math.min(durationFrames - 1, Math.round(s * fps)));
   const finalRevealFrame = toFrame(props.finalRevealAt);
-  // Before frame 0, so every spring/flash keyed to it is fully settled on the first frame.
-  const hintFrame = -fps;
+  const hook = resolveHook(word, hintLetter, fps);
 
   const seen = new Set<string>(hintLetter ? [hintLetter] : []);
   const guesses: ResolvedGuess[] = props.guesses
@@ -165,14 +167,15 @@ export function resolveTimeline(
     })
     .map((g, index) => ({
       ...g,
-      frame: toFrame(g.time),
+      // Nothing may land inside the opening hook (frames 0–30).
+      frame: Math.max(hook.endFrame, toFrame(g.time)),
       kind: letters.has(g.letter) ? ("correct" as const) : ("wrong" as const),
       index,
     }));
 
   const correctKeyFrames = new Map<string, number>();
   const wrongKeyFrames = new Map<string, number>();
-  if (hintLetter) correctKeyFrames.set(hintLetter, hintFrame);
+  if (hintLetter) correctKeyFrames.set(hintLetter, hook.lockFrame);
   for (const g of guesses) {
     if (g.kind === "correct" && g.frame < finalRevealFrame) correctKeyFrames.set(g.letter, g.frame);
     if (g.kind === "wrong") wrongKeyFrames.set(g.letter, g.frame);
@@ -189,8 +192,8 @@ export function resolveTimeline(
     if (c === " " || correctKeyFrames.has(c) || finalOrder.has(c)) continue;
     finalOrder.set(c, finalRevealFrame + stagger * k++);
   }
-  const charRevealFrames = [...word].map((c) =>
-    c === " " ? Infinity : (correctKeyFrames.get(c) ?? finalOrder.get(c) ?? finalRevealFrame),
+  const charRevealFrames = [...word].map((c, i) =>
+    c === " " ? Infinity : (hook.snapFrames.get(i) ?? correctKeyFrames.get(c) ?? finalOrder.get(c) ?? finalRevealFrame),
   );
   for (const [c, f] of finalOrder) correctKeyFrames.set(c, f);
 
@@ -200,6 +203,7 @@ export function resolveTimeline(
   return {
     word,
     hintLetter,
+    hook,
     guesses,
     charRevealFrames,
     correctKeyFrames,

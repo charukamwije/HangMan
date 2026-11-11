@@ -28,8 +28,26 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   const { sfx } = audio;
   const cues: AudioCue[] = [];
 
-  // 1. Frame-0 impact: heavy hardwood gavel. The hook lands with a hit, not silence.
-  cues.push({ id: "gavel", src: AUDIO.gavel, from: 0, durationInFrames: seconds(AUDIO_SECONDS.gavel, fps), volume: clamp01(sfx * 0.95) });
+  // 1. Frame-0 impact: heavy hardwood gavel + sub drop. The hook lands with a hit, not silence.
+  cues.push({ id: "gavel", src: AUDIO.gavel, from: 0, durationInFrames: seconds(AUDIO_SECONDS.gavel, fps), volume: clamp01(sfx) });
+
+  // 1b. Machine-gun hook (frames 0–30): a sharp click on every decoy pop, click + thud on its ✖,
+  //     then a metallic lock on the frame the last hint slot snaps in (36).
+  const { hook } = timeline;
+  const thudLen = Math.max(1, Math.round(fps * 0.15));
+  for (const d of hook.decoys) {
+    cues.push({ id: `hook-click-${d.id}`, src: AUDIO.click, from: d.popFrame, durationInFrames: seconds(AUDIO_SECONDS.click, fps), volume: clamp01(sfx * 0.7) });
+    // The ✖ is a hit, not a tick: a short burst of the wrong-guess thud under a click.
+    if (d.strikeFrame >= d.endFrame) continue; // replaced before its ✖ landed
+    cues.push({ id: `hook-strike-${d.id}`, src: AUDIO.click, from: d.strikeFrame, durationInFrames: seconds(AUDIO_SECONDS.click, fps), volume: clamp01(sfx * 0.5) });
+    cues.push({ id: `hook-thud-${d.id}`, src: AUDIO.thud, from: d.strikeFrame, durationInFrames: thudLen, volume: (f) => clamp01(sfx * 0.45) * Math.max(0, 1 - f / thudLen) });
+  }
+  // Tape rewind of the music bed under the whole decode, speeding up with the decoy cadence.
+  // Its Sequence hard-stops it on the clear frame (30); the same music then plays forward from the lock.
+  cues.push({ id: "hook-rewind", src: AUDIO.rewind, from: 0, durationInFrames: hook.clearFrame, volume: clamp01(Math.max(audio.music, 0.2) * 2) });
+  if (timeline.hintLetter) {
+    cues.push({ id: "hook-lock", src: AUDIO.lock, from: hook.lockFrame, durationInFrames: seconds(AUDIO_SECONDS.lock, fps), volume: clamp01(sfx * 0.9) });
+  }
 
   // 2. Clock ticks on every digit change (exactly every `fps` frames with the 1 Hz clock).
   //    The last FINAL_TICK_SECONDS rise in pitch (separate pitched assets) and in volume.
@@ -50,11 +68,18 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   // 3. Correct reveal: typewriter key strike + subtle metallic chime, on the reveal frame.
   // 4. Wrong strike: deep mahogany thud on the frame the key turns red.
   for (const g of timeline.guesses) {
+    // Anticipation: a whoosh that ends exactly on the impact frame.
+    if (g.frame < timeline.finalRevealFrame) {
+      const len = seconds(AUDIO_SECONDS.whoosh, fps);
+      cues.push({ id: `whoosh-${g.letter}`, src: AUDIO.whoosh, from: Math.max(0, g.frame - len), durationInFrames: len, volume: clamp01(sfx * 0.55) });
+    }
     if (g.kind === "correct" && g.frame < timeline.finalRevealFrame) {
+      cues.push({ id: `correct-${g.letter}`, src: AUDIO.correct, from: g.frame, durationInFrames: seconds(AUDIO_SECONDS.correct, fps), volume: clamp01(sfx * 0.85) });
       cues.push({ id: `type-${g.letter}`, src: AUDIO.typewriter, from: g.frame, durationInFrames: seconds(AUDIO_SECONDS.typewriter, fps), volume: clamp01(sfx * 0.9) });
       cues.push({ id: `chime-${g.letter}`, src: AUDIO.chime, from: g.frame, durationInFrames: seconds(AUDIO_SECONDS.chime, fps), volume: clamp01(sfx * 0.4) });
     }
     if (g.kind === "wrong") {
+      cues.push({ id: `wrong-${g.letter}`, src: AUDIO.wrong, from: g.frame, durationInFrames: seconds(AUDIO_SECONDS.wrong, fps), volume: clamp01(sfx * 0.75) });
       cues.push({ id: `thud-${g.letter}`, src: AUDIO.thud, from: g.frame, durationInFrames: seconds(AUDIO_SECONDS.thud, fps), volume: clamp01(sfx * 0.95) });
     }
   }

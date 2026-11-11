@@ -22,6 +22,7 @@ src/remotion/                 Self-contained composition (relative imports only,
   HangmanPuzzleReel.tsx       HangmanPuzzle(1080) compositions: raw puzzle JSON as input props
   audioCues.ts                buildAudioCues(): gameplay timeline → frame-pinned sound cues (pure, testable)
   motion.ts                   Frame-driven helpers: strikeShake() spring, stressAt() (< 00:08 tension + tick pulse)
+  hook.ts                     "Machine gun" opening hook plan: decoys, hint snap frames, lock + music handover
   types.ts / defaults.ts      ReelProps (serializable input props) + defaults
   themes.ts / fonts.ts        3 preset themes; Anton + Inter via @remotion/google-fonts
   components/
@@ -29,7 +30,8 @@ src/remotion/                 Self-contained composition (relative imports only,
     KenBurns.tsx              1.00 → 1.08 linear push-in on the background across the full reel
     StressVignette.tsx        Base vignette + stress layer that closes in and throbs on each tick below 00:08
     CountdownTimer.tsx        00:29 → 00:00 1 Hz neon clock; below 00:08 it pulses in sync with the vignette
-    HookBanner.tsx            Urgent "95% FAIL THIS" banner, fully visible on frame 0
+    OpeningHook.tsx           Frames 0–30: accelerating decoys + crimson ✖ strikes (one <Sequence> each), scan beam
+    HookBanner.tsx            "DECODING BOARD..." → hook-text banner flip (frames 0–35)
     Header.tsx                Hook banner, category (neon) and subtitle (white)
     WordBoard.tsx             Underscores + spring/glow letter reveals, wraps long answers onto more lines
     LivesRow.tsx              Mistake counter: one pawn per mistake, knocked over in red
@@ -93,7 +95,7 @@ One `HangmanPuzzleData` object makes one 30 s, 900-frame reel. The schema and ti
   "secretWord": "LANDMARKS",
   "wrongGuesses": ["B", "W", "X", "Q"],
   "revealSequence": [],
-  "viralHookText": "95% FAIL THIS"
+  "viralHookText": "CAN YOU SOLVE IT?"
 }
 ```
 

@@ -47,7 +47,8 @@ export const MAX_LIVES = 6;
 export const DECOY_LETTERS = "ETAOINSHRDLCUMWFGYPBVKJXQZ";
 
 // ------------------------------------------------------------- retention ----
-export const DEFAULT_HOOK_TEXT = "95% FAIL THIS";
+/** Where the banner lands after "DECODING BOARD..." (hook.ts). A plain question, not an unverifiable claim. */
+export const DEFAULT_HOOK_TEXT = "CAN YOU SOLVE IT?";
 /** Stress mode (vignette tightens, clock pulses) starts once the clock reads below this. */
 export const STRESS_BELOW_SECONDS = 8;
 /** Key-box shake amplitude, in output px at 1080 wide (scales with resolution: 10 px at 4K). */
@@ -57,6 +58,9 @@ export const KEN_BURNS = { from: 1, to: 1.08 } as const;
 
 /** Platform UI overlays (Reels / Shorts / TikTok) on the design canvas, in px. */
 export const SAFE_ZONE = { top: 230, bottom: 700, right: 220, left: 80 };
+/** The horizontal band that platform UI never covers. Centre content on SAFE_CENTER_X, not DESIGN_WIDTH / 2. */
+export const SAFE_WIDTH = DESIGN_WIDTH - SAFE_ZONE.left - SAFE_ZONE.right; // 1860
+export const SAFE_CENTER_X = SAFE_ZONE.left + SAFE_WIDTH / 2; // 1010
 
 /** Procedural SFX (scripts/generate-sfx.mjs). Drop in licensed files with the same names to replace them. */
 export const AUDIO = {
@@ -71,6 +75,19 @@ export const AUDIO = {
   thud: "audio/thud.wav",
   swell: "audio/swell.wav",
   reveal: "audio/reveal.wav",
+  /** Guess impacts: sub drop + rising pluck (correct) / distorted buzzer (wrong). */
+  correct: "audio/correct.wav",
+  wrong: "audio/wrong.wav",
+  /** 0.3 s rising whoosh that lands exactly on each guess frame. */
+  whoosh: "audio/whoosh.wav",
+  /** Opening hook: geiger/typewriter click per decoy pop + strike. */
+  click: "audio/click.wav",
+  /** Opening hook: metallic lock as the hint letter lands (frame 25). */
+  lock: "audio/lock.wav",
+  /** Opening hook: the music bed rewinding (reversed, accelerating) under the 1 s decode. */
+  rewind: "audio/rewind.wav",
+  /** 120 BPM staccato cello + woodblock bed, crossfaded in at the end of the hook. */
+  music: "audio/music.wav",
 } as const;
 
 /** Asset lengths in seconds (used to size each cue's <Sequence>). */
@@ -82,6 +99,11 @@ export const AUDIO_SECONDS = {
   thud: 0.65,
   swell: 4.5,
   reveal: 3.2,
+  click: 0.05,
+  correct: 0.9,
+  wrong: 0.55,
+  whoosh: 0.3,
+  lock: 0.5,
 } as const;
 
 /** Brass swell timing relative to the final reveal: starts 4 s before (00:25), peaks 1 s before (00:28). */
