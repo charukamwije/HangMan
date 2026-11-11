@@ -1,13 +1,11 @@
 import React from "react";
 import { interpolate, random, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { SAFE_CENTER_X } from "../constants";
+import { LOWER_SAFE_CENTER_X as SAFE_CENTER_X } from "../constants";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { ramp } from "../motion";
 import type { Theme } from "../themes";
 import type { ResolvedGuess } from "../timeline";
 
-/** Centre of the callout on the 4K design canvas: over the chess table, between lives row and keys. */
-const CALLOUT_Y = 2060;
 const LETTER = 480;
 /** How long each callout stays mounted. */
 export const CALLOUT_SECONDS = 0.8;
@@ -21,7 +19,13 @@ export const CALLOUT_SECONDS = 0.8;
  *  wrong:   slams in with a jitter, a crimson ✖ stamps over it on frame 3,
  *           then it drops away with gravity and a spin.
  */
-export const GuessCallouts: React.FC<{ theme: Theme; guesses: ResolvedGuess[]; finalRevealFrame: number }> = ({ theme, guesses, finalRevealFrame }) => {
+export const GuessCallouts: React.FC<{
+  theme: Theme;
+  guesses: ResolvedGuess[];
+  finalRevealFrame: number;
+  /** Vertical centre on the 4K design canvas (horizontal: the lower safe band's centre). */
+  centerY: number;
+}> = ({ theme, guesses, finalRevealFrame, centerY }) => {
   const { fps } = useVideoConfig();
   const len = Math.round(CALLOUT_SECONDS * fps);
   return (
@@ -30,14 +34,14 @@ export const GuessCallouts: React.FC<{ theme: Theme; guesses: ResolvedGuess[]; f
         .filter((g) => g.frame < finalRevealFrame)
         .map((g) => (
           <Sequence key={g.letter} name={`callout-${g.kind}-${g.letter}`} from={g.frame} durationInFrames={Math.min(len, finalRevealFrame - g.frame)} layout="none">
-            <Callout theme={theme} letter={g.letter} correct={g.kind === "correct"} />
+            <Callout theme={theme} letter={g.letter} correct={g.kind === "correct"} centerY={centerY} />
           </Sequence>
         ))}
     </>
   );
 };
 
-const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean }> = ({ theme, letter, correct }) => {
+const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; centerY: number }> = ({ theme, letter, correct, centerY: CALLOUT_Y }) => {
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = f / fps;

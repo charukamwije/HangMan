@@ -3,14 +3,13 @@ import { AbsoluteFill, interpolate, random, staticFile, useCurrentFrame, useVide
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 import { AUDIO, DESIGN_HEIGHT, DESIGN_WIDTH } from "../constants";
 import type { Theme } from "../themes";
-import { King, Pawn, Rook } from "./ChessPieces";
 import { KenBurns } from "./KenBurns";
+import { loopReset } from "../loop";
 
 const SHELF_TOP = 0;
 const SHELF_HEIGHT = 380;
-const SHELF_COUNT = 5;
-const BOARD_TOP = 1840;
-const BOARD_TILT = 60;
+/** Shelves fill the whole frame (10 × 380 = 3800 px + one bleeding off the bottom). */
+const SHELF_COUNT = 11;
 
 /** Deterministic book spines for the blurred library shelves. */
 function useBooks(theme: Theme) {
@@ -41,7 +40,7 @@ function useBooks(theme: Theme) {
 }
 
 /**
- * Mahogany library scene: shelves, perspective chess table, lamp glow, dust.
+ * Mahogany library scene: a full-height wall of blurred bookshelves, lamp glow, dust.
  * Fully opaque on frame 0 (no fade-in) and wrapped in a Ken Burns push-in.
  * The vignette lives in <StressVignette> so it can react to the countdown.
  */
@@ -60,9 +59,10 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
   }
   const flicker = 0.9 + 0.06 * Math.sin(t * 8.6) + 0.04 * Math.sin(t * 26 + 1) + Math.min(0.25, energy * 0.6);
 
-  // Parallax inside the zoom: shelves drift sideways, the table slowly yaws.
-  const drift = interpolate(frame, [0, durationInFrames], [-20, 20]);
-  const yaw = interpolate(frame, [0, durationInFrames], [-4, 4]);
+  // Loop reset: zoom, drift and dust ease back to their frame-0 state.
+  const back = loopReset(frame, durationInFrames, fps);
+  // Parallax inside the zoom: shelves drift sideways.
+  const drift = interpolate(frame, [0, durationInFrames], [-20, 20]) * (1 - back) + -20 * back;
 
   const particles = useMemo(
     () =>
@@ -79,7 +79,7 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
 
   return (
     <AbsoluteFill style={{ background: `linear-gradient(180deg, ${theme.wood[0]} 0%, ${theme.wood[1]} 55%, ${theme.wood[2]} 100%)` }}>
-      <KenBurns>
+      <KenBurns reset={back}>
         {/* --- Library shelves (depth-of-field blurred) --- */}
         <AbsoluteFill style={{ transform: `scale(1.04) translateX(${drift}px)`, transformOrigin: "50% 48%" }}>
           <div style={{ position: "absolute", inset: 0, filter: "blur(7px) saturate(0.85)", opacity: 0.62 }}>
@@ -121,55 +121,9 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
               </div>
             ))}
           </div>
-          {/* shelves fade into darkness toward the board */}
-          <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 25%, rgba(0,0,0,0.55) 42%, rgba(0,0,0,0.92) 52%, rgba(0,0,0,0) 54%)" }} />
+          {/* darken the shelves where text sits: lightest behind the header, darkest under the keys */}
+          <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0.5) 38%, rgba(0,0,0,0.62) 55%, rgba(0,0,0,0.78) 75%, rgba(0,0,0,0.88) 100%)" }} />
         </AbsoluteFill>
-
-        {/* --- Chess table in perspective (lower-middle focal space) --- */}
-        <div style={{ position: "absolute", left: 0, right: 0, top: BOARD_TOP, bottom: 0, perspective: 1800, perspectiveOrigin: "50% 0%", overflow: "hidden" }}>
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              bottom: -260,
-              width: 3600,
-              height: 3600,
-              marginLeft: -1800,
-              transform: `rotateX(${BOARD_TILT}deg) rotateZ(${yaw}deg)`,
-              transformOrigin: "50% 100%",
-              display: "grid",
-              gridTemplateColumns: "repeat(8, 1fr)",
-              gridTemplateRows: "repeat(8, 1fr)",
-              border: "40px solid #1d0f06",
-              boxShadow: "0 0 0 12px #3c2210",
-            }}
-          >
-            {Array.from({ length: 64 }, (_, i) => (
-              <div key={i} style={{ background: (Math.floor(i / 8) + i) % 2 === 0 ? theme.board[1] : theme.board[0] }} />
-            ))}
-          </div>
-          {/* table darkness falloff */}
-          <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.1) 12%, rgba(0,0,0,0.35) 40%, rgba(0,0,0,0.9) 100%)" }} />
-        </div>
-
-        {/* --- Pieces: hero king in focus, others soft --- */}
-        <div style={{ position: "absolute", left: 1440, top: 1950, filter: "blur(4px)", opacity: 0.7 }}>
-          <Rook color={theme.piece} size={120} />
-        </div>
-        <div style={{ position: "absolute", left: 560, top: 1975, filter: "blur(3px)", opacity: 0.8 }}>
-          <Pawn color={theme.piece} size={100} />
-        </div>
-        <div
-          style={{
-            position: "absolute",
-            left: 1000,
-            top: 1925,
-            filter: `drop-shadow(0 0 ${40 * flicker}px ${theme.lamp}66) drop-shadow(0 30px 40px rgba(0,0,0,0.9))`,
-            transform: `translateY(${Math.sin(t * 0.67) * 4}px)`,
-          }}
-        >
-          <King color="#15100c" size={160} />
-        </div>
 
         {/* --- Warm library lamp + rim light --- */}
         <AbsoluteFill
@@ -181,28 +135,9 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
       </KenBurns>
 
       {/* --- Floating dust motes (outside the zoom: they drift past the lens) --- */}
-      <AbsoluteFill style={{ mixBlendMode: "screen" }}>
-        {particles.map((p, i) => {
-          const y = (((p.y - t * p.speed) % DESIGN_HEIGHT) + DESIGN_HEIGHT) % DESIGN_HEIGHT;
-          const x = p.x + Math.sin(t + p.phase) * 30;
-          return (
-            <div
-              key={i}
-              style={{
-                position: "absolute",
-                left: x,
-                top: y,
-                width: p.r * 2,
-                height: p.r * 2,
-                borderRadius: "50%",
-                background: theme.lamp,
-                opacity: p.alpha * (0.6 + 0.4 * Math.sin(t * 2.4 + p.phase)),
-                filter: "blur(2px)",
-              }}
-            />
-          );
-        })}
-      </AbsoluteFill>
+      {/* During the loop reset the dust cross-fades into the copy that continues from frame 0. */}
+      <Dust particles={particles} t={t} color={theme.lamp} opacity={1 - back} />
+      {back > 0 && <Dust particles={particles} t={(frame - durationInFrames) / fps} color={theme.lamp} opacity={back} />}
     </AbsoluteFill>
   );
 };
@@ -211,3 +146,30 @@ const alphaHex = (a: number) =>
   Math.round(Math.max(0, Math.min(1, a)) * 255)
     .toString(16)
     .padStart(2, "0");
+
+type Particle = { x: number; y: number; r: number; speed: number; phase: number; alpha: number };
+
+const Dust: React.FC<{ particles: Particle[]; t: number; color: string; opacity: number }> = ({ particles, t, color, opacity }) => (
+  <AbsoluteFill style={{ mixBlendMode: "screen", opacity }}>
+    {particles.map((p, i) => {
+      const y = (((p.y - t * p.speed) % DESIGN_HEIGHT) + DESIGN_HEIGHT) % DESIGN_HEIGHT;
+      const x = p.x + Math.sin(t + p.phase) * 30;
+      return (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: x,
+            top: y,
+            width: p.r * 2,
+            height: p.r * 2,
+            borderRadius: "50%",
+            background: color,
+            opacity: p.alpha * (0.6 + 0.4 * Math.sin(t * 2.4 + p.phase)),
+            filter: "blur(2px)",
+          }}
+        />
+      );
+    })}
+  </AbsoluteFill>
+);

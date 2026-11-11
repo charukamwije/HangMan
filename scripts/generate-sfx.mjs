@@ -401,20 +401,20 @@ function music(seconds = 29) {
  * 4 → 1 frame gaps on the same curve), with tape flutter, a motor whine that
  * tracks the speed and hiss. Hard-stops at REWIND_SECONDS (the board clear).
  */
-function rewind(source) {
+function rewind(source, { seconds = REWIND_SECONDS, fromSec = 14, v0 = 3, v1 = 14, seed = 91 } = {}) {
   const [sl, sr] = source;
-  const out = buf(REWIND_SECONDS), rnd = mulberry32(91);
+  const out = buf(seconds), rnd = mulberry32(seed);
   const [l, r] = out;
   const read = (ch, pos) => {
     const i = Math.floor(pos), f = pos - i;
     const a = ch[Math.max(0, Math.min(ch.length - 1, i))], b = ch[Math.max(0, Math.min(ch.length - 1, i + 1))];
     return a + (b - a) * f;
   };
-  let pos = 14 * SR; // start 14 s in and run backwards (≈ 8.5 s of music in 1 s)
+  let pos = fromSec * SR; // hook: start 14 s in and run backwards (≈ 8.5 s of music in 1 s)
   let whine = 0;
   for (let i = 0; i < l.length; i++) {
-    const t = i / SR, p = t / REWIND_SECONDS;
-    const speed = (3 + 11 * p ** 1.3) * (1 + 0.06 * Math.sin(TAU * 7 * t) + 0.03 * Math.sin(TAU * 23 * t));
+    const t = i / SR, p = t / seconds;
+    const speed = (v0 + (v1 - v0) * p ** 1.3) * (1 + 0.06 * Math.sin(TAU * 7 * t) + 0.03 * Math.sin(TAU * 23 * t));
     pos = Math.max(0, pos - speed);
     whine += (95 * speed) / SR;
     const hiss = (rnd() * 2 - 1) * 0.04;
@@ -513,3 +513,6 @@ writeWav("lock.wav", lock());
 const musicBed = music();
 writeWav("music.wav", musicBed);
 writeWav("rewind.wav", rewind(musicBed));
+// Loop point: the last LOOP_RESET_SECONDS rewind the END of the song, faster still, and hard-stop
+// exactly as frame 0's gavel lands (keep in sync with LOOP_RESET_SECONDS in src/remotion/constants.ts).
+writeWav("loop-rewind.wav", rewind(musicBed, { seconds: 0.6, fromSec: 28.5, v0: 5, v1: 16, seed: 93 }));

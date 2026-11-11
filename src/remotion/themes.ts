@@ -11,8 +11,6 @@ export type Theme = {
   wood: [string, string, string];
   /** Warm focal lamp colour. */
   lamp: string;
-  /** Chess board squares [dark, light]. */
-  board: [string, string];
   /** Book spine palette for the shelves. */
   books: string[];
   piece: string;
@@ -27,7 +25,6 @@ export const THEMES: Record<ThemeId, Theme> = {
     wrong: "#FF2E2E",
     wood: ["#1b0f08", "#120a05", "#070403"],
     lamp: "#ffb25e",
-    board: ["#2a170b", "#8a6a48"],
     books: ["#4a1d14", "#2f2a1a", "#5b3a1e", "#1f2b22", "#3d1f2b", "#6b4a26", "#24180f"],
     piece: "#e9dcc4",
   },
@@ -39,7 +36,6 @@ export const THEMES: Record<ThemeId, Theme> = {
     wrong: "#FF2E2E",
     wood: ["#0d1018", "#080a10", "#030406"],
     lamp: "#9cc4ff",
-    board: ["#101521", "#4c5873"],
     books: ["#1b2233", "#2b2f3d", "#13283a", "#30243a", "#1e1e24", "#2d3a4f"],
     piece: "#dfe6f2",
   },
@@ -51,7 +47,6 @@ export const THEMES: Record<ThemeId, Theme> = {
     wrong: "#FF2E2E",
     wood: ["#0d1a12", "#08110b", "#030604"],
     lamp: "#ffd48a",
-    board: ["#132619", "#7b8f63"],
     books: ["#1d3b27", "#4a2a17", "#2b2416", "#0f2a22", "#5a3d1c", "#33251a"],
     piece: "#efe6cf",
   },

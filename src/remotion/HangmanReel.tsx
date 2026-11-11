@@ -1,13 +1,13 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { DESIGN_HEIGHT, DESIGN_WIDTH, KEYBOX_SHAKE_PX_AT_1080, SAFE_ZONE } from "./constants";
+import { DESIGN_HEIGHT, DESIGN_WIDTH, KEYBOX_SHAKE_PX_AT_1080, RIGHT_RAIL, SAFE_ZONE, TOP_CORNERS } from "./constants";
 import { framesSinceLast, NEVER, ramp, strikeShake, stressAt } from "./motion";
+import { loopReset } from "./loop";
 import { getTheme } from "./themes";
 import { resolveTimeline } from "./timeline";
 import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
-import { CountdownTimer } from "./components/CountdownTimer";
 import { GuessCallouts } from "./components/GuessCallout";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
@@ -15,9 +15,13 @@ import { LivesRow } from "./components/LivesRow";
 import { StressVignette } from "./components/StressVignette";
 import { measureWordBoard, WordBoard } from "./components/WordBoard";
 
-// Vertical layout on the 2160×3840 design canvas.
-const WORD_CENTER_Y = 1500;
-const KEYBOARD_BOTTOM = DESIGN_HEIGHT - SAFE_ZONE.bottom - 20; // whole key box sits above platform captions
+// Vertical layout on the 2160×3840 design canvas, stacked UP from the keyboard:
+// keys → mistakes row → word board → category + subtitle → banner + clock (see Header for the fallback).
+const LIVES_HEIGHT = 200;
+const GAP_BOARD_LIVES = 130; // lifts board + subtitle + topic a little off the pawns
+/** Guess callout centre, below the keyboard top: it plays over the upper key rows so the word board stays visible. */
+const CALLOUT_BELOW_KEYS_TOP = 280;
+const KEYBOARD_BOTTOM = DESIGN_HEIGHT - SAFE_ZONE.bottom - 20; // 3020: whole key box sits above YouTube's channel/title (≈ 3080)
 /** 5 px at 1080 wide → 10 design px; the stage scale turns it back into 5 px / 10 px on output. */
 const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
 
@@ -34,6 +38,9 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  *  - A reveal or strike lands every 2.0–2.5 s (see autoSchedule).
  *  - Strikes kick the key box sideways with a spring.
  *  - Below 00:08 the vignette closes in and throbs with the neon clock.
+ *  - Seamless loop: over the last 0.6 s keys, pawns, timer, answer, banner and
+ *    background animate back to their frame-0 state (loop.ts), so the
+ *    platform's auto-replay continues straight into the hook.
  *
  * All motion is derived from useCurrentFrame() (spring / interpolate), so every
  * render is deterministic. No setInterval / requestAnimationFrame.
@@ -65,15 +72,16 @@ function useReelTimeline(props: ReelProps) {
 
 const ReelStage: React.FC<ReelProps> = (props) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
   const theme = getTheme(props.themeId);
   const timeline = useReelTimeline(props);
   const stress = stressAt(frame, fps, timeline.tickFrames);
 
   const board = measureWordBoard(timeline.word || " ");
-  const wordTop = Math.round(WORD_CENTER_Y - board.height / 2);
-  const livesTop = Math.round(wordTop + board.height + 40);
   const keyboardTop = KEYBOARD_BOTTOM - KEYBOARD_HEIGHT;
+  const livesTop = keyboardTop - LIVES_HEIGHT;
+  const wordTop = Math.round(livesTop - GAP_BOARD_LIVES - board.height);
+  const WORD_CENTER_Y = Math.round(wordTop + board.height / 2);
 
   // Impact overlays: red edge flash on a strike, accent bloom on a correct reveal.
   const sinceWrong = framesSinceLast(timeline.wrongFrames, frame) / fps;
@@ -104,7 +112,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const overscan = 1.1 * Math.max(Math.abs(camX) / (DESIGN_WIDTH / 2), Math.abs(camY) / WORD_CENTER_Y);
   const camScale = 1 + 0.035 * punch + overscan;
   const camera = camX || camY || punch ? `translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
-  const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]);
+  const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]) * (1 - loopReset(frame, durationInFrames, fps, 0, 0.6));
 
   return (
     <AbsoluteFill style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }}>
@@ -112,8 +120,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       <Background theme={theme} />
       <StressVignette stress={stress} />
 
-      <Header theme={theme} hookText={props.hookText} category={props.category} subtitle={props.subtitle} bannerFlip={timeline.hook.bannerFrames} />
-      <CountdownTimer theme={theme} tickFrames={timeline.tickFrames} stress={stress} />
+      <Header theme={theme} hookText={props.hookText} category={props.category} subtitle={props.subtitle} bannerFlip={timeline.hook.bannerFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} finalRevealFrame={timeline.finalRevealFrame} top={livesTop} />
       <Keyboard
@@ -124,7 +131,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         wrongFrames={timeline.wrongFrames}
         shakePx={KEYBOX_SHAKE}
       />
-      <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} />
+      <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
       </AbsoluteFill>
 
       {redFlash > 0.001 && (
@@ -160,14 +167,30 @@ const AudioTrackForProps: React.FC<ReelProps> = (props) => {
   return <AudioTrack timeline={timeline} audio={props.audio} />;
 };
 
-const hatch = "repeating-linear-gradient(45deg, rgba(255,0,180,0.22) 0 18px, rgba(255,0,180,0.08) 18px 36px)";
+const hatch = "repeating-linear-gradient(45deg, rgba(255,0,180,0.30) 0 18px, rgba(255,0,180,0.10) 18px 36px)";
+const zoneLabel: React.CSSProperties = { position: "absolute", fontFamily: "sans-serif", fontSize: 40, color: "#ff4fd2", fontWeight: 700, textShadow: "0 2px 6px #000" };
+/**
+ * Preview-only map of where Instagram Reels / YouTube Shorts draw their UI
+ * (see SAFE_ZONE, TOP_CORNERS, RIGHT_RAIL in constants.ts). Nothing essential
+ * may sit under a hatched area.
+ */
 const SafeZones: React.FC = () => (
   <AbsoluteFill style={{ pointerEvents: "none" }}>
+    {/* status bar / app header */}
     <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: SAFE_ZONE.top, background: hatch }} />
+    {/* top corners: back arrow / "Reels" (left), search · profile · ⋯ (right) */}
+    <div style={{ position: "absolute", left: 0, top: SAFE_ZONE.top, width: TOP_CORNERS.leftWidth, height: TOP_CORNERS.bottom - SAFE_ZONE.top, background: hatch }} />
+    <div style={{ position: "absolute", right: 0, top: SAFE_ZONE.top, width: TOP_CORNERS.rightWidth, height: TOP_CORNERS.bottom - SAFE_ZONE.top, background: hatch }} />
+    {/* side crop on tall phones */}
+    <div style={{ position: "absolute", left: 0, top: TOP_CORNERS.bottom, bottom: SAFE_ZONE.bottom, width: SAFE_ZONE.left, background: hatch }} />
+    <div style={{ position: "absolute", right: 0, top: TOP_CORNERS.bottom, height: RIGHT_RAIL.top - TOP_CORNERS.bottom, width: SAFE_ZONE.right, background: hatch }} />
+    {/* right action rail */}
+    <div style={{ position: "absolute", right: 0, top: RIGHT_RAIL.top, bottom: SAFE_ZONE.bottom, width: RIGHT_RAIL.width, background: hatch }} />
+    {/* channel / title / caption */}
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: SAFE_ZONE.bottom, background: hatch }} />
-    <div style={{ position: "absolute", right: 0, top: SAFE_ZONE.top, bottom: SAFE_ZONE.bottom, width: SAFE_ZONE.right, background: hatch }} />
-    <div style={{ position: "absolute", left: 40, bottom: SAFE_ZONE.bottom - 90, fontFamily: "sans-serif", fontSize: 54, color: "#ff4fd2", fontWeight: 700 }}>
-      PLATFORM UI SAFE ZONE (preview only)
-    </div>
+    <div style={{ ...zoneLabel, left: 40, top: 200 }}>STATUS BAR · APP HEADER</div>
+    <div style={{ ...zoneLabel, right: 30, top: TOP_CORNERS.bottom - 60 }}>SEARCH · PROFILE · MORE</div>
+    <div style={{ ...zoneLabel, right: 30, top: RIGHT_RAIL.top + 20, width: RIGHT_RAIL.width - 40, textAlign: "right" }}>LIKE · COMMENT SHARE · SAVE</div>
+    <div style={{ ...zoneLabel, left: 40, bottom: SAFE_ZONE.bottom - 80 }}>CHANNEL · TITLE · CAPTION (preview only)</div>
   </AbsoluteFill>
 );

@@ -22,18 +22,19 @@ src/remotion/                 Self-contained composition (relative imports only,
   HangmanPuzzleReel.tsx       HangmanPuzzle(1080) compositions: raw puzzle JSON as input props
   audioCues.ts                buildAudioCues(): gameplay timeline → frame-pinned sound cues (pure, testable)
   motion.ts                   Frame-driven helpers: strikeShake() spring, stressAt() (< 00:08 tension + tick pulse)
+  loop.ts                     Seamless loop: last 0.6 s animate every element back to its frame-0 state
   hook.ts                     "Machine gun" opening hook plan: decoys, hint snap frames, lock + music handover
   types.ts / defaults.ts      ReelProps (serializable input props) + defaults
   themes.ts / fonts.ts        3 preset themes; Anton + Inter via @remotion/google-fonts
   components/
-    Background.tsx            Library shelves, perspective chess board, audio-reactive lamp, dust (no fade-in)
+    Background.tsx            Full-height blurred library shelves, audio-reactive lamp, dust (no fade-in)
     KenBurns.tsx              1.00 → 1.08 linear push-in on the background across the full reel
     StressVignette.tsx        Base vignette + stress layer that closes in and throbs on each tick below 00:08
     CountdownTimer.tsx        00:29 → 00:00 1 Hz neon clock; below 00:08 it pulses in sync with the vignette
     OpeningHook.tsx           Frames 0–30: accelerating decoys + crimson ✖ strikes (one <Sequence> each), scan beam
     HookBanner.tsx            "DECODING BOARD..." → hook-text banner flip (frames 0–35)
     Header.tsx                Hook banner, category (neon) and subtitle (white)
-    WordBoard.tsx             Underscores + spring/glow letter reveals, wraps long answers onto more lines
+    WordBoard.tsx             Outlined letter slots + spring/glow letter reveals, wraps long answers onto more lines
     LivesRow.tsx              Mistake counter: one pawn per mistake, knocked over in red
     Keyboard.tsx              4-row A–Z grid; correct = neon fill, wrong = red + X; key box springs sideways on each strike
     AudioTrack.tsx            Maps each cue to a <Sequence> + @remotion/media <Audio>, starting on its exact frame

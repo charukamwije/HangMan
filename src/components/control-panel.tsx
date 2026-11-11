@@ -98,7 +98,7 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
           ))}
         </NativeSelect>
         <div className="flex gap-1.5">
-          {[THEMES[s.themeId].accent, THEMES[s.themeId].wrong, THEMES[s.themeId].lamp, ...THEMES[s.themeId].wood, ...THEMES[s.themeId].board].map((c, i) => (
+          {[THEMES[s.themeId].accent, THEMES[s.themeId].wrong, THEMES[s.themeId].lamp, ...THEMES[s.themeId].wood].map((c, i) => (
             <span key={i} className="h-5 flex-1 rounded ring-1 ring-white/10" style={{ background: c }} />
           ))}
         </div>

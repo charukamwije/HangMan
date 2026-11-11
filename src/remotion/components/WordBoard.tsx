@@ -3,6 +3,7 @@ import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, NEVER, ramp, strikeShake } from "../motion";
+import { loopReset } from "../loop";
 import { SAFE_WIDTH, SAFE_ZONE } from "../constants";
 import type { HookPlan } from "../hook";
 import { DecodeScan, HookDecoys } from "./OpeningHook";
@@ -56,8 +57,7 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
   hook,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const t = frame / fps;
+  const { fps, durationInFrames } = useVideoConfig();
   const { lines, tile, gap, lineHeight } = useMemo(() => measureWordBoard(word), [word]);
   const decoysBySlot = useMemo(() => {
     const bySlot = new Map<number, HookPlan["decoys"]>();
@@ -72,7 +72,9 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
 
   const solved = frame >= finalRevealFrame;
   const sinceSolved = (frame - finalRevealFrame) / fps;
-  const celebrate = solved ? spring({ frame: frame - finalRevealFrame - Math.round(0.17 * fps), fps, config: { damping: 8, stiffness: 90 } }) : 0;
+  // Loop reset: the celebration settles first, then each letter lifts out of its slot (left → right).
+  const settle = 1 - loopReset(frame, durationInFrames, fps, 0.2, 0.55);
+  const celebrate = (solved ? spring({ frame: frame - finalRevealFrame - Math.round(0.17 * fps), fps, config: { damping: 8, stiffness: 90 } }) : 0) * settle;
 
   return (
     <div
@@ -105,7 +107,8 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
             const ring = shown && !snap ? ramp(since / fps, [0, 0.45], [0, 1]) : 1;
             const flash = shown ? ramp(since / fps, snap ? [0, 0.03, 0.4] : [0, 0.1, 0.67], [0, 1, 0]) : 0;
             const decoys = decoysBySlot.get(idx);
-            const wave = solved ? Math.max(0, Math.sin(sinceSolved * 6.7 - idx * 0.5)) * 0.25 : 0;
+            const wave = (solved ? Math.max(0, Math.sin(sinceSolved * 6.7 - idx * 0.5)) * 0.25 : 0) * settle;
+            const lift = shown ? loopReset(frame, durationInFrames, fps, 0.45 + 0.35 * (idx / Math.max(1, word.length - 1)), 0.65 + 0.35 * (idx / Math.max(1, word.length - 1))) : 0;
             const glow = 18 + 60 * flash + 30 * wave;
 
             return (
@@ -130,8 +133,14 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                     inset: `${tile * 0.06}px 0 ${tile * 0.16}px`,
                     borderRadius: tile * 0.14,
                     background: `linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.55))`,
-                    border: `2px solid rgba(255,255,255,${0.06 + flash * 0.3})`,
-                    boxShadow: flash ? `0 0 ${80 * flash}px ${theme.accent}66, inset 0 0 ${60 * flash}px ${theme.accent}55` : undefined,
+                    // Empty slots keep a clearly visible light outline; filled ones take the accent.
+                    border: `${Math.max(3, Math.round(tile * 0.022))}px solid ${shown ? slotBorder(theme.accent, flash > 0.3 ? 1 : 0.6, lift) : EMPTY_BORDER}`,
+                    boxShadow: [
+                      "inset 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.6)",
+                      flash ? `0 0 ${80 * flash}px ${theme.accent}66, inset 0 0 ${60 * flash}px ${theme.accent}55` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(", "),
                   }}
                 />
                 {decoys && frame < hook.clearFrame && <HookDecoys decoys={decoys} tile={tile} />}
@@ -149,27 +158,13 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                       lineHeight: 1,
                       color: flash > 0.5 ? "#ffffff" : theme.accent,
                       textShadow: `0 0 ${glow * 0.4}px ${theme.accent}, 0 0 ${glow}px ${theme.accent}aa, 0 0 ${glow * 2}px ${theme.accent}55`,
-                      transform: `translateY(${interpolate(pop, [0, 1], [slamFrom.y, 0])}px) scale(${interpolate(pop, [0, 1], [slamFrom.s, 1])})`,
-                      opacity: Math.min(1, pop * 1.5),
+                      transform: `translateY(${interpolate(pop, [0, 1], [slamFrom.y, 0]) - tile * 0.6 * lift}px) scale(${interpolate(pop, [0, 1], [slamFrom.s, 1]) * (1 - 0.3 * lift)})`,
+                      opacity: Math.min(1, pop * 1.5) * (1 - lift),
                     }}
                   >
                     {ch}
                   </div>
                 )}
-                {/* neon underscore */}
-                <div
-                  style={{
-                    position: "absolute",
-                    left: tile * 0.06,
-                    right: tile * 0.06,
-                    bottom: tile * 0.06,
-                    height: Math.max(10, tile * 0.075),
-                    borderRadius: 99,
-                    background: theme.accent,
-                    boxShadow: `0 0 ${16 + 40 * flash}px ${theme.accent}, 0 0 ${50 + 60 * flash}px ${theme.accent}77`,
-                    opacity: shown ? 1 : 0.72 + 0.18 * Math.sin(t * 4.3 + idx),
-                  }}
-                />
               </div>
             );
           })}
@@ -179,3 +174,12 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
     </div>
   );
 };
+
+const EMPTY_BORDER = "rgba(255,255,255,0.45)";
+/** Filled-slot outline (accent at `alpha`), blended back to the empty outline as `toEmpty` → 1. */
+function slotBorder(accent: string, alpha: number, toEmpty: number) {
+  if (toEmpty <= 0) return `${accent}${alpha >= 1 ? "ff" : "99"}`;
+  const n = parseInt(accent.slice(1, 7), 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * toEmpty);
+  return `rgba(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)}, ${(alpha + (0.45 - alpha) * toEmpty).toFixed(3)})`;
+}

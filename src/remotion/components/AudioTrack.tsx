@@ -2,7 +2,8 @@ import React, { useMemo } from "react";
 import { Audio } from "@remotion/media";
 import { interpolate, Sequence, staticFile, useVideoConfig } from "remotion";
 import { AUDIO } from "../constants";
-import { buildAudioCues } from "../audioCues";
+import { buildAudioCues, LOOP_REWIND_CUE_ID } from "../audioCues";
+import { loopResetStart } from "../loop";
 import type { Timeline } from "../timeline";
 import type { ReelAudioSettings } from "../types";
 
@@ -20,6 +21,7 @@ export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings
   const fadeIn = Math.round(fps * 0.1);
   const [xfadeFrom, xfadeTo] = timeline.hook.musicInFrames;
   const musicFrames = durationInFrames - xfadeFrom;
+  const loopFrom = loopResetStart(durationInFrames, fps);
   return (
     <>
       {/* Dark drone under the hook (0.1 s fade in), crossfaded out as the music comes in after the lock. */}
@@ -34,15 +36,27 @@ export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings
       <Sequence name="music-bed" from={xfadeFrom} durationInFrames={musicFrames} premountFor={fps}>
         <Audio
           src={staticFile(AUDIO.music)}
-          volume={(f) => interpolate(f, [0, xfadeTo - xfadeFrom, musicFrames - fps, musicFrames], [0, audio.music, audio.music, 0], clamp)}
+          volume={(f) =>
+            interpolate(f, [0, xfadeTo - xfadeFrom, musicFrames - fps], [0, audio.music, audio.music], clamp) *
+            // the song itself is "rewound" by loop-rewind.wav, so it drops out as the rewind starts
+            interpolate(xfadeFrom + f, [loopFrom, loopFrom + 2], [1, 0], clamp)
+          }
         />
       </Sequence>
 
-      {cues.map((cue) => (
-        <Sequence key={cue.id} name={cue.id} from={cue.from} durationInFrames={cue.durationInFrames} premountFor={Math.round(fps * 0.5)}>
-          <Audio src={staticFile(cue.src)} volume={cue.volume} />
-        </Sequence>
-      ))}
+      {cues.map((cue) => {
+        // Everything except the loop rewind ducks out over its first 3 frames, so the
+        // replay's frame-0 gavel follows the rewind with nothing hanging over the cut.
+        const ducked =
+          cue.id === LOOP_REWIND_CUE_ID
+            ? cue.volume
+            : (f: number) => (typeof cue.volume === "number" ? cue.volume : cue.volume(f)) * interpolate(cue.from + f, [loopFrom, loopFrom + 3], [1, 0.1], clamp);
+        return (
+          <Sequence key={cue.id} name={cue.id} from={cue.from} durationInFrames={cue.durationInFrames} premountFor={Math.round(fps * 0.5)}>
+            <Audio src={staticFile(cue.src)} volume={ducked} />
+          </Sequence>
+        );
+      })}
     </>
   );
 };

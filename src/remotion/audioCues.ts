@@ -4,7 +4,9 @@
  * <AudioTrack> component only maps this list to <Sequence>/<Audio>, so what
  * you hear in the Player is exactly what `npx remotion render` muxes.
  */
-import { AUDIO, AUDIO_SECONDS, COUNTDOWN_FROM, FINAL_TICK_SECONDS, SWELL_LEAD_SECONDS } from "./constants";
+import { AUDIO, AUDIO_SECONDS, COUNTDOWN_FROM, DURATION_SECONDS, FINAL_TICK_SECONDS, LOOP_RESET_SECONDS, SWELL_LEAD_SECONDS } from "./constants";
+
+export const LOOP_REWIND_CUE_ID = "loop-rewind";
 import type { Timeline } from "./timeline";
 import type { ReelAudioSettings } from "./types";
 
@@ -94,6 +96,12 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   const swellFrom = Math.max(0, timeline.finalRevealFrame - Math.round(SWELL_LEAD_SECONDS * fps));
   cues.push({ id: "brass-swell", src: AUDIO.swell, from: swellFrom, durationInFrames: seconds(AUDIO_SECONDS.swell, fps), volume: clamp01(sfx * 0.85) });
   cues.push({ id: "reveal-sting", src: AUDIO.reveal, from: timeline.finalRevealFrame, durationInFrames: seconds(AUDIO_SECONDS.reveal, fps), volume: clamp01(sfx) });
+
+  // 6. Loop point: the end of the song rewinds over the last LOOP_RESET_SECONDS and hard-stops
+  //    right as frame 0's gavel hits on the replay (everything else ducks under it, see AudioTrack).
+  const loopLen = Math.round(LOOP_RESET_SECONDS * fps);
+  const durationFrames = Math.round(DURATION_SECONDS * fps);
+  cues.push({ id: LOOP_REWIND_CUE_ID, src: AUDIO.loopRewind, from: durationFrames - loopLen, durationInFrames: loopLen, volume: clamp01(Math.max(audio.music, 0.2) * 2.2) });
 
   return cues.sort((a, b) => a.from - b.from || a.id.localeCompare(b.id));
 }

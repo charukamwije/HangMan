@@ -13,12 +13,15 @@ export const KenBurns: React.FC<{
   to?: number;
   /** transform-origin; slightly above centre keeps the focal lamp/board in frame. */
   origin?: string;
-}> = ({ children, from = KEN_BURNS.from, to = KEN_BURNS.to, origin = "50% 46%" }) => {
+  /** 0 → 1: ease the zoom back to `from` (loop reset), so the replay starts where this ends. */
+  reset?: number;
+}> = ({ children, from = KEN_BURNS.from, to = KEN_BURNS.to, origin = "50% 46%", reset = 0 }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
-  const scale = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [from, to], {
+  const push = interpolate(frame, [0, Math.max(1, durationInFrames - 1)], [from, to], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+  const scale = push + (from - push) * reset;
   return <AbsoluteFill style={{ transform: `scale(${scale})`, transformOrigin: origin, willChange: "transform" }}>{children}</AbsoluteFill>;
 };

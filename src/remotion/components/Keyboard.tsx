@@ -3,15 +3,18 @@ import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, ramp, strikeShake } from "../motion";
-import { SAFE_CENTER_X } from "../constants";
+import { loopReset } from "../loop";
+import { LOWER_SAFE_CENTER_X } from "../constants";
 
 /** 4-row alphabetical A–Z grid: 7 / 7 / 6 / 6. */
 export const KEY_ROWS = ["ABCDEFG", "HIJKLMN", "OPQRST", "UVWXYZ"];
 
-const KEY_W = 222;
-const KEY_H = 182;
-const GAP = 22;
-const PAD = 50;
+// Sized to the lower safe band (x 140 → 1780, left of the platform action rail):
+// 7 × 200 + 6 × 20 + 2 × 44 = 1608 px wide → spans 156 – 1764.
+const KEY_W = 200;
+const KEY_H = 166;
+const GAP = 20;
+const PAD = 44;
 
 export const KEYBOARD_HEIGHT = KEY_ROWS.length * KEY_H + (KEY_ROWS.length - 1) * GAP + PAD * 2;
 
@@ -31,14 +34,14 @@ export const Keyboard: React.FC<{
   shakePx: number;
 }> = ({ theme, top, correctKeyFrames, wrongKeyFrames, wrongFrames, shakePx }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
   const shakeX = strikeShake(framesSinceLast(wrongFrames, frame), fps, shakePx);
 
   return (
     <div
       style={{
         position: "absolute",
-        left: SAFE_CENTER_X, // 1792px box → spans 114–1906, inside the 80–1940 safe band
+        left: LOWER_SAFE_CENTER_X,
         top,
         transform: `translateX(calc(-50% + ${shakeX.toFixed(2)}px))`,
         padding: PAD,
@@ -59,7 +62,20 @@ export const Keyboard: React.FC<{
             const wf = wrongKeyFrames.get(letter);
             const state: KeyState = cf !== undefined && frame >= cf ? "correct" : wf !== undefined && frame >= wf ? "wrong" : "idle";
             const since = state === "correct" ? frame - cf! : state === "wrong" ? frame - wf! : -1;
-            return <Key key={letter} letter={letter} state={state} since={since} theme={theme} fps={fps} />;
+            // Loop reset: lit / struck keys fade back to idle in an A → Z sweep (first ~85 % of the reset).
+            const k = letter.charCodeAt(0) - 65;
+            const reset = state === "idle" ? 0 : loopReset(frame, durationInFrames, fps, 0.45 * (k / 25), 0.45 * (k / 25) + 0.4);
+            if (reset <= 0) return <Key key={letter} letter={letter} state={state} since={since} theme={theme} fps={fps} />;
+            return (
+              <div key={letter} style={{ position: "relative", width: KEY_W, height: KEY_H }}>
+                <div style={{ position: "absolute", inset: 0 }}>
+                  <Key letter={letter} state="idle" since={-1} theme={theme} fps={fps} />
+                </div>
+                <div style={{ position: "absolute", inset: 0, opacity: 1 - reset, transform: `scale(${1 - 0.08 * reset})` }}>
+                  <Key letter={letter} state={state} since={since} theme={theme} fps={fps} />
+                </div>
+              </div>
+            );
           })}
         </div>
       ))}
@@ -87,7 +103,7 @@ const Key: React.FC<{ letter: string; state: KeyState; since: number; theme: The
     alignItems: "center",
     justifyContent: "center",
     fontFamily: DISPLAY_FONT,
-    fontSize: 118,
+    fontSize: 106,
     lineHeight: 1,
     transform: `translateX(${rattle.toFixed(2)}px) scale(${scale})`,
     zIndex: since >= 0 && since < fps * 0.5 ? 2 : undefined,

@@ -56,11 +56,30 @@ export const KEYBOX_SHAKE_PX_AT_1080 = 5;
 /** Ken Burns push-in on the background across the full reel. */
 export const KEN_BURNS = { from: 1, to: 1.08 } as const;
 
-/** Platform UI overlays (Reels / Shorts / TikTok) on the design canvas, in px. */
-export const SAFE_ZONE = { top: 230, bottom: 700, right: 220, left: 80 };
-/** The horizontal band that platform UI never covers. Centre content on SAFE_CENTER_X, not DESIGN_WIDTH / 2. */
-export const SAFE_WIDTH = DESIGN_WIDTH - SAFE_ZONE.left - SAFE_ZONE.right; // 1860
-export const SAFE_CENTER_X = SAFE_ZONE.left + SAFE_WIDTH / 2; // 1010
+/**
+ * Platform UI on the 2160×3840 design canvas, measured from real phone
+ * screenshots of the reel on Instagram Reels and YouTube Shorts. Both apps
+ * show the video ~815 px wide on a 738 px screen, so ~105 design px are
+ * cropped off EACH side before any overlay is drawn.
+ *
+ *   top        status bar / app header strip (full width)
+ *   left/right side crop (+ a little margin)
+ *   bottom     channel name + title + caption (YouTube starts ≈ y 3080, Instagram ≈ 3420)
+ */
+export const SAFE_ZONE = { top: 300, bottom: 800, left: 140, right: 140 };
+/** Top corners: Instagram back arrow / "Reels" title (left), search · profile · ⋯ (right, both apps), y ≈ 350–480. */
+export const TOP_CORNERS = { bottom: 520, leftWidth: 290, rightWidth: 560 };
+/** Right action rail (like · comment · share · save · remix · ⋯): x ≥ 1800 from y ≈ 2050 (Shorts) / 2430 (Reels). */
+export const RIGHT_RAIL = { top: 1980, width: 380 };
+
+/** Upper/middle band (below the top corners, above the rail): side crop only. Centre content on SAFE_CENTER_X. */
+export const SAFE_WIDTH = DESIGN_WIDTH - SAFE_ZONE.left - SAFE_ZONE.right; // 1880
+export const SAFE_CENTER_X = SAFE_ZONE.left + SAFE_WIDTH / 2; // 1080
+/** Lower band (y ≥ RIGHT_RAIL.top): from the left crop to the action rail. */
+export const LOWER_SAFE_WIDTH = DESIGN_WIDTH - SAFE_ZONE.left - RIGHT_RAIL.width; // 1640
+export const LOWER_SAFE_CENTER_X = SAFE_ZONE.left + LOWER_SAFE_WIDTH / 2; // 960
+/** Banner + clock row: just below the top-corner icons (search · profile · more), full safe width. */
+export const TOP_ROW = { left: SAFE_ZONE.left + 60, right: DESIGN_WIDTH - SAFE_ZONE.right - 60, top: TOP_CORNERS.bottom + 20 }; // x 200 → 1960, y 540
 
 /** Procedural SFX (scripts/generate-sfx.mjs). Drop in licensed files with the same names to replace them. */
 export const AUDIO = {
@@ -84,6 +103,8 @@ export const AUDIO = {
   click: "audio/click.wav",
   /** Opening hook: metallic lock as the hint letter lands (frame 25). */
   lock: "audio/lock.wav",
+  /** Loop point: fast rewind of the end of the song over the last LOOP_RESET_SECONDS. */
+  loopRewind: "audio/loop-rewind.wav",
   /** Opening hook: the music bed rewinding (reversed, accelerating) under the 1 s decode. */
   rewind: "audio/rewind.wav",
   /** 120 BPM staccato cello + woodblock bed, crossfaded in at the end of the hook. */
@@ -105,6 +126,12 @@ export const AUDIO_SECONDS = {
   whoosh: 0.3,
   lock: 0.5,
 } as const;
+
+/**
+ * Seamless loop: over the last 0.6 s every element animates smoothly back to its
+ * frame-0 state (see loop.ts), so the platform's auto-replay lands on the hook with no cut.
+ */
+export const LOOP_RESET_SECONDS = 0.6;
 
 /** Brass swell timing relative to the final reveal: starts 4 s before (00:25), peaks 1 s before (00:28). */
 export const SWELL_LEAD_SECONDS = 4;
