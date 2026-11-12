@@ -109,7 +109,8 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
             const decoys = decoysBySlot.get(idx);
             const wave = (solved ? Math.max(0, Math.sin(sinceSolved * 6.7 - idx * 0.5)) * 0.25 : 0) * settle;
             const lift = shown ? loopReset(frame, durationInFrames, fps, 0.45 + 0.35 * (idx / Math.max(1, word.length - 1)), 0.65 + 0.35 * (idx / Math.max(1, word.length - 1))) : 0;
-            const glow = 18 + 60 * flash + 30 * wave;
+            // Settled glow is kept tight so it doesn't haze the slot outline; the flash still blooms.
+            const glow = 8 + 60 * flash + 24 * wave;
 
             return (
               <div key={ci} style={{ position: "relative", width: tile, height: lineHeight, transform: `scale(${1 + celebrate * 0.04})` }}>
@@ -134,9 +135,11 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                     borderRadius: tile * 0.14,
                     background: `linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.55))`,
                     // Empty slots keep a clearly visible light outline; filled ones take the accent.
-                    border: `${Math.max(3, Math.round(tile * 0.022))}px solid ${shown ? slotBorder(theme.accent, flash > 0.3 ? 1 : 0.6, lift) : EMPTY_BORDER}`,
+                    // Filled slots: solid, slightly thicker accent outline with a crisp dark keyline
+                    // either side, so the edge stays sharp under the letter's glow.
+                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, 1, lift) : EMPTY_BORDER}`,
                     boxShadow: [
-                      "inset 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.6)",
+                      shown ? "inset 0 0 0 2px rgba(0,0,0,0.75), 0 0 0 2px rgba(0,0,0,0.75), 0 4px 14px rgba(0,0,0,0.6)" : "inset 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.6)",
                       flash ? `0 0 ${80 * flash}px ${theme.accent}66, inset 0 0 ${60 * flash}px ${theme.accent}55` : "",
                     ]
                       .filter(Boolean)
@@ -157,7 +160,7 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                       fontSize: tile * 1.08,
                       lineHeight: 1,
                       color: flash > 0.5 ? "#ffffff" : theme.accent,
-                      textShadow: `0 0 ${glow * 0.4}px ${theme.accent}, 0 0 ${glow}px ${theme.accent}aa, 0 0 ${glow * 2}px ${theme.accent}55`,
+                      textShadow: `0 0 ${glow * 0.4}px ${theme.accent}, 0 0 ${glow}px ${theme.accent}99, 0 0 ${glow * 1.4}px ${theme.accent}40`,
                       transform: `translateY(${interpolate(pop, [0, 1], [slamFrom.y, 0]) - tile * 0.6 * lift}px) scale(${interpolate(pop, [0, 1], [slamFrom.s, 1]) * (1 - 0.3 * lift)})`,
                       opacity: Math.min(1, pop * 1.5) * (1 - lift),
                     }}

@@ -16,7 +16,7 @@ export const CALLOUT_SECONDS = 0.8;
  *
  *  correct: slams in (3.2× → 1×), shockwave ring + spark burst, then flies up
  *           toward the board and dissolves.
- *  wrong:   slams in with a jitter, a crimson ✖ stamps over it on frame 3,
+ *  wrong:   slams in red with a jitter (no cross),
  *           then it drops away with gravity and a spin.
  */
 export const GuessCallouts: React.FC<{
@@ -61,8 +61,6 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
 
   const backdrop = ramp(t, [0, 0.05, 0.55, 0.8], [0, 0.85, 0.6, 0]);
   const ring = ramp(t, [0, 0.4], [0, 1]);
-  const stamp = !correct ? spring({ frame: f - 3, fps, config: { damping: 12, stiffness: 600, mass: 0.5 } }) : 0;
-  const stampOn = !correct && f >= 3;
 
   return (
     <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
@@ -126,8 +124,8 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
             fontFamily: DISPLAY_FONT,
             fontSize: LETTER,
             lineHeight: 1,
-            // Wrong letters stay white so the crimson ✖ reads on top of them.
-            color: f < 2 || !correct ? "#ffffff" : color,
+            // White impact flash for 2 frames, then the verdict colour (accent = correct, red = wrong).
+            color: f < 2 ? "#ffffff" : color,
             textShadow: `0 0 40px ${color}, 0 0 120px ${color}aa, 0 24px 60px rgba(0,0,0,0.9)`,
             WebkitTextStroke: `10px rgba(0,0,0,0.55)`,
             paintOrder: "stroke fill",
@@ -136,26 +134,6 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
           }}
         >
           {letter}
-          {stampOn && (
-            <svg
-              viewBox="0 0 100 100"
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                width: LETTER * 0.95,
-                height: LETTER * 0.95,
-                marginLeft: -LETTER * 0.475,
-                marginTop: -LETTER * 0.475,
-                overflow: "visible",
-                transform: `scale(${interpolate(stamp, [0, 1], [2.4, 1])})`,
-                filter: `drop-shadow(0 0 30px ${color}) drop-shadow(0 12px 20px rgba(0,0,0,0.8))`,
-              }}
-            >
-              <line x1="10" y1="10" x2="90" y2="90" stroke={color} strokeWidth="13" strokeLinecap="round" />
-              <line x1="90" y1="10" x2="10" y2="90" stroke={color} strokeWidth="13" strokeLinecap="round" />
-            </svg>
-          )}
         </div>
         {/* verdict tag */}
         <div

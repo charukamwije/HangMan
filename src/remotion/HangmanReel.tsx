@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
-import { DESIGN_HEIGHT, DESIGN_WIDTH, KEYBOX_SHAKE_PX_AT_1080, RIGHT_RAIL, SAFE_ZONE, TOP_CORNERS } from "./constants";
+import { DESIGN_HEIGHT, DESIGN_WIDTH, HINT2_AT_SECONDS, KEYBOX_SHAKE_PX_AT_1080, RIGHT_RAIL, SAFE_ZONE, TOP_CORNERS } from "./constants";
 import { framesSinceLast, NEVER, ramp, strikeShake, stressAt } from "./motion";
 import { loopReset } from "./loop";
 import { getTheme } from "./themes";
@@ -16,9 +16,9 @@ import { StressVignette } from "./components/StressVignette";
 import { measureWordBoard, WordBoard } from "./components/WordBoard";
 
 // Vertical layout on the 2160×3840 design canvas, stacked UP from the keyboard:
-// keys → mistakes row → word board → category + subtitle → banner + clock (see Header for the fallback).
+// keys → pawns → word board → "HINT" label + hint text. Banner + clock are pinned below the platform icons.
 const LIVES_HEIGHT = 200;
-const GAP_BOARD_LIVES = 130; // lifts board + subtitle + topic a little off the pawns
+const GAP_BOARD_LIVES = 130; // lifts board + hint a little off the pawns
 /** Guess callout centre, below the keyboard top: it plays over the upper key rows so the word board stays visible. */
 const CALLOUT_BELOW_KEYS_TOP = 280;
 const KEYBOARD_BOTTOM = DESIGN_HEIGHT - SAFE_ZONE.bottom - 20; // 3020: whole key box sits above YouTube's channel/title (≈ 3080)
@@ -29,7 +29,7 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  * "The Dark Board" — 30 s · 9:16 · 30 fps Hangman reel (1080×1920 or 2160×3840).
  *
  * Retention structure:
- *  - Frame 0 is a complete frame: hook banner, category, every word slot, the
+ *  - Frame 0 is a complete frame: hook banner, hint, every word slot, the
  *    first decoy mid-pop, clock and keys. No black frame, no fade-in.
  *  - Frames 0–42 are the "machine gun" hook (hook.ts): a full second of
  *    accelerating decoding over a tape-rewind of the music, then the hint
@@ -120,7 +120,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       <Background theme={theme} />
       <StressVignette stress={stress} />
 
-      <Header theme={theme} hookText={props.hookText} category={props.category} subtitle={props.subtitle} bannerFlip={timeline.hook.bannerFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerFlip={timeline.hook.bannerFrames} hintReveal={timeline.hook.hintRevealFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} finalRevealFrame={timeline.finalRevealFrame} top={livesTop} />
       <Keyboard

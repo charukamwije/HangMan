@@ -3,7 +3,7 @@ export type ThemeId = "dark-academia" | "midnight-noir" | "emerald-library";
 export type Theme = {
   id: ThemeId;
   name: string;
-  /** Category header, timer, underscores, revealed letters. */
+  /** "HINT" label, timer, slot outlines, revealed letters. */
   accent: string;
   text: string;
   wrong: string;

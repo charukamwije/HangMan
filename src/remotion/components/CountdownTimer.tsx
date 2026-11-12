@@ -5,14 +5,14 @@ import { framesSinceLast, ramp, type Stress } from "../motion";
 import { loopReset } from "../loop";
 import { COUNTDOWN_FROM } from "../constants";
 import type { Theme } from "../themes";
-import { BODY_FONT, DISPLAY_FONT } from "../fonts";
+import { BODY_FONT } from "../fonts";
 import { DESIGN_WIDTH, TOP_ROW } from "../constants";
 
 /** Compact clock at the right end of TOP_ROW (just below the platform's search/profile/more icons). */
-export const CLOCK = { width: 400, height: 222, padding: "16px 0 20px", radius: 38, label: 32, digits: 140, digitW: 76, colonW: 38 } as const;
+export const CLOCK = { width: 400, height: 222, padding: "18px 0 22px", radius: 30, label: 30 } as const;
 
 /**
- * Neon clock "00:29" → "00:00" (1 Hz). Visible from frame 0. Below 00:08 it
+ * Red seven-segment LED clock "00:29" → "00:00" (1 Hz). Visible from frame 0. Below 00:08 it
  * enters stress mode: every tick it punches (scale + glow) on the exact frames
  * the vignette throbs, because both read the same `Stress` value.
  */
@@ -36,6 +36,9 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
   const done = remaining === 0 && reset === 0;
   const doneBlink = done ? 0.65 + 0.35 * Math.cos(sinceTick * 10) : 1;
 
+  // LED brightness: a small flicker on every tick, brighter + throbbing under stress, blinking at 00:00.
+  const led = Math.min(1, (0.88 + 0.12 * flash + 0.12 * pulse * level) * doneBlink);
+
   return (
     <div
       style={{
@@ -45,9 +48,17 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
         width: S.width,
         padding: S.padding,
         borderRadius: S.radius,
-        background: `linear-gradient(180deg, rgba(14,12,8,0.82), rgba(4,4,3,0.88)), ${theme.accent}${active ? hex2(0.18 * pulse) : "00"}`,
-        border: `${borderW}px solid ${theme.accent}`,
-        boxShadow: `0 0 ${glow}px ${theme.accent}${active ? "cc" : "88"}, 0 0 ${glow * 2.2 * level}px ${theme.accent}55, inset 0 0 ${40 + 60 * pulse}px ${theme.accent}${hex2(0.13 + 0.3 * pulse * level)}, 0 30px 60px rgba(0,0,0,0.6)`,
+        // Smoked-glass LED panel in a dark bezel.
+        background: `radial-gradient(120% 90% at 50% 40%, rgba(60,0,0,${0.55 + 0.25 * pulse * level}), rgba(8,0,0,0.95) 70%), #050000`,
+        border: `${borderW}px solid #1a0505`,
+        boxShadow: [
+          `0 0 0 3px rgba(255,40,30,${0.25 + 0.35 * level})`,
+          `0 0 ${glow}px rgba(255,30,20,${0.35 + 0.35 * level})`,
+          `0 0 ${glow * 2.2 * level}px rgba(255,30,20,0.35)`,
+          `inset 0 0 ${40 + 60 * pulse}px rgba(255,30,20,${(0.12 + 0.3 * pulse * level).toFixed(3)})`,
+          "inset 0 3px 0 rgba(255,255,255,0.06)",
+          "0 30px 60px rgba(0,0,0,0.6)",
+        ].join(", "),
         transform: `scale(${scale + rollPop})`,
         transformOrigin: "100% 0%",
         textAlign: "center",
@@ -59,36 +70,63 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
           fontWeight: 800,
           fontSize: S.label,
           letterSpacing: "0.32em",
-          color: active ? theme.accent : theme.text,
-          opacity: 0.8 + 0.2 * level,
-          marginBottom: 2,
+          color: LED_ON,
+          textShadow: `0 0 12px ${LED_ON}`,
+          opacity: (0.75 + 0.25 * level) * (done ? doneBlink : 1),
+          marginBottom: 10,
           paddingLeft: "0.32em",
         }}
       >
         {done ? "TIME'S UP" : active ? "HURRY UP" : "TIME LEFT"}
       </div>
-      <div
-        style={{
-          fontFamily: DISPLAY_FONT,
-          fontSize: S.digits,
-          lineHeight: 1,
-          color: pulse > 0.75 ? "#FFFFFF" : theme.accent,
-          opacity: doneBlink,
-          textShadow: `0 0 18px ${theme.accent}, 0 0 ${glow * 1.6}px ${theme.accent}aa`,
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        {/* fixed-width digits so the clock never jitters */}
-        {text.split("").map((c, i) => (
-          <span key={i} style={{ display: "inline-block", width: c === ":" ? S.colonW : S.digitW, textAlign: "center" }}>
-            {c}
-          </span>
-        ))}
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, filter: `drop-shadow(0 0 ${10 + 14 * flash}px ${LED_ON}aa)` }}>
+        {/* fixed-width seven-segment digits so the clock never jitters */}
+        {text.split("").map((c, i) =>
+          c === ":" ? (
+            <LedColon key={i} height={DIGIT_H} brightness={led} />
+          ) : (
+            <LedDigit key={i} digit={Number(c)} height={DIGIT_H} brightness={led} />
+          ),
+        )}
       </div>
     </div>
   );
 };
+
+// ------------------------------------------------------------ seven-segment
+const LED_ON = "#ff2a1f";
+const LED_OFF = "rgba(255,40,30,0.07)";
+const DIGIT_H = 124;
+
+/** Segment polygons on a 60×100 grid (classic hexagonal LED segments, slight italic via skew). */
+const SEG: Record<string, string> = {
+  a: "10,4 50,4 44,11 16,11",
+  b: "51,6 55,10 55,46 51,50 45,45 45,13",
+  c: "51,52 55,56 55,90 51,94 45,87 45,57",
+  d: "16,89 44,89 50,96 10,96",
+  e: "9,52 15,57 15,87 9,94 5,90 5,56",
+  f: "9,6 15,13 15,45 9,50 5,46 5,10",
+  g: "11,50 16,46 44,46 49,50 44,54 16,54",
+};
+const DIGIT_SEGMENTS = ["abcdef", "bc", "abged", "abgcd", "fgbc", "afgcd", "afgedc", "abc", "abcdefg", "abcdfg"];
+
+const LedDigit: React.FC<{ digit: number; height: number; brightness: number }> = ({ digit, height, brightness }) => {
+  const on = DIGIT_SEGMENTS[digit] ?? "";
+  return (
+    <svg viewBox="0 0 60 100" width={height * 0.6} height={height} style={{ overflow: "visible", transform: "skewX(-6deg)" }}>
+      {Object.entries(SEG).map(([k, pts]) => (
+        <polygon key={k} points={pts} fill={on.includes(k) ? LED_ON : LED_OFF} opacity={on.includes(k) ? brightness : 1} />
+      ))}
+    </svg>
+  );
+};
+
+const LedColon: React.FC<{ height: number; brightness: number }> = ({ height, brightness }) => (
+  <svg viewBox="0 0 16 100" width={height * 0.16} height={height} style={{ overflow: "visible" }}>
+    <rect x="3" y="28" width="10" height="10" rx="2" fill={LED_ON} opacity={brightness} />
+    <rect x="3" y="62" width="10" height="10" rx="2" fill={LED_ON} opacity={brightness} />
+  </svg>
+);
 
 const hex2 = (a: number) =>
   Math.round(Math.max(0, Math.min(1, a)) * 255)

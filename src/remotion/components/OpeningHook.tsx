@@ -4,12 +4,12 @@ import { HOOK_FONT } from "../fonts";
 import type { HookDecoy } from "../hook";
 import { ramp } from "../motion";
 
-/** Crimson strike mark, kept distinct from the theme's neon `wrong` red. */
+/** Crimson decoy letters, kept distinct from the theme's neon `wrong` red. */
 export const HOOK_RED = "#D32F2F";
 /** Aged-parchment ink for the decoy glyphs. */
 const PARCHMENT = "#E9DCC4";
-/** Cipher glyphs flashed while a slot is "decoding" — no letters, so the scramble can never leak the answer. */
-const CIPHER = "0123456789#%&?§†‡¥";
+/** Letters flashed while a slot is "decoding" (letters only). */
+const CIPHER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 type TileProps = {
   letter: string;
@@ -21,8 +21,8 @@ type TileProps = {
 };
 
 /**
- * One noise slot: scrambles through cipher glyphs, locks on its decoy letter
- * and is slammed with a crimson ✖. Every value is a pure function of the
+ * One noise slot: scrambles through A–Z, then locks on its decoy letter (one of the
+ * answer's letters, never the slot's own) with a crimson punch — no cross. Every value is a pure function of the
  * Sequence-local frame (glyphs come from remotion's seeded random()).
  */
 export const DecoyTile: React.FC<TileProps> = ({ letter, tile, strikeAt, clearAt }) => {
@@ -34,25 +34,11 @@ export const DecoyTile: React.FC<TileProps> = ({ letter, tile, strikeAt, clearAt
   const struck = s >= 0;
   const glyph = struck ? letter : CIPHER[Math.floor(random(`cipher-${letter}-${f}`) * CIPHER.length)];
   const jitterY = struck ? 0 : (random(`jit-${letter}-${f}`) - 0.5) * tile * 0.16;
-  // Strike: ✖ lands oversized and slams down; the letter gets a white impact flash.
-  const strikeScale = ramp(s, [0, 2], [2.2, 1]);
-  const strikeOpacity = ramp(s, [0, 1], [0.5, 1]);
+  // Lock: the letter turns crimson and punches (1.35× → 1×) with a short red flash.
+  const lockScale = struck ? ramp(s, [0, 2], [1.35, 1]) : 1;
   const impact = struck ? ramp(s, [0, 3], [1, 0]) : 0;
   // Wipe: half-faded on the last frame, unmounted (gone) on the clear frame.
   const fade = ramp(f, [clearAt - 2, clearAt], [1, 0]);
-  const thick = Math.max(8, tile * 0.085);
-  const bar = {
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    width: tile * 0.95,
-    height: thick,
-    marginLeft: -tile * 0.475,
-    marginTop: -thick / 2,
-    borderRadius: 99,
-    background: HOOK_RED,
-    boxShadow: `0 0 0 ${Math.max(2, thick * 0.25)}px rgba(0,0,0,0.75), 0 0 ${tile * (0.15 + 0.35 * impact)}px ${HOOK_RED}`,
-  } as const;
 
   return (
     <div style={{ position: "absolute", inset: 0, opacity: fade, pointerEvents: "none" }}>
@@ -69,24 +55,17 @@ export const DecoyTile: React.FC<TileProps> = ({ letter, tile, strikeAt, clearAt
           fontWeight: 900,
           fontSize: tile * 0.92,
           lineHeight: 1,
-          color: struck ? PARCHMENT : "#f6efe0",
-          opacity: struck ? 0.9 : 0.75,
-          // cipher frames get an RGB split so the slot reads as "decoding"
+          color: struck ? HOOK_RED : PARCHMENT,
+          opacity: struck ? 1 : 0.7,
+          // scramble frames get an RGB split so the slot reads as "decoding"
           textShadow: struck
-            ? `0 4px 0 rgba(0,0,0,0.55), 0 0 ${18 + 40 * impact}px rgba(255,255,255,${0.6 * impact})`
+            ? `0 4px 0 rgba(0,0,0,0.6), 0 0 ${16 + 40 * impact}px ${HOOK_RED}${impact > 0.3 ? "ff" : "aa"}`
             : `${tile * 0.04}px 0 0 ${HOOK_RED}cc, ${-tile * 0.04}px 0 0 #3fd6ffaa, 0 0 18px rgba(0,0,0,0.6)`,
-          transform: `translateY(${jitterY}px) scale(${scale})`,
+          transform: `translateY(${jitterY}px) scale(${scale * lockScale})`,
         }}
       >
         {glyph}
       </div>
-      {/* ✖ drawn as two bars — no dependency on the font having the glyph. */}
-      {struck && (
-        <div style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: tile * 0.2, opacity: strikeOpacity, transform: `scale(${strikeScale})` }}>
-          <div style={{ ...bar, transform: "rotate(45deg)" }} />
-          <div style={{ ...bar, transform: "rotate(-45deg)" }} />
-        </div>
-      )}
     </div>
   );
 };

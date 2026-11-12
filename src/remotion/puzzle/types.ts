@@ -29,10 +29,10 @@ export interface RevealEvent {
 export type HangmanPuzzleData = {
   /** Optional slug for output file names, e.g. "2026-11-11". [A-Za-z0-9_-] only. */
   id?: string;
-  /** Category title (neon), e.g. "GLOBAL LANDMARKS & GEOGRAPHY". */
-  topic: string;
   /** Subtitle hint (white), e.g. "A TRICKY US & UK CHALLENGE WORD". */
   hint: string;
+  /** Second hint, replaces `hint` at 15 s (blur out → chip flip → word-by-word reveal). "" = keep hint 1. */
+  hint2: string;
   /** The answer. Letters and spaces, ≤ 36 chars. */
   secretWord: string;
   /** Letters the "player" gets wrong. Letters that are actually in the word are ignored. */

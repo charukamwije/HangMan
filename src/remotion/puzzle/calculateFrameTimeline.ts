@@ -81,8 +81,8 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
   // ---- 2. Composition props -------------------------------------------------
   const reelProps: ReelProps = {
     hookText: puzzle.viralHookText,
-    category: puzzle.topic,
     subtitle: puzzle.hint,
+    hint2: puzzle.hint2 ?? "",
     word,
     hintLetter: prefilledLetter,
     guesses,

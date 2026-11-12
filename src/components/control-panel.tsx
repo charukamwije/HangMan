@@ -46,11 +46,23 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
         <Field label="Hook banner (frame 0)">
           <Input value={s.hookText} maxLength={40} placeholder="CAN YOU SOLVE IT?" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
         </Field>
-        <Field label="Topic / Category">
-          <Input value={s.category} maxLength={80} onChange={(e) => s.update({ category: e.target.value })} />
+        <Field label="Hint 1 (0–15 s)">
+          <Input
+            value={s.subtitle}
+            maxLength={120}
+            placeholder="e.g. A TRICKY US & UK CHALLENGE WORD"
+            onChange={(e) => s.update({ subtitle: e.target.value })}
+          />
+          <HintLengthGuide length={s.subtitle.trim().length} />
         </Field>
-        <Field label="Subtitle / Hint">
-          <Input value={s.subtitle} maxLength={120} onChange={(e) => s.update({ subtitle: e.target.value })} />
+        <Field label="Hint 2 (15–30 s, optional)">
+          <Input
+            value={s.hint2 ?? ""}
+            maxLength={120}
+            placeholder="e.g. FAMOUS PLACES PEOPLE TRAVEL TO SEE (empty = keep hint 1)"
+            onChange={(e) => s.update({ hint2: e.target.value })}
+          />
+          <HintLengthGuide length={(s.hint2 ?? "").trim().length} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Secret Answer">
@@ -223,6 +235,39 @@ function Section({ icon, title, children, defaultOpen = true }: { icon: ReactNod
         )}
       </AnimatePresence>
     </section>
+  );
+}
+
+/**
+ * Readability guide for the hint card (≈ 24 characters per line on screen):
+ *   ≤ 50  two lines, ideal for a one-glance read
+ *   ≤ 70  three lines, always full size even with a two-line answer
+ *   > 70  the card shrinks when the answer wraps onto two lines
+ */
+const HINT_IDEAL = 50;
+const HINT_MAX = 70;
+
+function HintLengthGuide({ length }: { length: number }) {
+  const tone = length > HINT_MAX ? "text-red-400" : length > HINT_IDEAL ? "text-amber-300" : "text-muted-foreground";
+  const bar = length > HINT_MAX ? "bg-red-400" : length > HINT_IDEAL ? "bg-amber-300" : "bg-emerald-400";
+  const message =
+    length > HINT_MAX
+      ? "Too long: the hint card shrinks when the answer wraps. Keep it under 70."
+      : length > HINT_IDEAL
+        ? "OK (3 lines). Under 50 reads best in one glance."
+        : "Ideal length: best 50 or less, max 70.";
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="h-1 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full transition-all ${bar}`} style={{ width: `${Math.min(100, (length / HINT_MAX) * 100)}%` }} />
+      </div>
+      <div className={`flex justify-between text-[11px] ${tone}`}>
+        <span>{message}</span>
+        <span className="font-mono tabular-nums">
+          {length}/{HINT_MAX}
+        </span>
+      </div>
+    </div>
   );
 }
 

@@ -26,9 +26,25 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
   const outro =
     spring({ frame: frame - finalRevealFrame - Math.round(0.33 * fps), fps, config: { damping: 14 } }) * (1 - loopReset(frame, durationInFrames, fps, 0.05, 0.35));
 
+  // Lives are lost from the RIGHT end of the row toward the left; on the loop reset they
+  // drop back in the order they were lost.
+  const slots = Array.from({ length: lives }, (_, i) => {
+    const order = lives - 1 - i;
+    const hitAt = wrongFrames[order];
+    const hit = hitAt !== undefined && frame >= hitAt;
+    const since = hit ? frame - hitAt : -1;
+    const restore = hit ? loopReset(frame, durationInFrames, fps, 0.1 + 0.08 * order, 0.55 + 0.08 * order) : 0;
+    // 1 = pawn standing on the ledge (drives its contact shadow).
+    const presence = !hit ? 1 : Math.max(1 - ramp(since / fps, [FALL.tipAt, FALL.tipAt + 0.15], [0, 1]), restore);
+    return { since, restore, presence };
+  });
+
+  const falling = slots.some((sl) => sl.since >= 0 && sl.restore === 0 && sl.since / fps < FALL.tipAt + 1.2);
+
   return (
     // Same horizontal band as the keyboard (left crop → action rail), so the pawns centre on the keys.
-    <div style={{ position: "absolute", left: SAFE_ZONE.left, right: RIGHT_RAIL.width, top, height: 200 }}>
+    // While a pawn is falling, the row draws above the keyboard so the pawn drops in front of it.
+    <div style={{ position: "absolute", left: SAFE_ZONE.left, right: RIGHT_RAIL.width, top, height: 200, zIndex: falling ? 3 : undefined }}>
       <div
         style={{
           position: "absolute",
@@ -36,18 +52,15 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 34,
+          gap: PAWN_GAP,
           opacity: 1 - outro,
           transform: `translateY(${-outro * 40}px)`,
         }}
       >
-        {Array.from({ length: lives }, (_, i) => {
-          const hitAt = wrongFrames[i];
-          const hit = hitAt !== undefined && frame >= hitAt;
-          // Loop reset: captured pawns come back to life one after another (left → right).
-          const restore = hit ? loopReset(frame, durationInFrames, fps, 0.15 + 0.07 * i, 0.5 + 0.07 * i) : 0;
-          return <LifePawn key={i} theme={theme} since={hit ? frame - hitAt : -1} fps={fps} restore={restore} />;
-        })}
+        <Ledge lives={lives} presence={slots.map((sl) => sl.presence)} />
+        {slots.map((sl, i) => (
+          <LifePawn key={i} theme={theme} since={sl.since} fps={fps} restore={sl.restore} />
+        ))}
       </div>
       <div
         style={{
@@ -73,55 +86,125 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
 };
 
 const PAWN = 74;
-const DEAD_FILL = "#2a2421";
+const PAWN_GAP = 34;
+/** Pawn box is centred in the 200 px row; the base ellipse spans ~85–96 % of the SVG height. */
+const PAWN_H = PAWN * 1.6;
+const FOOT_TOP = 100 - PAWN_H / 2 + PAWN_H * 0.82; // top of the lower base ellipse
+const FOOT_BOTTOM = 100 - PAWN_H / 2 + PAWN_H * 0.965;
+/** Ledge top surface (seen from slightly above) holds the whole foot, front face below it. */
+const TOP_FACE = { top: FOOT_TOP - 10, height: FOOT_BOTTOM - FOOT_TOP + 22 };
+const FRONT_FACE = 26;
+
+/**
+ * Dark-wood ledge the pawns stand on: a lit top surface deep enough for the
+ * whole pawn foot, a brass-lipped front edge, the front face, a drop shadow,
+ * and a contact shadow under each pawn.
+ */
+const Ledge: React.FC<{ lives: number; presence: number[] }> = ({ lives, presence }) => {
+  const width = lives * PAWN + (lives - 1) * PAWN_GAP + 2 * 70;
+  const frontTop = TOP_FACE.top + TOP_FACE.height;
+  return (
+    <div style={{ position: "absolute", left: "50%", top: 0, width, marginLeft: -width / 2, height: 200, pointerEvents: "none" }}>
+      {/* drop shadow under the ledge */}
+      <div style={{ position: "absolute", left: 10, right: 10, top: frontTop + FRONT_FACE - 6, height: 34, borderRadius: "50%", background: "rgba(0,0,0,0.8)", filter: "blur(14px)" }} />
+      {/* top surface: back edge darker (further from the lamp), front edge catches the light */}
+      <div
+        style={{
+          position: "absolute",
+          left: 14,
+          right: 14,
+          top: TOP_FACE.top,
+          height: TOP_FACE.height,
+          borderRadius: "14px 14px 0 0",
+          background:
+            "linear-gradient(180deg, #2a160a 0%, #4a2a14 45%, #6b4220 100%), repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 46px, rgba(0,0,0,0.06) 46px 104px)",
+          boxShadow: "inset 0 6px 10px rgba(0,0,0,0.55)",
+        }}
+      />
+      {/* contact shadows under each pawn, on the top surface */}
+      {Array.from({ length: lives }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            top: FOOT_BOTTOM - 12,
+            left: 70 + i * (PAWN + PAWN_GAP) - 8,
+            width: PAWN + 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "rgba(0,0,0,0.6)",
+            filter: "blur(4px)",
+            opacity: presence[i] ?? 1,
+          }}
+        />
+      ))}
+      {/* brass lip + front face */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: frontTop,
+          height: FRONT_FACE,
+          borderRadius: "4px 4px 12px 12px",
+          background: "linear-gradient(180deg, #e6c27a 0px, #a8803f 3px, #4a2a12 6px, #2c170a 60%, #140904 100%)",
+          boxShadow: "inset 0 -6px 10px rgba(0,0,0,0.6)",
+        }}
+      />
+    </div>
+  );
+};
+
+/** Fall timing (seconds after the wrong guess) and motion. */
+const FALL = { tipAt: 0.18, g: 5200, spin: 260, drift: 140 } as const;
 
 /**
  * One life. `since` = frames since it was lost (-1 while alive).
- * `restore` 0 → 1 (loop reset): the ✖ retracts and the cream pawn fades back in.
- *  0 → 0.1 s   red flash + punch (1.3× → 1×) + shudder
- *  0.05 → 0.3  fill fades to a dark silhouette, ✖ strokes draw on one after the other
- *  settled     dim pawn, crimson ✖, faint red glow
+ *  0 → 0.18 s   red flash + punch (1.3× → 1×) + shudder, still on the ledge
+ *  0.18 s →     tips forward off the ledge and drops off the bottom of the screen
+ *               with gravity, spinning and drifting sideways (gone after ~0.9 s)
+ * `restore` 0 → 1 (loop reset): the cream pawn drops back onto the ledge from above.
  */
 const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: number }> = ({ theme, since, fps, restore = 0 }) => {
-  if (since < 0 || restore >= 1) {
-    return (
-      <div style={{ filter: "drop-shadow(0 10px 14px rgba(0,0,0,0.7))", opacity: 0.95 }}>
-        <Pawn color={theme.piece} size={PAWN} />
-      </div>
-    );
+  const alive = (
+    <div style={{ filter: "drop-shadow(0 10px 14px rgba(0,0,0,0.7))", opacity: 0.95 }}>
+      <Pawn color={theme.piece} size={PAWN} />
+    </div>
+  );
+  if (since < 0 || restore >= 1) return alive;
+
+  // Loop reset: drop back in from above with a small settle.
+  if (restore > 0) {
+    const y = -520 * (1 - restore) ** 2;
+    return <div style={{ transform: `translateY(${y.toFixed(1)}px)`, opacity: Math.min(1, restore * 3) }}>{alive}</div>;
   }
+
   const s = since / fps;
   const punch = spring({ frame: since, fps, config: { damping: 12, stiffness: 420, mass: 0.6 } });
   const scale = interpolate(punch, [0, 1], [1.3, 1]);
-  const shudder = since < fps * 0.25 ? Math.sin(since * 2.4) * 9 * (1 - since / (fps * 0.25)) : 0;
-  const redness = ramp(s, [0, 0.08, 0.3], [1, 1, 0]); // red flash → dark silhouette
-  // On restore the strokes retract in reverse order (second stroke first).
-  const stroke1 = ramp(s, [0.05, 0.15], [0, 1]) * (1 - ramp(restore, [0.3, 0.8], [0, 1]));
-  const stroke2 = ramp(s, [0.12, 0.22], [0, 1]) * (1 - ramp(restore, [0, 0.5], [0, 1]));
-  const glow = 10 + 40 * redness;
-  const LEN = 132; // ≈ length of each ✖ diagonal in viewBox units
+  const shudder = s < FALL.tipAt ? Math.sin(since * 2.4) * 9 * (1 - s / FALL.tipAt) : 0;
+  const redness = ramp(s, [0, 0.12, 0.45], [1, 1, 0.35]);
+
+  // Fall: tip forward over the front edge, then free-fall.
+  const tf = Math.max(0, s - FALL.tipAt);
+  if (tf > 1.1) return <div style={{ width: PAWN, height: PAWN * 1.6 }} />; // long gone; keep its slot
+  const tip = ramp(tf, [0, 0.12], [0, 1]);
+  const fallY = 0.5 * FALL.g * tf * tf + 30 * tip;
+  const rot = 28 * tip + FALL.spin * tf;
+  const driftX = FALL.drift * tf;
 
   return (
     <div
       style={{
         position: "relative",
-        transform: `translateX(${shudder.toFixed(2)}px) scale(${scale})`,
-        transformOrigin: "50% 100%",
-        filter: `drop-shadow(0 0 ${(glow * (1 - restore)).toFixed(1)}px ${theme.wrong}${redness > 0.2 ? "dd" : "88"}) drop-shadow(0 10px 14px rgba(0,0,0,${(0.7 * restore).toFixed(2)}))`,
+        width: PAWN,
+        height: PAWN * 1.6,
+        transform: `translate(${(shudder + driftX).toFixed(2)}px, ${fallY.toFixed(1)}px) rotate(${rot.toFixed(1)}deg) scale(${scale})`,
+        transformOrigin: "50% 85%",
+        filter: `drop-shadow(0 0 ${(10 + 40 * redness).toFixed(1)}px ${theme.wrong}${redness > 0.5 ? "dd" : "88"}) drop-shadow(0 12px 16px rgba(0,0,0,0.6))`,
       }}
     >
-      <div style={{ opacity: (0.55 + 0.45 * redness) * (1 - restore) }}>
-        <Pawn color={redness > 0.5 ? theme.wrong : DEAD_FILL} size={PAWN} />
-      </div>
-      {restore > 0 && (
-        <div style={{ position: "absolute", inset: 0, opacity: restore * 0.95 }}>
-          <Pawn color={theme.piece} size={PAWN} />
-        </div>
-      )}
-      <svg viewBox="0 0 100 160" width={PAWN} height={PAWN * 1.6} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-        <line x1="8" y1="38" x2="92" y2="138" stroke={theme.wrong} strokeWidth="12" strokeLinecap="round" strokeDasharray={LEN} strokeDashoffset={LEN * (1 - stroke1)} />
-        <line x1="92" y1="38" x2="8" y2="138" stroke={theme.wrong} strokeWidth="12" strokeLinecap="round" strokeDasharray={LEN} strokeDashoffset={LEN * (1 - stroke2)} />
-      </svg>
+      <Pawn color={redness > 0.6 ? theme.wrong : redness > 0.45 ? "#b2382e" : "#5a3b30"} size={PAWN} />
     </div>
   );
 };

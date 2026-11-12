@@ -14,8 +14,10 @@ export type ReelAudioSettings = {
 export type ReelProps = {
   /** Top banner text after the "DECODING BOARD..." intro flips (frame ~16), e.g. "CAN YOU SOLVE IT?". Empty → "GUESS THE WORD". */
   hookText: string;
-  category: string;
+  /** Hint 1, shown from the start. */
   subtitle: string;
+  /** Hint 2, replaces hint 1 at HINT2_AT_SECONDS (15 s). Empty or missing = hint 1 all the way. */
+  hint2?: string;
   word: string;
   /** Letter pre-filled on frame 0 (every occurrence). Empty → first letter of the word. */
   hintLetter: string;

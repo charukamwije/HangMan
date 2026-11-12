@@ -11,8 +11,8 @@ import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/r
 
 export type ReelState = {
   hookText: string;
-  category: string;
   subtitle: string;
+  hint2: string;
   word: string;
   /** Pre-filled on frame 0; "" = first letter of the word. */
   hintLetter: string;
@@ -42,8 +42,8 @@ type Actions = {
 
 const INITIAL: ReelState = {
   hookText: DEFAULT_INPUT.hookText,
-  category: DEFAULT_INPUT.category,
   subtitle: DEFAULT_INPUT.subtitle,
+  hint2: DEFAULT_INPUT.hint2,
   word: DEFAULT_INPUT.word,
   hintLetter: DEFAULT_INPUT.hintLetter,
   wrongLetters: DEFAULT_INPUT.wrongLetters,
@@ -105,8 +105,8 @@ export const useReelStore = create<ReelState & Actions>()(
         const t = calculateFrameTimeline(puzzle, FPS);
         set({
           hookText: puzzle.viralHookText,
-          category: puzzle.topic,
           subtitle: puzzle.hint,
+          hint2: puzzle.hint2 ?? "",
           word: t.word,
           hintLetter: puzzle.prefilledLetter ?? "",
           wrongLetters: puzzle.wrongGuesses.join(", "),
@@ -138,8 +138,8 @@ export const useReelStore = create<ReelState & Actions>()(
 /** Maps editor state to the serializable composition input props. */
 export const toReelProps = (s: ReelState): ReelProps => ({
   hookText: s.hookText,
-  category: s.category,
   subtitle: s.subtitle,
+  hint2: s.hint2 ?? "",
   word: normalizeWord(s.word),
   hintLetter: s.hintLetter,
   guesses: s.guesses,
@@ -158,8 +158,8 @@ export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
   const word = normalizeWord(s.word);
   const letters = new Set(word.replace(/ /g, ""));
   return {
-    topic: s.category,
     hint: s.subtitle,
+    hint2: s.hint2 ?? "",
     secretWord: word,
     wrongGuesses: parseLetters(s.wrongLetters).filter((l) => !letters.has(l)),
     revealSequence: s.autoTiming

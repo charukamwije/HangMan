@@ -25,7 +25,7 @@ export function Studio() {
   const inputProps = useMemo(
     () => toReelProps(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.category, state.subtitle, state.word, state.guesses, state.finalRevealAt, state.themeId, state.audio, state.showSafeZones],
+    [state.hookText, state.hintLetter, state.subtitle, state.hint2, state.word, state.guesses, state.finalRevealAt, state.themeId, state.audio, state.showSafeZones],
   );
 
   return (

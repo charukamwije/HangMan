@@ -491,6 +491,41 @@ function whoosh() {
   return out;
 }
 
+/**
+ * The whole 1 s "machine gun" decode pre-mixed into ONE file: a click on every
+ * decoy pop, click + short faded thud on each strike (pop + 2 frames).
+ * One <Audio> instead of ~40 keeps the Remotion Player from hitting React's
+ * nested-update limit. Pop schedule mirrors decoyPopFrames30() in src/remotion/hook.ts
+ * (keep in sync): gaps ease 4 → 1 frame across frames 0 → 26 @ 30 fps.
+ */
+function hookDecode() {
+  const pops = [];
+  for (let t = 0; t <= 26; ) {
+    pops.push(t);
+    t += Math.max(1, Math.round(4 + (1 - 4) * (t / 26)));
+  }
+  const clickBuf = click(), thudBuf = thud();
+  const out = buf(1.05);
+  const [l, r] = out;
+  const mixIn = ([sl, sr], atSec, gain, maxSec = Infinity) => {
+    const start = Math.round(atSec * SR), len = Math.min(sl.length, Math.round(maxSec * SR));
+    for (let j = 0; j < len && start + j < l.length; j++) {
+      const g = maxSec === Infinity ? gain : gain * (1 - j / len); // linear fade for clipped thuds
+      l[start + j] += sl[j] * g;
+      r[start + j] += sr[j] * g;
+    }
+  };
+  for (const p of pops) {
+    mixIn(clickBuf, p / 30, 0.7);
+    mixIn(clickBuf, (p + 2) / 30, 0.5);
+    mixIn(thudBuf, (p + 2) / 30, 0.45, 0.15);
+  }
+  let peak = 0;
+  for (let i = 0; i < l.length; i++) peak = Math.max(peak, Math.abs(l[i]), Math.abs(r[i]));
+  if (peak > 0.95) normalize(out, 0.95);
+  return out;
+}
+
 // ---------------------------------------------------------------- main
 fs.mkdirSync(OUT_DIR, { recursive: true });
 console.log(`Generating SFX → ${path.relative(process.cwd(), OUT_DIR)}`);
@@ -510,6 +545,7 @@ writeWav("correct.wav", correct());
 writeWav("wrong.wav", wrong());
 writeWav("whoosh.wav", whoosh());
 writeWav("lock.wav", lock());
+writeWav("hook-decode.wav", hookDecode());
 const musicBed = music();
 writeWav("music.wav", musicBed);
 writeWav("rewind.wav", rewind(musicBed));

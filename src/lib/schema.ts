@@ -7,8 +7,8 @@ export const reelPropsSchema = z.object({
   // Defaults keep older props files (pre-hook) valid.
   hookText: z.string().max(40).default(DEFAULT_HOOK_TEXT),
   hintLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").default(""),
-  category: z.string().max(80),
   subtitle: z.string().max(120),
+  hint2: z.string().max(120).default(""),
   word: z
     .string()
     .min(1)

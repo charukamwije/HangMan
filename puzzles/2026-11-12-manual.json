@@ -1,7 +1,7 @@
 {
   "id": "2026-11-12-chess",
-  "topic": "CHESS OPENINGS",
   "hint": "AN AGGRESSIVE FIRST MOVE",
+  "hint2": "A RISKY PAWN SACRIFICE ON MOVE TWO",
   "secretWord": "KINGS GAMBIT",
   "wrongGuesses": ["E", "O"],
   "viralHookText": "ONLY GRANDMASTERS GET THIS",

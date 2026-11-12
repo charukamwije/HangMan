@@ -33,7 +33,7 @@ src/remotion/                 Self-contained composition (relative imports only,
     CountdownTimer.tsx        00:29 → 00:00 1 Hz neon clock; below 00:08 it pulses in sync with the vignette
     OpeningHook.tsx           Frames 0–30: accelerating decoys + crimson ✖ strikes (one <Sequence> each), scan beam
     HookBanner.tsx            "DECODING BOARD..." → hook-text banner flip (frames 0–35)
-    Header.tsx                Hook banner, category (neon) and subtitle (white)
+    Header.tsx                Hook banner + countdown row, fixed "HINT" label (neon) and hint text (white)
     WordBoard.tsx             Outlined letter slots + spring/glow letter reveals, wraps long answers onto more lines
     LivesRow.tsx              Mistake counter: one pawn per mistake, knocked over in red
     Keyboard.tsx              4-row A–Z grid; correct = neon fill, wrong = red + X; key box springs sideways on each strike
@@ -53,7 +53,7 @@ src/components/               Studio, ControlPanel, PreviewPlayer, TimelineScrub
 
 ## Retention hook (first 5 seconds)
 
-- **Frame 0 is a full frame**: hook banner, category, every word slot, one pre-filled **hint letter** (first letter by default), the clock and the keys. Nothing fades in, so frame 0 also works as the thumbnail.
+- **Frame 0 is a full frame**: hook banner, hint, every word slot, one pre-filled **hint letter** (first letter by default), the clock and the keys. Nothing fades in, so frame 0 also works as the thumbnail.
 - **First beats**: a correct reveal at 2.0 s and usually a strike around 4.4 s, so viewers see both outcomes before 5 s.
 - **Strike feedback**: the key box is kicked 5 px sideways (at 1080p; 10 px at 4K) by an underdamped spring that settles in about 0.35 s.
 - **Stress mode**: from 00:07 the vignette closes in and throbs on every tick, exactly in sync with the neon clock. It releases at 00:00 for the reveal.
@@ -91,8 +91,8 @@ One `HangmanPuzzleData` object makes one 30 s, 900-frame reel. The schema and ti
 ```json
 {
   "id": "2026-11-11-landmarks",
-  "topic": "GLOBAL LANDMARKS & GEOGRAPHY",
   "hint": "A TRICKY US & UK CHALLENGE WORD",
+  "hint2": "FAMOUS PLACES PEOPLE TRAVEL TO SEE",
   "secretWord": "LANDMARKS",
   "wrongGuesses": ["B", "W", "X", "Q"],
   "revealSequence": [],

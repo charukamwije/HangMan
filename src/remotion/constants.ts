@@ -48,6 +48,9 @@ export const DECOY_LETTERS = "ETAOINSHRDLCUMWFGYPBVKJXQZ";
 
 // ------------------------------------------------------------- retention ----
 /** Where the banner lands after "DECODING BOARD..." (hook.ts). A plain question, not an unverifiable claim. */
+/** Hint 2 replaces hint 1 at this second (blur out → chip flip → word-by-word reveal). */
+export const HINT2_AT_SECONDS = 15;
+
 export const DEFAULT_HOOK_TEXT = "CAN YOU SOLVE IT?";
 /** Stress mode (vignette tightens, clock pulses) starts once the clock reads below this. */
 export const STRESS_BELOW_SECONDS = 8;
@@ -99,6 +102,8 @@ export const AUDIO = {
   wrong: "audio/wrong.wav",
   /** 0.3 s rising whoosh that lands exactly on each guess frame. */
   whoosh: "audio/whoosh.wav",
+  /** Opening hook: every decoy click / strike / thud pre-mixed into one 1 s file (see generate-sfx.mjs). */
+  hookDecode: "audio/hook-decode.wav",
   /** Opening hook: geiger/typewriter click per decoy pop + strike. */
   click: "audio/click.wav",
   /** Opening hook: metallic lock as the hint letter lands (frame 25). */
@@ -121,6 +126,7 @@ export const AUDIO_SECONDS = {
   swell: 4.5,
   reveal: 3.2,
   click: 0.05,
+  hookDecode: 1.05,
   correct: 0.9,
   wrong: 0.55,
   whoosh: 0.3,

@@ -1,5 +1,5 @@
 import React from "react";
-import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../themes";
 import type { Stress } from "../motion";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
@@ -7,29 +7,29 @@ import { HookBanner } from "./HookBanner";
 import { CLOCK, CountdownTimer } from "./CountdownTimer";
 import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
 import { HOOK_INTRO_TEXT } from "../hook";
+import { ramp } from "../motion";
+import { loopReset, loopResetStart } from "../loop";
 
 /** Same 60px margin inside the safe band on both sides, so the header centres on the safe area. */
 const HEADER_INSET = { left: SAFE_ZONE.left + 60, right: SAFE_ZONE.right + 60 };
 const HEADER_WIDTH = DESIGN_WIDTH - HEADER_INSET.left - HEADER_INSET.right; // 1760
 
-/** Category block must stay this far below the banner/clock row. */
+/** Hint block must stay this far below the banner/clock row. */
 const ROW_CLEARANCE = 50;
-const SUBTITLE_SIZE = 72;
-/**
- * Space above the hint (topic → hint) AND below it (hint → answer board; HangmanReel
- * uses it as the header-to-board gap), so the hint sits vertically centred between them.
- */
+/** The hint text is the hero of the header: big, bright, inside a glowing card. */
+const SUBTITLE_SIZE = 84;
+/** Small neon tab on the card's top edge. */
+const HINT_LABEL = "HINT";
+const LABEL_SIZE = 66;
+const TAB_HEIGHT = LABEL_SIZE + 34;
+const CARD_PAD = { x: 80, top: 78, bottom: 56 };
+const CARD_BORDER = 4;
+/** Hint text → answer board. */
 export const HINT_GAP = 130;
-/** In a tight fit the two gaps close up to this before any text is scaled down. */
+/** In a tight fit the board gap closes up to this before any text is scaled down. */
 const MIN_HINT_GAP = 50;
-/** Subtitle text column: header width minus the two 120 px rules and their 36 px gaps. */
-const SUBTITLE_WIDTH = HEADER_WIDTH - 2 * (120 + 36);
-
-const categorySize = (text: string) => {
-  const longestWord = Math.max(...text.split(/\s+/).map((w) => w.length), 1);
-  // Anton ≈ 0.46em per glyph; keep the longest word on one line within the header width.
-  return Math.min(148, Math.floor(HEADER_WIDTH / (longestWord * 0.5)), text.length > 34 ? 128 : 148);
-};
+/** Hint text column inside the card. */
+const SUBTITLE_WIDTH = HEADER_WIDTH - 2 * (CARD_PAD.x + CARD_BORDER);
 
 /** Greedy word-wrap line count for a column `maxChars` wide (balance-wrap never uses fewer lines). */
 const lineCount = (text: string, maxChars: number) => {
@@ -46,25 +46,24 @@ const lineCount = (text: string, maxChars: number) => {
 };
 
 /**
- * Conservative height of category + subtitle text (gaps excluded). Over-estimates glyph widths
- * (Anton 0.5em, Inter 800 caps + tracking 0.82em) so the fit check errs safe.
+ * Conservative height of the hint card incl. the half of the "HINT" tab above it. Over-estimates glyph widths
+ * (Inter 800 caps + tracking 0.82em) so the fit check errs safe.
  */
-export function estimateHeaderTextHeight(category: string, subtitle: string) {
-  const cat = categorySize(category);
-  const catLines = Math.max(1, lineCount(category, Math.floor(HEADER_WIDTH / (cat * 0.5))));
-  const subLines = subtitle.trim() ? lineCount(subtitle, Math.floor(SUBTITLE_WIDTH / (SUBTITLE_SIZE * 0.82))) : 0;
-  return { category: catLines * cat * 1.04, subtitle: subLines * SUBTITLE_SIZE * 1.25 };
+export const hintLines = (text: string) => (text.trim() ? lineCount(text, Math.floor(SUBTITLE_WIDTH / (SUBTITLE_SIZE * 0.82))) : 0);
+
+export function estimateHeaderTextHeight(subtitle: string, hint2 = "") {
+  const lines = Math.max(hintLines(subtitle), hintLines(hint2));
+  if (!lines) return 0;
+  return TAB_HEIGHT / 2 + CARD_BORDER * 2 + CARD_PAD.top + CARD_PAD.bottom + lines * SUBTITLE_SIZE * 1.2;
 }
 
 /**
  * Banner (left) + compact clock (right) in a fixed row just below the
- * platform's search/profile/more icons (TOP_ROW), then the Category title
- * (neon) and Subtitle hint (white) as one block whose BOTTOM edge sits on
- * `boardTop - gap` (just above the word board), so it hugs the board and grows upward.
- * The hint sits centred between topic and board: the gap above and below it are equal
- * (HINT_GAP, closing to MIN_HINT_GAP when space is tight).
- * If a very long category/subtitle would reach the banner row, the block is
- * scaled down (from its bottom edge) until it fits.
+ * platform's search/profile/more icons (TOP_ROW), then a fixed neon "HINT"
+ * label over the hint text (white) as one block whose BOTTOM edge sits
+ * HINT_GAP above the word board, so it hugs the board and grows upward.
+ * If a very long hint would reach
+ * the banner row, the board gap closes to MIN_HINT_GAP, then the block scales down.
  *
  * No entrance animation: everything is on screen, at full opacity, on frame 0.
  * The banner opens on "DECODING BOARD..." and flips to `hookText` during `bannerFlip`.
@@ -72,27 +71,69 @@ export function estimateHeaderTextHeight(category: string, subtitle: string) {
 export const Header: React.FC<{
   theme: Theme;
   hookText: string;
-  category: string;
+  /** Hint 1: shown from the start until `hint2At`. */
   subtitle: string;
+  /** Hint 2: replaces hint 1 at `hint2At` (blur out → chip flip → word-by-word reveal). Empty = keep hint 1. */
+  hint2?: string;
+  hint2At: number;
   bannerFlip: readonly [number, number];
+  /** Hint text is blurred before this window and un-blurs word by word across it. */
+  hintReveal: readonly [number, number];
+  /** Every wrong guess re-blurs the hint, which then reveals word by word again. */
+  wrongFrames: readonly number[];
   /** y of the word board's top edge. */
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-}> = ({ theme, hookText, category, subtitle, bannerFlip, boardTop, tickFrames, stress }) => {
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerFlip, hintReveal, wrongFrames, boardTop, tickFrames, stress }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  // Travelling sheen across the category, one pass every 3.75 s (8 passes per 30 s, so it wraps on the loop).
-  const shimmer = interpolate(((frame / fps) % 3.75) / 3.75, [0, 1], [-30, 130]);
+  const { fps, durationInFrames } = useVideoConfig();
+  const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
+  // Hint 2 switch: hint 1 blurs out from hint2At like a wrong-guess hit, the text swaps once it is
+  // fully blurred, then hint 2 reveals word by word with the same timing.
+  const hasHint2 = hint2.trim() !== "";
+  const current = hasHint2 && frame >= hint2At + wrongBlurIn ? hint2 : subtitle;
+  const blurEvents = hasHint2 ? [...wrongFrames, hint2At] : [...wrongFrames];
+  // Word-by-word reveal; each word takes WORD_FRAMES to sharpen, starts spread across the window.
+  const words = current.trim().split(/\s+/).filter(Boolean);
+  const [revealFrom, revealTo] = hintReveal;
+  const WORD_FRAMES = Math.max(3, Math.round(fps * 0.2));
+  const stagger = words.length > 1 ? Math.max(1, (revealTo - revealFrom - WORD_FRAMES) / (words.length - 1)) : 0;
+  // Loop reset: words blur back out (last word first) so the replay opens blurred, like frame 0.
+  // Wrong guess: all words blur in ~0.1 s on the strike, then re-reveal word by word from +0.2 s to +1.0 s.
+  const lastWrong = blurEvents.reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
+  const wrongFrom = Math.round(fps * 0.2);
+  const wrongStagger = words.length > 1 ? Math.max(1, (Math.round(fps * 1.0) - wrongFrom - WORD_FRAMES) / (words.length - 1)) : 0;
+  const wrongHidden = (i: number) => {
+    if (!Number.isFinite(lastWrong)) return 0;
+    const start = lastWrong + wrongFrom + i * wrongStagger;
+    return ramp(frame, [lastWrong, lastWrong + wrongBlurIn], [0, 1]) * (1 - ramp(frame, [start, start + WORD_FRAMES], [0, 1]));
+  };
+  // "HINT" chip does a full 3D flip whenever the hint blurs: on every wrong guess and as the
+  // loop reset starts (that flip ends before the last frame, so the replay starts on a still chip).
+  const FLIP = Math.round(fps / 3);
+  const loopStart = loopResetStart(durationInFrames, fps);
+  const flipFrom = [...blurEvents, loopStart].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
+  const flip = Number.isFinite(flipFrom) ? interpolate(frame - flipFrom, [0, FLIP], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) }) : 1;
+  const flipping = flip > 0 && flip < 1;
+  const reblur = (i: number) => {
+    const k = (words.length - 1 - i) / Math.max(1, words.length - 1); // 0 for the last word
+    return loopReset(frame, durationInFrames, fps, 0.35 + 0.3 * k, 0.65 + 0.3 * k);
+  };
+  const t = frame / fps;
+  // Travelling sheen across the tab, one pass every 3.75 s (8 passes per 30 s, so it wraps on the loop).
+  const shimmer = interpolate((t % 3.75) / 3.75, [0, 1], [-30, 130]);
+  // Card glow breathes at 1.1 Hz (33 cycles per 30 s: seamless on the loop).
+  const breathe = 0.5 + 0.5 * Math.cos(t * Math.PI * 2 * 1.1);
 
-  // Space between the banner row and the board: topic + gap + hint + gap must fit in it.
+  // Space between the banner row and the board: label + hint + gap must fit in it.
   const room = boardTop - (TOP_ROW.top + CLOCK.height + ROW_CLEARANCE);
-  const est = estimateHeaderTextHeight(category, subtitle);
-  const textH = est.category + est.subtitle;
-  const gaps = est.subtitle ? 2 : 1;
-  const gap = Math.max(MIN_HINT_GAP, Math.min(HINT_GAP, (room - textH) / gaps));
+  // Sized for the longer hint, so the card never changes size at the 15 s switch.
+  const textH = estimateHeaderTextHeight(subtitle, hint2);
+  const textMinHeight = Math.max(hintLines(subtitle), hintLines(hint2)) * SUBTITLE_SIZE * 1.2;
+  const gap = Math.max(MIN_HINT_GAP, Math.min(HINT_GAP, room - textH));
   // Block is scaled from its bottom edge; the gap below it stays unscaled.
-  const fit = Math.min(1, (room - gap) / (textH + (gaps - 1) * gap));
+  const fit = Math.min(1, (room - gap) / textH);
   const bottom = boardTop - gap;
 
   return (
@@ -111,45 +152,85 @@ export const Header: React.FC<{
           transformOrigin: "50% 100%",
         }}
       >
-        <div
-          style={{
-            fontFamily: DISPLAY_FONT,
-            fontSize: categorySize(category),
-            lineHeight: 1.04,
-            letterSpacing: "0.02em",
-            textTransform: "uppercase",
-            color: theme.accent,
-            textWrap: "balance",
-            filter: `drop-shadow(0 0 22px ${theme.accent}99) drop-shadow(0 0 70px ${theme.accent}55) drop-shadow(0 10px 24px rgba(0,0,0,0.85))`,
-            backgroundImage: `linear-gradient(100deg, ${theme.accent} ${shimmer - 12}%, #ffffff ${shimmer}%, ${theme.accent} ${shimmer + 12}%)`,
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
-        >
-          {category}
-        </div>
-        {subtitle.trim() && (
-          <div style={{ marginTop: gap, display: "flex", alignItems: "center", justifyContent: "center", gap: 36 }}>
-            <span style={{ flex: "0 0 120px", height: 4, background: `linear-gradient(90deg, transparent, ${theme.text}aa)` }} />
-            <span
+        {(subtitle.trim() || hasHint2) && (
+          <div
+            style={{
+              position: "relative",
+              marginTop: TAB_HEIGHT / 2,
+              padding: `${CARD_PAD.top}px ${CARD_PAD.x}px ${CARD_PAD.bottom}px`,
+              borderRadius: 48,
+              background: "linear-gradient(180deg, rgba(12,11,8,0.78), rgba(4,4,3,0.86))",
+              border: `${CARD_BORDER}px solid ${theme.accent}${hex2(0.45 + 0.25 * breathe)}`,
+              boxShadow: `0 0 ${40 + 30 * breathe}px ${theme.accent}${hex2(0.22 + 0.12 * breathe)}, inset 0 0 60px ${theme.accent}14, 0 30px 60px rgba(0,0,0,0.7)`,
+            }}
+          >
+            {/* "HINT" tab on the top edge */}
+            <div
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: -TAB_HEIGHT / 2 - CARD_BORDER / 2,
+                height: TAB_HEIGHT,
+                transform: flipping ? `translateX(-50%) perspective(700px) rotateX(${(360 * flip).toFixed(1)}deg)` : "translateX(-50%)",
+                display: "flex",
+                alignItems: "center",
+                padding: "0 46px 0 calc(46px + 0.3em)",
+                fontWeight: 400,
+                borderRadius: 999,
+                fontFamily: DISPLAY_FONT,
+                fontSize: LABEL_SIZE,
+                lineHeight: 1,
+                letterSpacing: "0.3em",
+                color: "#0b0b05",
+                background: `linear-gradient(100deg, ${theme.accent} ${shimmer - 12}%, #ffffff ${shimmer}%, ${theme.accent} ${shimmer + 12}%)`,
+                boxShadow: `0 0 30px ${theme.accent}88, 0 8px 18px rgba(0,0,0,0.6)`,
+              }}
+            >
+              {HINT_LABEL}
+            </div>
+            <div style={{ minHeight: textMinHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div
               style={{
                 fontFamily: BODY_FONT,
                 fontWeight: 800,
                 fontSize: SUBTITLE_SIZE,
-                letterSpacing: "0.08em",
-                color: theme.text,
+                lineHeight: 1.2,
+                letterSpacing: "0.06em",
+                color: "#FFFFFF",
                 textTransform: "uppercase",
-                textShadow: "0 6px 24px rgba(0,0,0,0.9)",
+                textShadow: `0 0 28px ${theme.accent}40, 0 6px 24px rgba(0,0,0,0.9)`,
                 textWrap: "balance",
               }}
             >
-              {subtitle}
-            </span>
-            <span style={{ flex: "0 0 120px", height: 4, background: `linear-gradient(270deg, transparent, ${theme.text}aa)` }} />
+              {words.map((w, i) => {
+                const start = revealFrom + i * stagger;
+                const p = Math.max(ramp(frame, [start, start + WORD_FRAMES], [0, 1]) * (1 - wrongHidden(i)) * (1 - reblur(i)), 0);
+                return (
+                  <React.Fragment key={i}>
+                    {i > 0 && " "}
+                    <span
+                      style={{
+                        display: "inline-block",
+                        filter: p < 1 ? `blur(${(1 - p) * 26}px)` : undefined,
+                        opacity: 0.45 + 0.55 * p,
+                        transform: p < 1 ? `translateY(${(1 - p) * 14}px) scale(${1.06 - 0.06 * p})` : undefined,
+                      }}
+                    >
+                      {w}
+                    </span>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            </div>
           </div>
         )}
       </div>
     </>
   );
 };
+
+const hex2 = (a: number) =>
+  Math.round(Math.max(0, Math.min(1, a)) * 255)
+    .toString(16)
+    .padStart(2, "0");

@@ -36,13 +36,11 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   // 1b. Machine-gun hook (frames 0–30): a sharp click on every decoy pop, click + thud on its ✖,
   //     then a metallic lock on the frame the last hint slot snaps in (36).
   const { hook } = timeline;
-  const thudLen = Math.max(1, Math.round(fps * 0.15));
-  for (const d of hook.decoys) {
-    cues.push({ id: `hook-click-${d.id}`, src: AUDIO.click, from: d.popFrame, durationInFrames: seconds(AUDIO_SECONDS.click, fps), volume: clamp01(sfx * 0.7) });
-    // The ✖ is a hit, not a tick: a short burst of the wrong-guess thud under a click.
-    if (d.strikeFrame >= d.endFrame) continue; // replaced before its ✖ landed
-    cues.push({ id: `hook-strike-${d.id}`, src: AUDIO.click, from: d.strikeFrame, durationInFrames: seconds(AUDIO_SECONDS.click, fps), volume: clamp01(sfx * 0.5) });
-    cues.push({ id: `hook-thud-${d.id}`, src: AUDIO.thud, from: d.strikeFrame, durationInFrames: thudLen, volume: (f) => clamp01(sfx * 0.45) * Math.max(0, 1 - f / thudLen) });
+  // All decoy clicks / strikes / thuds are pre-mixed into ONE file on the fixed pop schedule
+  // (decoyPopFrames30): ~40 separate <Audio> tags mounting in the first second overflowed
+  // React's nested-update limit in the Remotion Player.
+  if (hook.decoys.length) {
+    cues.push({ id: "hook-decode", src: AUDIO.hookDecode, from: 0, durationInFrames: Math.min(hook.clearFrame + 2, seconds(AUDIO_SECONDS.hookDecode, fps)), volume: clamp01(sfx) });
   }
   // Tape rewind of the music bed under the whole decode, speeding up with the decoy cadence.
   // Its Sequence hard-stops it on the clear frame (30); the same music then plays forward from the lock.

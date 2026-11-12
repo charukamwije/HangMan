@@ -15,6 +15,7 @@
  *     29 → 30    everything wiped; rewind hard-stops on 30 (also the first clock tick)
  *   Phase 2 · Target snap (30–42)
  *     30 → 35    banner flips to the hook text ("CAN YOU SOLVE IT?")
+ *     30 → 54    hint text (blurred until now) un-blurs word by word
  *     ≤ 36       hint-letter slots snap in one frame apart, the LAST one always on 36
  *     36         metallic lock + hint key lights; the same music now plays FORWARD,
  *                fading in 36 → 42, its downbeats on the clock ticks
@@ -43,6 +44,8 @@ export const HOOK_FRAMES_30 = {
   snapEnd: 36,
   banner: [30, 35],
   musicIn: [36, 42],
+  /** Hint text: blurred through the decode, then un-blurs word by word in this window. */
+  hintReveal: [30, 54],
   end: 42,
 } as const;
 
@@ -74,6 +77,8 @@ export type HookPlan = {
   clearFrame: number;
   bannerFrames: readonly [number, number];
   musicInFrames: readonly [number, number];
+  /** Hint text word-by-word reveal window (blurred before it). */
+  hintRevealFrames: readonly [number, number];
   /** First frame of the regular reel; guesses never land before it. */
   endFrame: number;
 };
@@ -81,7 +86,10 @@ export type HookPlan = {
 const hash = (s: string) =>
   [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
 
-/** Accelerating pop schedule at 30 fps: 0, 4, 8, 11, 14, 16, … 26. */
+/**
+ * Accelerating pop schedule at 30 fps: 0, 4, 8, 11, 14, 16, … 26.
+ * Mirrored by hookDecode() in scripts/generate-sfx.mjs (the pre-mixed decode SFX) — keep in sync.
+ */
 export function decoyPopFrames30(): number[] {
   const { lastPop, firstGap, lastGap } = HOOK_FRAMES_30;
   const pops: number[] = [];
@@ -107,18 +115,20 @@ export function resolveHook(word: string, hintLetter: string, fps: number): Hook
   const slots = Array.from({ length: count }, (_, k) => empty[Math.floor(((k + 0.5) * empty.length) / count)]);
   // Zig-zag across the board so the eye is pulled side to side: 0, n-1, 1, n-2, …
   const zigzag = slots.map((_, k) => slots[k % 2 === 0 ? k / 2 : count - 1 - (k - 1) / 2]);
-  // Rare "noise" letters (Q, Z, X, J …) that are not in the word, order shuffled per word.
-  const pool = [...DECOY_LETTERS]
-    .reverse()
-    .filter((l) => !word.includes(l))
-    .slice(0, 10)
-    .sort((a, b) => hash(a + word) - hash(b + word));
+  // Decoys use the ANSWER's own letters (shuffled per word), but never the slot's correct letter,
+  // so the scramble teases the answer without giving any position away.
+  const answerLetters = [...new Set(chars.filter((c) => c !== " "))].sort((a, b) => hash(a + word) - hash(b + word));
+  const decoyLetter = (slot: number, k: number) => {
+    const options = answerLetters.filter((l) => l !== chars[slot]);
+    const fallback = [...DECOY_LETTERS].find((l) => l !== chars[slot]) ?? "X"; // single-letter words
+    return options.length ? options[(k + hash(`${word}-${slot}`)) % options.length] : fallback;
+  };
 
   const decoys: HookDecoy[] = count
     ? decoyPopFrames30().map((pop, k) => ({
         id: `d${k}`,
         slot: zigzag[k % count],
-        letter: pool[k % Math.max(1, pool.length)] ?? "X",
+        letter: decoyLetter(zigzag[k % count], k),
         popFrame: F(pop),
         strikeFrame: F(pop + HOOK_FRAMES_30.strikeDelay),
         endFrame: clearFrame,
@@ -145,6 +155,7 @@ export function resolveHook(word: string, hintLetter: string, fps: number): Hook
     clearFrame,
     bannerFrames: [F(HOOK_FRAMES_30.banner[0]), F(HOOK_FRAMES_30.banner[1])],
     musicInFrames: [F(HOOK_FRAMES_30.musicIn[0]), F(HOOK_FRAMES_30.musicIn[1])],
+    hintRevealFrames: [F(HOOK_FRAMES_30.hintReveal[0]), F(HOOK_FRAMES_30.hintReveal[1])],
     endFrame: F(HOOK_FRAMES_30.end),
   };
 }
