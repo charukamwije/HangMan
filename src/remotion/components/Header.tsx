@@ -7,6 +7,7 @@ import { HookBanner } from "./HookBanner";
 import { CLOCK, CountdownTimer } from "./CountdownTimer";
 import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
 import { HOOK_INTRO_TEXT } from "../hook";
+import { HintOwl, OWL_ABOVE, THROW_HIT_SECONDS } from "./HintOwl";
 import { ramp } from "../motion";
 import { loopReset, loopResetStart } from "../loop";
 
@@ -54,7 +55,8 @@ export const hintLines = (text: string) => (text.trim() ? lineCount(text, Math.f
 export function estimateHeaderTextHeight(subtitle: string, hint2 = "") {
   const lines = Math.max(hintLines(subtitle), hintLines(hint2));
   if (!lines) return 0;
-  return TAB_HEIGHT / 2 + CARD_BORDER * 2 + CARD_PAD.top + CARD_PAD.bottom + lines * SUBTITLE_SIZE * 1.2;
+  // Headroom above the card: the owl sitting on its top-right corner (taller than the HINT tab).
+  return Math.max(TAB_HEIGHT / 2, OWL_ABOVE) + CARD_BORDER * 2 + CARD_PAD.top + CARD_PAD.bottom + lines * SUBTITLE_SIZE * 1.2;
 }
 
 /**
@@ -93,7 +95,12 @@ export const Header: React.FC<{
   // fully blurred, then hint 2 reveals word by word with the same timing.
   const hasHint2 = hint2.trim() !== "";
   const current = hasHint2 && frame >= hint2At + wrongBlurIn ? hint2 : subtitle;
-  const blurEvents = hasHint2 ? [...wrongFrames, hint2At] : [...wrongFrames];
+  // On a wrong guess the owl throws water: the hint blurs when the splash lands, not on the guess.
+  const splashFrames = wrongFrames.map((f) => f + Math.round(THROW_HIT_SECONDS * fps));
+  const blurEvents = hasHint2 ? [...splashFrames, hint2At] : splashFrames;
+  // Water on the card: ripple distortion + running ink, strongest right after the splash.
+  const lastSplash = splashFrames.reduce((acc, f) => (f <= frame && f > acc ? f : acc), -Infinity);
+  const wet = Number.isFinite(lastSplash) ? ramp((frame - lastSplash) / fps, [0, 0.05, 1.4], [0, 1, 0]) : 0;
   // Word-by-word reveal; each word takes WORD_FRAMES to sharpen, starts spread across the window.
   const words = current.trim().split(/\s+/).filter(Boolean);
   const [revealFrom, revealTo] = hintReveal;
@@ -188,9 +195,18 @@ export const Header: React.FC<{
             >
               {HINT_LABEL}
             </div>
+            {wet > 0.01 && (
+              <svg width={0} height={0} style={{ position: "absolute" }}>
+                <filter id="hintWater" x="-10%" y="-20%" width="120%" height="160%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.010 0.045" numOctaves={2} seed={Math.floor(frame / 2) % 97} result="noise" />
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale={(70 * wet).toFixed(1)} xChannelSelector="R" yChannelSelector="G" />
+                </filter>
+              </svg>
+            )}
             <div style={{ minHeight: textMinHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div
               style={{
+                filter: wet > 0.01 ? "url(#hintWater)" : undefined,
                 fontFamily: BODY_FONT,
                 fontWeight: 800,
                 fontSize: SUBTITLE_SIZE,
@@ -198,7 +214,11 @@ export const Header: React.FC<{
                 letterSpacing: "0.06em",
                 color: "#FFFFFF",
                 textTransform: "uppercase",
-                textShadow: `0 0 28px ${theme.accent}40, 0 6px 24px rgba(0,0,0,0.9)`,
+                // While wet, the ink runs: faint downward smears under the letters.
+                textShadow:
+                  wet > 0.01
+                    ? `0 0 28px ${theme.accent}40, 0 ${(10 * wet).toFixed(1)}px ${(6 * wet).toFixed(1)}px rgba(200,230,255,${(0.45 * wet).toFixed(2)}), 0 ${(26 * wet).toFixed(1)}px ${(14 * wet).toFixed(1)}px rgba(200,230,255,${(0.25 * wet).toFixed(2)}), 0 6px 24px rgba(0,0,0,0.9)`
+                    : `0 0 28px ${theme.accent}40, 0 6px 24px rgba(0,0,0,0.9)`,
                 textWrap: "balance",
               }}
             >
@@ -223,6 +243,11 @@ export const Header: React.FC<{
               })}
             </div>
             </div>
+            <HintOwl
+              throwFrames={wrongFrames}
+              cardW={HEADER_WIDTH - CARD_BORDER * 2}
+              cardH={CARD_PAD.top + CARD_PAD.bottom + textMinHeight}
+            />
           </div>
         )}
       </div>

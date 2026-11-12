@@ -7,9 +7,10 @@ import { loopReset } from "../loop";
 import { TOP_ROW } from "../constants";
 
 import { CLOCK } from "./CountdownTimer";
+import { crewState, Holders, MOUSE_W, PinnerAndPin } from "./BannerCrew";
 
-/** Left end of TOP_ROW, 60 px clear of the clock. */
-const MAX_WIDTH = TOP_ROW.right - TOP_ROW.left - CLOCK.width - 60;
+/** Left end of TOP_ROW, 60 px clear of the clock, leaving room for a holder mouse at each end. */
+const MAX_WIDTH = TOP_ROW.right - TOP_ROW.left - CLOCK.width - 60 - 2 * MOUSE_W;
 const MAX_FONT = 66;
 const fontSizeFor = (text: string) => Math.min(MAX_FONT, Math.floor((MAX_WIDTH - 150) / (Math.max(1, text.length) * 0.56)));
 
@@ -56,6 +57,11 @@ export const HookBanner: React.FC<{
   const dots = intro.length - base.length;
   const dotsShown = dots ? (back > 0 ? 1 : 1 + (Math.floor(frame / 3) % dots)) : 0;
 
+  // Fixed pill width (sized for the longer label), so the holders know exactly where the corners are.
+  const bannerW = Math.min(MAX_WIDTH, Math.ceil(26 + 24 + 32 + 40 + 8 + Math.max(intro.length, label.length) * fontSize * 0.6));
+  const crew = crewState(t, bannerW);
+  const holderBlink = t % 4 < 0.1;
+
   const labelStyle: React.CSSProperties = {
     gridArea: "1 / 1",
     fontFamily: DISPLAY_FONT,
@@ -72,8 +78,19 @@ export const HookBanner: React.FC<{
       style={{
         position: "absolute",
         top: TOP_ROW.top + (CLOCK.height - (MAX_FONT + 52)) / 2, // vertically centred on the clock
-        left: TOP_ROW.left,
-        maxWidth: MAX_WIDTH,
+        left: TOP_ROW.left + MOUSE_W,
+        width: bannerW,
+      }}
+    >
+      <PinnerAndPin crew={crew} bannerW={bannerW} />
+      {/* the banner swings around whichever top corner is still held */}
+      <div style={{ transform: crew.angle ? `rotate(${crew.angle.toFixed(2)}deg)` : undefined, transformOrigin: crew.origin }}>
+    <div
+      style={{
+        position: "relative",
+        width: bannerW,
+        boxSizing: "border-box",
+        justifyContent: "center",
         display: "flex",
         alignItems: "center",
         gap: 24,
@@ -118,6 +135,9 @@ export const HookBanner: React.FC<{
         )}
         <span style={{ ...labelStyle, opacity: labelIn, transform: `translateY(${(labelIn - 1) * slide}px)` }}>{label}</span>
       </span>
+    </div>
+      </div>
+      <Holders crew={crew} bannerW={bannerW} blink={holderBlink} />
     </div>
   );
 };

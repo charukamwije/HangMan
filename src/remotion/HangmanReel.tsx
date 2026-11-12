@@ -9,6 +9,7 @@ import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
 import { GuessCallouts } from "./components/GuessCallout";
+import { Pigeons } from "./components/Pigeons";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
 import { LivesRow } from "./components/LivesRow";
@@ -119,6 +120,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       <AbsoluteFill style={{ transform: camera, transformOrigin: `50% ${WORD_CENTER_Y}px` }}>
       <Background theme={theme} />
       <StressVignette stress={stress} />
+      {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
+      <Pigeons />
 
       <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerFlip={timeline.hook.bannerFrames} hintReveal={timeline.hook.hintRevealFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
