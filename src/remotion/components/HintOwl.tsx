@@ -10,7 +10,8 @@ import { ramp } from "../motion";
  *   0.14–0.30 s  throw: bucket swings forward and tips
  *   0.22–0.34 s  water leaves the moving rim as a continuous, ballistic stream
  *   ≈0.38 s      first impact = THROW_HIT_SECONDS: hint distorts + blurs, splash crown, spray
- *   0.4–1.6 s    drips run down the card, beads glisten, sheen fades; owl squints (laughs)
+ *   0.4–1.8 s    clear 3D water beads sit on the card (blurring the text behind them),
+ *                then evaporate; sheen fades; owl squints (laughs)
  *
  * The stream is a particle simulation: each parcel of water has its own launch
  * time from the moving bucket rim, a velocity solved to land on the text, and
@@ -123,6 +124,7 @@ export const HintOwl: React.FC<{
         {splashT >= 0 && <SplashLayer t={splashT} s={s} target={target} cardW={cardW} cardH={cardH} seed={throwSeed} parcels={parcels} />}
         {live.length > 1 && <Stream pts={live} />}
       </svg>
+      {splashT >= 0 && <WaterBeads t={splashT} target={target} cardW={cardW} cardH={cardH} seed={throwSeed} />}
 
       {/* the owl + bucket on the card's top-right corner */}
       <div style={{ position: "absolute", left: boxLeft, top: boxTop + bob, width: BOX.w, height: BOX.h, pointerEvents: "none" }}>
@@ -187,18 +189,20 @@ const Stream: React.FC<{ pts: { i: number; x: number; y: number; w: number }[] }
 /** A water drop with a refraction highlight and a darker lower rim. */
 const Drop: React.FC<{ x: number; y: number; r: number; o?: number }> = ({ x, y, r, o = 1 }) => (
   <g opacity={o}>
-    <circle cx={x} cy={y} r={r} fill="rgba(140,200,245,0.75)" />
+    {/* clear drop: faint body, darker refracting rim, bright glint, soft caustic */}
+    <circle cx={x} cy={y} r={r} fill="rgba(190,225,255,0.18)" stroke="rgba(210,235,255,0.55)" strokeWidth={Math.max(1, r * 0.12)} />
     <path
-      d={`M ${x - r * 0.8} ${y + r * 0.2} A ${r * 0.85} ${r * 0.85} 0 0 0 ${x + r * 0.8} ${y + r * 0.2}`}
-      stroke="rgba(20,60,100,0.5)"
-      strokeWidth={Math.max(1, r * 0.22)}
+      d={`M ${x - r * 0.75} ${y + r * 0.3} A ${r * 0.85} ${r * 0.85} 0 0 0 ${x + r * 0.75} ${y + r * 0.3}`}
+      stroke="rgba(10,30,60,0.35)"
+      strokeWidth={Math.max(1, r * 0.16)}
       fill="none"
     />
-    <circle cx={x - r * 0.32} cy={y - r * 0.35} r={r * 0.3} fill="#ffffff" opacity={0.9} />
+    <circle cx={x - r * 0.32} cy={y - r * 0.35} r={r * 0.24} fill="#ffffff" opacity={0.95} />
+    <circle cx={x + r * 0.3} cy={y + r * 0.38} r={r * 0.16} fill="#ffffff" opacity={0.35} />
   </g>
 );
 
-/** Impact: wet sheen, spreading ring, splash crown + spray, then drips and beads on the card. */
+/** Impact: wet sheen, splash crown + spray. (Beads are HTML: see WaterBeads.) */
 const SplashLayer: React.FC<{
   t: number;
   s: number;
@@ -209,7 +213,6 @@ const SplashLayer: React.FC<{
   parcels: Parcel[];
 }> = ({ t, s, target, cardW, cardH, seed, parcels }) => {
   const sheen = ramp(t, [0, 0.06, 1.3], [0, 1, 0]);
-  const ring = ramp(t, [0, 0.35], [0, 1]);
   const R = (k: string) => random(`${seed}-${k}`);
 
   // spray from every parcel that has landed: short-lived ballistic droplets
@@ -231,53 +234,9 @@ const SplashLayer: React.FC<{
     });
   });
 
-  // drips running down the card from the impact line, slowing like real water
-  const drips = Array.from({ length: 7 }, (_, k) => {
-    const x0 = target.x - 240 + 480 * (k / 6) + (R(`dx-${k}`) - 0.5) * 50;
-    const dt = t - (0.05 + 0.18 * R(`ds-${k}`));
-    if (dt <= 0) return null;
-    const len = cardH - target.y + 10;
-    const y = target.y + len * Easing.out(Easing.quad)(Math.min(1, dt / (0.7 + 0.5 * R(`dd-${k}`))));
-    const w = 5 + 5 * R(`dw-${k}`);
-    return (
-      <g key={`dr-${k}`} opacity={1 - ramp(t, [1.0, 1.6], [0, 1])}>
-        <path d={`M ${x0} ${target.y - 10} L ${x0 + 2} ${y}`} stroke="url(#owlDrip)" strokeWidth={w} strokeLinecap="round" />
-        <Drop x={x0 + 2} y={y + w * 0.3} r={w * 0.95} />
-      </g>
-    );
-  });
-
-  // beads left on the card surface, catching the light
-  const beads = Array.from({ length: 22 }, (_, k) => {
-    const o = ramp(t, [0.08 + 0.1 * R(`bt-${k}`), 0.2, 1.1, 1.6], [0, 1, 1, 0]);
-    if (o <= 0) return null;
-    return (
-      <Drop
-        key={`b-${k}`}
-        x={target.x + (R(`bx-${k}`) - 0.5) * cardW * 0.8}
-        y={target.y + (R(`by-${k}`) - 0.5) * cardH * 0.9}
-        r={3 + 6 * R(`br-${k}`)}
-        o={o * 0.85}
-      />
-    );
-  });
-
   return (
     <g>
       <rect x={0} y={0} width={cardW} height={cardH} rx={44} fill="url(#owlWetSheen)" opacity={sheen} />
-      {/* soft specular glints where the film of water is thickest */}
-      <ellipse cx={target.x - 120} cy={target.y - 30} rx={220} ry={26} fill="url(#owlGlint)" opacity={0.55 * sheen} />
-      <ellipse cx={target.x + 160} cy={target.y + 34} rx={160} ry={18} fill="url(#owlGlint)" opacity={0.4 * sheen} />
-      <ellipse
-        cx={target.x}
-        cy={target.y}
-        rx={80 + 520 * ring}
-        ry={26 + 110 * ring}
-        fill="none"
-        stroke="rgba(200,235,255,0.8)"
-        strokeWidth={10 * (1 - ring) + 1}
-        opacity={1 - ring}
-      />
       {/* splash crown: sheets thrown up from the impact line */}
       {Array.from({ length: 9 }, (_, k) => {
         const life = ramp(t, [0, 0.08, 0.3], [0, 1, 0]);
@@ -293,10 +252,66 @@ const SplashLayer: React.FC<{
           />
         );
       })}
-      {drips}
-      {beads}
       {spray}
     </g>
+  );
+};
+
+/**
+ * Clear 3D water beads resting on the card after the splash. Each is an HTML
+ * lens: backdrop blur + slight brightening distorts whatever text is beneath it,
+ * a darker refracting rim and inner shading give it volume, a sharp glint and a
+ * soft caustic on the opposite side sell the transparency. They land with a
+ * jiggle, wobble gently, then evaporate (shrink + fade) — no running drips.
+ */
+const WaterBeads: React.FC<{ t: number; target: { x: number; y: number }; cardW: number; cardH: number; seed: number }> = ({ t, target, cardW, cardH, seed }) => {
+  const R = (k: string) => random(`${seed}-bead-${k}`);
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {Array.from({ length: 18 }, (_, k) => {
+        const land = 0.02 + 0.16 * R(`l-${k}`);
+        const dt = t - land;
+        if (dt < 0) return null;
+        const big = k < 6; // a few large beads over the text, the rest scattered
+        const r = big ? 34 + 22 * R(`r-${k}`) : 12 + 16 * R(`r-${k}`);
+        const x = target.x + (R(`x-${k}`) - 0.5) * cardW * (big ? 0.55 : 0.85);
+        const y = target.y + (R(`y-${k}`) - 0.5) * cardH * (big ? 0.5 : 0.85);
+        const jiggle = Math.exp(-dt * 9) * Math.sin(dt * 40) * 0.18;
+        const evap = 1 - ramp(t, [1.0 + 0.4 * R(`e-${k}`), 1.6 + 0.3 * R(`e-${k}`)], [0, 1]);
+        if (evap <= 0) return null;
+        const appear = ramp(dt, [0, 0.06], [0, 1]);
+        const size = r * 2 * (0.55 + 0.45 * evap);
+        const wob = Math.sin(t * 6 + k) * 0.03;
+        return (
+          <div
+            key={k}
+            style={{
+              position: "absolute",
+              left: x - size / 2,
+              top: y - size / 2,
+              width: size,
+              height: size * 0.9,
+              borderRadius: "50% 50% 48% 52% / 55% 55% 45% 45%",
+              transform: `scale(${(1 + jiggle + wob).toFixed(3)}, ${(1 - jiggle - wob).toFixed(3)})`,
+              opacity: appear * Math.min(1, evap * 1.6),
+              backdropFilter: `blur(${(2.5 + size / 30).toFixed(1)}px) brightness(1.12) saturate(1.15)`,
+              WebkitBackdropFilter: `blur(${(2.5 + size / 30).toFixed(1)}px) brightness(1.12) saturate(1.15)`,
+              background: [
+                "radial-gradient(ellipse 22% 16% at 34% 26%, rgba(255,255,255,0.95), rgba(255,255,255,0) 100%)",
+                "radial-gradient(ellipse 30% 18% at 62% 78%, rgba(255,255,255,0.35), rgba(255,255,255,0) 100%)",
+                "radial-gradient(circle at 50% 45%, rgba(190,225,255,0.06) 50%, rgba(25,55,95,0.38) 100%)",
+              ].join(", "),
+              boxShadow: [
+                "inset 0 -5px 10px rgba(255,255,255,0.28)",
+                "inset 0 6px 12px rgba(0,25,55,0.35)",
+                "0 0 0 1.5px rgba(220,240,255,0.35)",
+                `0 ${(size * 0.08).toFixed(1)}px ${(size * 0.12).toFixed(1)}px rgba(0,0,0,0.35)`,
+              ].join(", "),
+            }}
+          />
+        );
+      })}
+    </div>
   );
 };
 

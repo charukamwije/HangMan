@@ -198,8 +198,8 @@ export const Header: React.FC<{
             {wet > 0.01 && (
               <svg width={0} height={0} style={{ position: "absolute" }}>
                 <filter id="hintWater" x="-10%" y="-20%" width="120%" height="160%">
-                  <feTurbulence type="fractalNoise" baseFrequency="0.010 0.045" numOctaves={2} seed={Math.floor(frame / 2) % 97} result="noise" />
-                  <feDisplacementMap in="SourceGraphic" in2="noise" scale={(70 * wet).toFixed(1)} xChannelSelector="R" yChannelSelector="G" />
+                  <feTurbulence type="fractalNoise" baseFrequency="0.006 0.018" numOctaves={1} seed={Math.floor(frame / 4) % 97} result="noise" />
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale={(34 * wet).toFixed(1)} xChannelSelector="R" yChannelSelector="G" />
                 </filter>
               </svg>
             )}
@@ -214,11 +214,7 @@ export const Header: React.FC<{
                 letterSpacing: "0.06em",
                 color: "#FFFFFF",
                 textTransform: "uppercase",
-                // While wet, the ink runs: faint downward smears under the letters.
-                textShadow:
-                  wet > 0.01
-                    ? `0 0 28px ${theme.accent}40, 0 ${(10 * wet).toFixed(1)}px ${(6 * wet).toFixed(1)}px rgba(200,230,255,${(0.45 * wet).toFixed(2)}), 0 ${(26 * wet).toFixed(1)}px ${(14 * wet).toFixed(1)}px rgba(200,230,255,${(0.25 * wet).toFixed(2)}), 0 6px 24px rgba(0,0,0,0.9)`
-                    : `0 0 28px ${theme.accent}40, 0 6px 24px rgba(0,0,0,0.9)`,
+                textShadow: `0 0 28px ${theme.accent}40, 0 6px 24px rgba(0,0,0,0.9)`,
                 textWrap: "balance",
               }}
             >

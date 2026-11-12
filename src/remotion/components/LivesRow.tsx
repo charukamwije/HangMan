@@ -187,27 +187,44 @@ const FRUSTRATION = ["NOOO!", "UGH!", "WHY ME?!", "NOT FAIR!", "ARGH!", "I QUIT!
 
 /** Leg length below the base, in pawn viewBox units (100 × 160); the body is lifted by it. */
 const LEG = 28;
-const LIMB = "#f2ead8"; // light cartoon limbs…
-const OUTLINE = "#140904"; // …with a dark outline so they pop on the dark backdrop
+/** Lighten (amt > 0) / darken (amt < 0) a #rrggbb colour. */
+const tone = (hex: string, amt: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.round(Math.max(0, Math.min(255, amt >= 0 ? v + (255 - v) * amt : v * (1 + amt))));
+  return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => ch(v).toString(16).padStart(2, "0")).join("")}`;
+};
 
 /**
- * Cartoon limbs on the 100 × 160 pawn grid. `walk` = stride phase (radians),
- * `pose` 0 = walking, 1 = airborne (arms up, legs tucked), `grow` 0 → 1 pops them out.
- * `part` draws the legs (behind the body) or the arms (in front of it).
+ * 3D limbs in the pawn's own colour, on the 100 × 160 pawn grid: tube-shaded
+ * arms/legs (dark edge → base → highlight streak), sphere-lit hands and feet with
+ * a specular glint. `walk` = stride phase, `pose` 0 = walking / 1 = airborne,
+ * `grow` 0 → 1 pops them out. `part` draws the legs (behind) or arms (in front).
  */
-const Limbs: React.FC<{ walk: number; pose: number; grow: number; crouch: number; part: "legs" | "arms" }> = ({ walk, pose, grow, crouch, part }) => {
+const Limbs: React.FC<{ walk: number; pose: number; grow: number; crouch: number; part: "legs" | "arms"; color: string }> = ({ walk, pose, grow, crouch, part, color }) => {
   const swing = Math.sin(walk) * (1 - pose);
   const legLen = (LEG - 6 * crouch) * grow;
-  const armLen = 36 * grow;
+  const armLen = 34 * grow;
+  const tube = (x1: number, y1: number, x2: number, y2: number, w: number) => (
+    <g strokeLinecap="round">
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={tone(color, -0.55)} strokeWidth={w + 2.5} />
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={tone(color, -0.18)} strokeWidth={w} />
+      <line x1={x1 - w * 0.12} y1={y1} x2={x2 - w * 0.12} y2={y2} stroke={color} strokeWidth={w * 0.6} />
+      <line x1={x1 - w * 0.22} y1={y1} x2={x2 - w * 0.22} y2={y2} stroke={tone(color, 0.6)} strokeWidth={Math.max(1.5, w * 0.18)} opacity={0.85} />
+    </g>
+  );
   const leg = (x: number, deg: number, key: string) => {
     const r = (deg * Math.PI) / 180;
+    const kx = x + Math.sin(r) * legLen * 0.5 + 3 * grow; // knee pushed slightly forward
+    const ky = 148 + Math.cos(r) * legLen * 0.5;
     const fx = x + Math.sin(r) * legLen;
     const fy = 150 + Math.cos(r) * legLen - 6 * pose;
     return (
       <g key={key}>
-        <line x1={x} y1={146} x2={fx} y2={fy} stroke={OUTLINE} strokeWidth={15} strokeLinecap="round" />
-        <line x1={x} y1={146} x2={fx} y2={fy} stroke={LIMB} strokeWidth={9} strokeLinecap="round" />
-        <ellipse cx={fx + 6} cy={fy + 3} rx={14 * grow} ry={8 * grow} fill={LIMB} stroke={OUTLINE} strokeWidth={4} />
+        {tube(x, 146, kx, ky, 9)}
+        {tube(kx, ky, fx, fy, 8.5)}
+        <circle cx={kx} cy={ky} r={5.2 * grow} fill="url(#limbBall)" />
+        <ellipse cx={fx + 5} cy={fy + 3} rx={13 * grow} ry={7 * grow} fill="url(#limbBall)" />
+        <ellipse cx={fx + 1} cy={fy} rx={4 * grow} ry={1.8 * grow} fill="#fff" opacity={0.6} />
       </g>
     );
   };
@@ -218,14 +235,21 @@ const Limbs: React.FC<{ walk: number; pose: number; grow: number; crouch: number
     const hy = 86 + Math.cos(r) * armLen;
     return (
       <g key={key}>
-        <line x1={x} y1={86} x2={hx} y2={hy} stroke={OUTLINE} strokeWidth={14} strokeLinecap="round" />
-        <line x1={x} y1={86} x2={hx} y2={hy} stroke={LIMB} strokeWidth={8} strokeLinecap="round" />
-        <circle cx={hx} cy={hy} r={10 * grow} fill="#ffffff" stroke={OUTLINE} strokeWidth={4} />
+        {tube(x, 86, hx, hy, 8)}
+        <circle cx={hx} cy={hy} r={8.5 * grow} fill="url(#limbBall)" />
+        <ellipse cx={hx - 3 * grow} cy={hy - 3 * grow} rx={2.6 * grow} ry={1.6 * grow} fill="#fff" opacity={0.7} />
       </g>
     );
   };
   return (
     <svg viewBox="0 0 100 160" width={PAWN} height={PAWN * 1.6} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+      <defs>
+        <radialGradient id="limbBall" cx="0.38" cy="0.32" r="0.75">
+          <stop offset="0" stopColor={tone(color, 0.6)} />
+          <stop offset="0.5" stopColor={color} />
+          <stop offset="1" stopColor={tone(color, -0.5)} />
+        </radialGradient>
+      </defs>
       {part === "legs"
         ? [leg(38, 26 * swing, "l"), leg(62, -26 * swing, "r")]
         : [arm(34, -1, -40 * swing - 150 * pose - 30, "al"), arm(66, 1, 40 * swing + 150 * pose + 30, "ar")]}
@@ -268,7 +292,6 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
   const punch = spring({ frame: since, fps, config: { damping: 12, stiffness: 420, mass: 0.6 } });
   const scale = interpolate(punch, [0, 1], [1.3, 1]);
   const shudder = s < ESCAPE.hit ? Math.sin(since * 2.4) * 9 * (1 - s / ESCAPE.hit) : 0;
-  const redness = ramp(s, [0, 0.12, 0.5], [1, 1, 0.35]);
   const grow = ramp(s, [ESCAPE.limbsAt, ESCAPE.limbsAt + 0.2], [0, 1]);
 
   // Walk: eases in and out (sets off, strides, slows at the edge); steps follow the distance covered.
@@ -312,12 +335,12 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
           inset: 0,
           transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${(lean + takeoffLean + spin).toFixed(1)}deg) scale(${(scale * sx).toFixed(3)}, ${(scale * sy).toFixed(3)})`,
           transformOrigin: "50% 95%",
-          filter: `drop-shadow(0 0 ${(10 + 40 * redness).toFixed(1)}px ${theme.wrong}${redness > 0.5 ? "dd" : "88"}) drop-shadow(0 12px 16px rgba(0,0,0,0.6))`,
+          filter: "drop-shadow(0 12px 16px rgba(0,0,0,0.6))",
         }}
       >
-        {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="legs" />}
-        <Pawn color={redness > 0.6 ? theme.wrong : "#b8352a"} size={PAWN} style={{ position: "relative" }} />
-        {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="arms" />}
+        {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="legs" color={theme.piece} />}
+        <Pawn color={theme.piece} size={PAWN} style={{ position: "relative" }} />
+        {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="arms" color={theme.piece} />}
       </div>
       {bubbleO > 0.01 && (
         <SpeechBubble text={word} x={walkDist + PAWN * 0.55} y={lift - 26} pop={bubbleIn} opacity={bubbleO} wobble={Math.sin(s * 22) * 2 * (1 - ramp(s, [crouchAt, crouchAt + 0.4], [0, 1]))} />
