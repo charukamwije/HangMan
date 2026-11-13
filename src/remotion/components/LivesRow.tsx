@@ -71,21 +71,45 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          gap: 40,
           fontFamily: BODY_FONT,
           fontWeight: 900,
-          fontSize: 86,
-          letterSpacing: "0.12em",
+          fontSize: 76,
+          lineHeight: 1.08,
+          letterSpacing: "0.08em",
           color: theme.text,
           textShadow: `0 0 30px ${theme.accent}66, 0 8px 30px rgba(0,0,0,0.9)`,
           opacity: outro,
           transform: `scale(${interpolate(outro, [0, 1], [0.7, 1])})`,
         }}
       >
-        DID YOU GET IT?
+        {/* Comment-bait CTA: a specific question gets more replies than a yes/no. Drawn icon, no emoji glyph. */}
+        <ChatIcon color={theme.accent} size={150} />
+        <div style={{ textAlign: "left" }}>
+          WHAT LETTER DID
+          <br />
+          YOU GUESS FIRST?
+        </div>
       </div>
     </div>
   );
 };
+
+/** Speech-bubble "comment" icon (rounded bubble, tail bottom-left, three dots). */
+const ChatIcon: React.FC<{ color: string; size: number }> = ({ color, size }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" style={{ flex: "0 0 auto", filter: `drop-shadow(0 0 18px ${color}aa) drop-shadow(0 8px 16px rgba(0,0,0,0.8))` }}>
+    <path
+      d="M 20 14 H 80 Q 92 14 92 26 V 62 Q 92 74 80 74 H 42 L 22 90 L 26 74 H 20 Q 8 74 8 62 V 26 Q 8 14 20 14 Z"
+      fill="rgba(0,0,0,0.55)"
+      stroke={color}
+      strokeWidth={7}
+      strokeLinejoin="round"
+    />
+    {[32, 50, 68].map((cx) => (
+      <circle key={cx} cx={cx} cy={44} r={6.5} fill={color} />
+    ))}
+  </svg>
+);
 
 const PAWN = 74;
 const PAWN_GAP = 34;
@@ -172,10 +196,11 @@ const ESCAPE = {
   minSpeed: 470, // average px/s; faster for long walks so it always leaves within ~1 s
   maxWalk: 1.0,
   crouch: 0.2, // anticipation squat before the jump
-  hopUp: 760, // initial upward speed of the hop, px/s
-  hopX: 300, // forward speed while airborne, px/s
-  g: 3000, // a little floaty, so the arc reads clearly
-  spin: 320, // deg/s once the tumble has fully built up
+  hopUp: 820, // initial upward speed of the hop, px/s
+  hopX: 340, // forward launch speed, px/s (slowly reduced by air drag)
+  g: 6400, // real-feeling gravity at this scale: a ~1.4k px drop takes ~0.7 s
+  drag: 0.9, // horizontal air drag, 1/s
+  spin: 260, // constant tumble rate set by the push-off, deg/s (angular momentum is conserved)
 } as const;
 const walkSpeed = (dist: number) => Math.max(ESCAPE.minSpeed, dist / ESCAPE.maxWalk);
 const walkTime = (dist: number) => dist / walkSpeed(dist);
@@ -308,11 +333,15 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
   const air = Math.max(0, s - hopAt);
   const airborne = s >= hopAt;
   const stretch = airborne ? ramp(air, [0, 0.06, 0.22], [0, 1, 0]) : 0;
-  const hopX = airborne ? ESCAPE.hopX * air : 0;
+  // Ballistic flight: constant gravity (y), linear air drag on the forward speed (x).
+  const hopX = airborne ? (ESCAPE.hopX / ESCAPE.drag) * (1 - Math.exp(-ESCAPE.drag * air)) : 0;
   const hopY = airborne ? -ESCAPE.hopUp * air + 0.5 * ESCAPE.g * air * air : 0;
-  // Tumble builds up smoothly instead of snapping on: angle = rate · a²/(a + 0.3).
-  const spin = airborne ? ESCAPE.spin * ((air * air) / (air + 0.3)) : 0;
-  const takeoffLean = airborne ? 10 * ramp(air, [0, 0.15], [0, 1]) : 0;
+  const vy = airborne ? -ESCAPE.hopUp + ESCAPE.g * air : 0; // px/s, + = falling
+  // Tumble: the push-off gives a constant spin about the centre of mass (eased in over the
+  // first 0.08 s of the push so it doesn't snap), the same direction it is travelling.
+  const spin = airborne ? ESCAPE.spin * Math.max(0, air - 0.04 * (1 - Math.exp(-air / 0.04))) : 0;
+  // Motion blur + stretch along the fall direction once it is really moving.
+  const speedBlur = Math.max(0, vy - 900) / 2600;
   const pose = airborne ? Easing.out(Easing.cubic)(ramp(air, [0, 0.18], [0, 1])) : 0;
 
   const lift = -LEG * px * grow; // legs push the body up so the feet stand on the ledge
@@ -333,9 +362,10 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
         style={{
           position: "absolute",
           inset: 0,
-          transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${(lean + takeoffLean + spin).toFixed(1)}deg) scale(${(scale * sx).toFixed(3)}, ${(scale * sy).toFixed(3)})`,
-          transformOrigin: "50% 95%",
-          filter: "drop-shadow(0 12px 16px rgba(0,0,0,0.6))",
+          transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${(lean + spin).toFixed(1)}deg) scale(${(scale * sx).toFixed(3)}, ${(scale * sy).toFixed(3)})`,
+          // on the ground it pivots at its feet; in the air it tumbles about its centre of mass
+          transformOrigin: airborne ? "50% 62%" : "50% 95%",
+          filter: `drop-shadow(0 12px 16px rgba(0,0,0,0.6))${speedBlur > 0.02 ? ` blur(${Math.min(2.5, speedBlur * 3).toFixed(2)}px)` : ""}`,
         }}
       >
         {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="legs" color={theme.piece} />}

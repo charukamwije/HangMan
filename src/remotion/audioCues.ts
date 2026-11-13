@@ -7,7 +7,7 @@
 import { AUDIO, AUDIO_SECONDS, COUNTDOWN_FROM, DURATION_SECONDS, FINAL_TICK_SECONDS, LOOP_RESET_SECONDS, SWELL_LEAD_SECONDS } from "./constants";
 
 export const LOOP_REWIND_CUE_ID = "loop-rewind";
-import type { Timeline } from "./timeline";
+import { stressStartFrame, type Timeline } from "./timeline";
 import type { ReelAudioSettings } from "./types";
 
 export type AudioCue = {
@@ -64,6 +64,18 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
       volume: clamp01(audio.tick * (final ? 1.15 + 0.85 * urgency : 0.7)),
     });
   });
+
+  // 2b. Stress mode (00:07 → reveal): the music bed cuts out (see AudioTrack) and a heartbeat
+  //     thumps half a second after every tick, so heart and clock alternate, louder each beat.
+  const stressFrom = stressStartFrame(timeline.tickFrames);
+  if (stressFrom !== undefined) {
+    const offset = Math.round(fps / 2);
+    const beats = timeline.tickFrames.filter((f) => f >= stressFrom && f + offset < timeline.finalRevealFrame);
+    beats.forEach((frame, k) => {
+      const urgency = beats.length > 1 ? k / (beats.length - 1) : 1; // 0 → 1
+      cues.push({ id: `heartbeat-${k}`, src: AUDIO.heartbeat, from: frame + offset, durationInFrames: seconds(AUDIO_SECONDS.heartbeat, fps), volume: clamp01(sfx * (0.55 + 0.45 * urgency)) });
+    });
+  }
 
   // 3. Correct reveal: typewriter key strike + subtle metallic chime, on the reveal frame.
   // 4. Wrong strike: deep mahogany thud on the frame the key turns red.

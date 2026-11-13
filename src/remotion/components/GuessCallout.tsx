@@ -34,14 +34,23 @@ export const GuessCallouts: React.FC<{
         .filter((g) => g.frame < finalRevealFrame)
         .map((g) => (
           <Sequence key={g.letter} name={`callout-${g.kind}-${g.letter}`} from={g.frame} durationInFrames={Math.min(len, finalRevealFrame - g.frame)} layout="none">
-            <Callout theme={theme} letter={g.letter} correct={g.kind === "correct"} centerY={centerY} />
+            <Callout
+              theme={theme}
+              letter={g.letter}
+              correct={g.kind === "correct"}
+              centerY={centerY}
+              praise={PRAISE[guesses.filter((p) => p.kind === "correct" && p.frame < g.frame).length % PRAISE.length]}
+            />
           </Sequence>
         ))}
     </>
   );
 };
 
-const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; centerY: number }> = ({ theme, letter, correct, centerY: CALLOUT_Y }) => {
+/** Verdict pill text for correct guesses, cycled in guess order (deterministic). */
+const PRAISE = ["NICE!", "SMART!", "YES!", "GENIUS!"] as const;
+
+const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; centerY: number; praise: string }> = ({ theme, letter, correct, centerY: CALLOUT_Y, praise }) => {
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = f / fps;
@@ -162,7 +171,7 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
               color: correct ? "#0b0b05" : "#ffffff",
             }}
           >
-            {correct ? "CORRECT" : "WRONG"}
+            {correct ? praise : "WRONG"}
           </span>
         </div>
       </div>

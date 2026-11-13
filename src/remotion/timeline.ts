@@ -12,6 +12,7 @@ import {
   DECOY_LETTERS,
   DURATION_SECONDS,
   MAX_LIVES,
+  STRESS_BELOW_SECONDS,
 } from "./constants";
 import { resolveHook, type HookPlan } from "./hook";
 import type { Guess, ReelProps } from "./types";
@@ -214,6 +215,13 @@ export function resolveTimeline(
     tickFrames,
   };
 }
+
+/**
+ * First frame of stress mode: the tick on which the clock first reads below
+ * STRESS_BELOW_SECONDS (00:07, frame 660 at 30 fps). Shared by the vignette/clock
+ * (stressAt) and the audio (music cut + heartbeat), so they switch on the same frame.
+ */
+export const stressStartFrame = (tickFrames: readonly number[]): number | undefined => tickFrames[COUNTDOWN_FROM - STRESS_BELOW_SECONDS];
 
 /** Seconds shown on the clock at a frame: COUNTDOWN_FROM → 0, reaching 0 at COUNTDOWN_ENDS_AT and holding. */
 export const countdownAt = (frame: number, fps: number) =>

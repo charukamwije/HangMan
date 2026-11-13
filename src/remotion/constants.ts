@@ -114,6 +114,8 @@ export const AUDIO = {
   rewind: "audio/rewind.wav",
   /** 120 BPM staccato cello + woodblock bed, crossfaded in at the end of the hook. */
   music: "audio/music.wav",
+  /** Stress mode: low lub-dub between the ticks once the music cuts at 00:07. */
+  heartbeat: "audio/heartbeat.wav",
 } as const;
 
 /** Asset lengths in seconds (used to size each cue's <Sequence>). */
@@ -131,6 +133,7 @@ export const AUDIO_SECONDS = {
   wrong: 0.55,
   whoosh: 0.3,
   lock: 0.5,
+  heartbeat: 0.45,
 } as const;
 
 /**

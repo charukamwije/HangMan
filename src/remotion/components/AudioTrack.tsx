@@ -4,7 +4,7 @@ import { interpolate, Sequence, staticFile, useVideoConfig } from "remotion";
 import { AUDIO } from "../constants";
 import { buildAudioCues, LOOP_REWIND_CUE_ID } from "../audioCues";
 import { loopResetStart } from "../loop";
-import type { Timeline } from "../timeline";
+import { stressStartFrame, type Timeline } from "../timeline";
 import type { ReelAudioSettings } from "../types";
 
 /**
@@ -27,6 +27,8 @@ export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings
   const musicFrames = durationInFrames - xfadeFrom;
   const loopFrom = loopResetStart(durationInFrames, fps);
   const fadeIn = Math.round(fps * 0.1);
+  // Stress mode (00:07): the music drops out over 2 frames, leaving ticks + heartbeat.
+  const musicCut = stressStartFrame(timeline.tickFrames) ?? loopFrom;
 
   const cues = useMemo(() => {
     // Cues still sounding at the loop point are cut there (the loud loop-rewind starts on that
@@ -47,8 +49,8 @@ export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings
     (f: number) =>
       interpolate(f, [0, xfadeTo - xfadeFrom, musicFrames - fps], [0, audio.music, audio.music], CLAMP) *
       // the song itself is "rewound" by loop-rewind.wav, so it drops out as the rewind starts
-      interpolate(xfadeFrom + f, [loopFrom, loopFrom + 2], [1, 0], CLAMP),
-    [xfadeFrom, xfadeTo, musicFrames, fps, audio.music, loopFrom],
+      interpolate(xfadeFrom + f, [Math.min(musicCut, loopFrom), Math.min(musicCut, loopFrom) + 2], [1, 0], CLAMP),
+    [xfadeFrom, xfadeTo, musicFrames, fps, audio.music, loopFrom, musicCut],
   );
 
   if (!audio.enabled) return null;

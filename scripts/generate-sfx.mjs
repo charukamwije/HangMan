@@ -194,6 +194,24 @@ function thud() {
 }
 
 /**
+ * Stress-mode heartbeat: a low "lub" (55 Hz) then a softer "dub" (48 Hz) 0.16 s
+ * later, each a pitch-dropping sine with a felt-soft attack, 0.45 s.
+ */
+function heartbeat() {
+  const out = buf(0.45);
+  const [l, r] = out;
+  const beat = (t, f, a) => (t < 0 ? 0 : Math.sin(TAU * (f * t + (f * 0.35 / 18) * (1 - Math.exp(-t * 18)))) * env(t, 0.006, 0.075) * a);
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    l[i] = r[i] = beat(t, 55, 1) + beat(t - 0.16, 48, 0.7);
+  }
+  lowpass(l, 220); lowpass(r, 220);
+  fade(out, 0, 0.08);
+  normalize(out, 0.95);
+  return out;
+}
+
+/**
  * Dark brass swell in D minor: detuned saw ensemble through an opening
  * two-pole filter. Crescendo over 3 s to a peak, then a 1.5 s tail.
  */
@@ -537,6 +555,7 @@ for (let r = 5; r >= 1; r--) writeWav(`tick-final-${r}.wav`, tick(2100, 10 + r, 
 writeWav("typewriter.wav", typewriter());
 writeWav("chime.wav", chime());
 writeWav("thud.wav", thud());
+writeWav("heartbeat.wav", heartbeat());
 writeWav("swell.wav", swell());
 writeWav("reveal.wav", reveal());
 writeWav("ambient.wav", ambient());

@@ -10,8 +10,8 @@ import { ramp } from "../motion";
  *   0.14–0.30 s  throw: bucket swings forward and tips
  *   0.22–0.34 s  water leaves the moving rim as a continuous, ballistic stream
  *   ≈0.38 s      first impact = THROW_HIT_SECONDS: hint distorts + blurs, splash crown, spray
- *   0.4–1.8 s    clear 3D water beads sit on the card (blurring the text behind them),
- *                then evaporate; sheen fades; owl squints (laughs)
+ *   0.4–1.0 s    the crown collapses, spray rains down and the sheen fades;
+ *                owl squints (laughs)
  *
  * The stream is a particle simulation: each parcel of water has its own launch
  * time from the moving bucket rim, a velocity solved to land on the text, and
@@ -33,8 +33,6 @@ const G = 3200; // px/s² on the 4K stage
 const EMIT = [0.22, 0.34] as const;
 const FLIGHT = 0.16; // seconds from rim to text
 const PARCELS = 30;
-const WATER_DEEP = "rgba(96,168,230,0.78)";
-const WATER_MID = "rgba(170,215,250,0.85)";
 
 const deg = (d: number) => (d * Math.PI) / 180;
 const rot = (x: number, y: number, a: number) => ({ x: x * Math.cos(a) - y * Math.sin(a), y: x * Math.sin(a) + y * Math.cos(a) });
@@ -97,7 +95,7 @@ export const HintOwl: React.FC<{
         const a = s - p.te;
         if (a < 0 || a > p.T) return [];
         const env = Math.sin(Math.PI * (i / (PARCELS - 1))); // thin at both ends of the pour
-        return [{ i, x: p.m.x + p.v.x * a, y: p.m.y + p.v.y * a + 0.5 * G * a * a, w: 8 + 30 * env * (1 - 0.45 * (a / p.T)) }];
+        return [{ i, x: p.m.x + p.v.x * a, y: p.m.y + p.v.y * a + 0.5 * G * a * a, w: 14 + 46 * env * (1 - 0.4 * (a / p.T)) }];
       })
     : [];
 
@@ -120,11 +118,11 @@ export const HintOwl: React.FC<{
             <stop offset="0" stopColor="#cfe9ff" stopOpacity="0" />
             <stop offset="1" stopColor="#cfe9ff" stopOpacity="0.75" />
           </linearGradient>
+          <WaterDefs />
         </defs>
-        {splashT >= 0 && <SplashLayer t={splashT} s={s} target={target} cardW={cardW} cardH={cardH} seed={throwSeed} parcels={parcels} />}
-        {live.length > 1 && <Stream pts={live} />}
+        {splashT >= 0 && <SplashLayer t={splashT} target={target} cardW={cardW} cardH={cardH} seed={throwSeed} />}
+        {live.length > 1 && <Stream pts={live} s={s} />}
       </svg>
-      {splashT >= 0 && <WaterBeads t={splashT} target={target} cardW={cardW} cardH={cardH} seed={throwSeed} />}
 
       {/* the owl + bucket on the card's top-right corner */}
       <div style={{ position: "absolute", left: boxLeft, top: boxTop + bob, width: BOX.w, height: BOX.h, pointerEvents: "none" }}>
@@ -142,176 +140,295 @@ export const HintOwl: React.FC<{
 };
 
 /* ---------------------------------------------------------------- water */
+/*
+ * Look: clear, glassy water. Every water body (stream, crown sheet, fingers, drops)
+ * is a pale-blue translucent volume with a darker refracting blue edge, a white
+ * specular rim and faint inner caustic ripples, so it reads as liquid against the dark card.
+ */
 
-/** The pour: a tapered ribbon through the live parcels, in three layers + breakup droplets. */
-const Stream: React.FC<{ pts: { i: number; x: number; y: number; w: number }[] }> = ({ pts }) => {
-  const seg = (layer: "deep" | "mid" | "hi") =>
-    pts.slice(1).map((p, k) => {
-      const q = pts[k];
-      const w = (p.w + q.w) / 2;
-      const width = layer === "deep" ? w : layer === "mid" ? w * 0.55 : Math.max(2, w * 0.16);
-      const off = layer === "hi" ? -w * 0.22 : 0;
-      return (
-        <line
-          key={`${layer}-${p.i}`}
-          x1={q.x}
-          y1={q.y + off}
-          x2={p.x}
-          y2={p.y + off}
-          stroke={layer === "deep" ? WATER_DEEP : layer === "mid" ? WATER_MID : "rgba(255,255,255,0.9)"}
-          strokeWidth={width}
-          strokeLinecap="round"
-        />
-      );
+type Pt = { x: number; y: number };
+const f1 = (n: number) => n.toFixed(1);
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+const easeOut3 = (x: number) => 1 - (1 - clamp01(x)) ** 3;
+
+/** Catmull-Rom spline through `p` as cubic Bézier segments; `move` starts a new subpath. */
+function curve(p: Pt[], move = true) {
+  if (!p.length) return "";
+  let d = move ? `M ${f1(p[0].x)} ${f1(p[0].y)}` : `L ${f1(p[0].x)} ${f1(p[0].y)}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[i - 1] ?? p[i];
+    const p1 = p[i];
+    const p2 = p[i + 1];
+    const p3 = p[i + 2] ?? p2;
+    d += ` C ${f1(p1.x + (p2.x - p0.x) / 6)} ${f1(p1.y + (p2.y - p0.y) / 6)} ${f1(p2.x - (p3.x - p1.x) / 6)} ${f1(p2.y - (p3.y - p1.y) / 6)} ${f1(p2.x)} ${f1(p2.y)}`;
+  }
+  return d;
+}
+
+/** Closed tapered tube around a centreline: half-width `w[i]` at each point. */
+function tube(c: Pt[], w: number[]) {
+  const side = (sign: 1 | -1) =>
+    c.map((p, i) => {
+      const a = c[Math.max(0, i - 1)];
+      const b = c[Math.min(c.length - 1, i + 1)];
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: p.x + (sign * -(b.y - a.y) * w[i]) / len, y: p.y + (sign * (b.x - a.x) * w[i]) / len };
     });
+  return `${curve(side(1))} ${curve(side(-1).reverse(), false)} Z`;
+}
+
+/** Gradients shared by every water shape (one owl per reel, so fixed ids are safe). */
+const WaterDefs: React.FC = () => (
+  <>
+    {/* glass sphere: bright off-centre core, saturated body, dark refracting rim */}
+    <radialGradient id="owlDropFill" cx="0.5" cy="0.5" r="0.5" fx="0.38" fy="0.32">
+      <stop offset="0" stopColor="#f2fbff" stopOpacity="0.95" />
+      <stop offset="0.45" stopColor="#a6d6f5" stopOpacity="0.82" />
+      <stop offset="0.85" stopColor="#4a92cf" stopOpacity="0.88" />
+      <stop offset="1" stopColor="#1f5f9e" stopOpacity="0.95" />
+    </radialGradient>
+    {/* crown sheet: lighter, thinner water up top, denser blue at the base */}
+    <linearGradient id="owlSheetFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#d9f0ff" stopOpacity="0.62" />
+      <stop offset="0.5" stopColor="#9fd0f2" stopOpacity="0.5" />
+      <stop offset="1" stopColor="#5c9fd6" stopOpacity="0.7" />
+    </linearGradient>
+    {/* cylinder shading for the stream and fingers: dark edges, bright core */}
+    <linearGradient id="owlTubeFill" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stopColor="#3f86c6" stopOpacity="0.9" />
+      <stop offset="0.45" stopColor="#d6efff" stopOpacity="0.8" />
+      <stop offset="1" stopColor="#3f86c6" stopOpacity="0.9" />
+    </linearGradient>
+  </>
+);
+
+const EDGE = "rgba(32,96,160,0.85)";
+
+/**
+ * A water drop: glass-sphere fill, dark refracting rim, white specular top-left and
+ * a faint caustic bottom-right. Moving drops stretch along their velocity (vx, vy).
+ */
+const Drop: React.FC<{ x: number; y: number; r: number; o?: number; vx?: number; vy?: number }> = ({ x, y, r, o = 1, vx = 0, vy = 0 }) => {
+  const speed = Math.hypot(vx, vy);
+  const stretch = 1 + Math.min(0.9, speed / 1800);
+  const ang = speed > 1 ? (Math.atan2(vy, vx) * 180) / Math.PI : 0;
+  return (
+    <g opacity={o}>
+      <g transform={`translate(${f1(x)} ${f1(y)}) rotate(${f1(ang)}) scale(${stretch.toFixed(3)} ${(1 / Math.sqrt(stretch)).toFixed(3)})`}>
+        <circle r={r} fill="url(#owlDropFill)" stroke={EDGE} strokeWidth={Math.max(0.8, r * 0.1)} />
+      </g>
+      {/* highlights stay screen-aligned (lit from the top-left lamp) */}
+      <ellipse cx={x - r * 0.32} cy={y - r * 0.36} rx={r * 0.3} ry={r * 0.2} fill="#ffffff" opacity={0.95} transform={`rotate(-30 ${f1(x - r * 0.32)} ${f1(y - r * 0.36)})`} />
+      {r > 5 && <circle cx={x + r * 0.36} cy={y + r * 0.4} r={r * 0.14} fill="#ffffff" opacity={0.45} />}
+    </g>
+  );
+};
+
+/**
+ * The pour in flight: a thick, translucent tube through the live parcels whose edges
+ * wobble like real moving water, with a bright core, a white specular streak, a bulbous
+ * leading head and drops peeling off its edges.
+ */
+const Stream: React.FC<{ pts: { i: number; x: number; y: number; w: number }[]; s: number }> = ({ pts, s }) => {
+  const c = pts.map((p) => ({ x: p.x, y: p.y }));
+  const wob = pts.map((p) => p.w * 0.5 * (1 + 0.22 * Math.sin(p.i * 1.9 + s * 55)));
   const head = pts[pts.length - 1];
   return (
     <g>
-      {seg("deep")}
-      {seg("mid")}
-      {seg("hi")}
-      {/* leading bulb + breakup droplets peeling off the sheet */}
-      <circle cx={head.x} cy={head.y} r={head.w * 0.62} fill={WATER_MID} />
+      <path d={tube(c, wob)} fill="url(#owlTubeFill)" stroke={EDGE} strokeWidth={3} strokeLinejoin="round" />
+      <path d={tube(c, wob.map((w) => w * 0.45))} fill="rgba(225,244,255,0.45)" />
+      <path d={curve(c.map((p, k) => ({ x: p.x, y: p.y - wob[k] * 0.45 })))} stroke="rgba(255,255,255,0.9)" strokeWidth={3} fill="none" strokeLinecap="round" />
+      <Drop x={head.x} y={head.y} r={head.w * 0.62} />
       {pts
         .filter((p) => p.i % 3 === 1)
         .map((p) => (
           <Drop
             key={`bd-${p.i}`}
-            x={p.x + (random(`bd-x-${p.i}`) - 0.5) * 70}
-            y={p.y + (random(`bd-y-${p.i}`) - 0.3) * 50}
-            r={3 + 6 * random(`bd-r-${p.i}`)}
+            x={p.x + (random(`bd-x-${p.i}`) - 0.5) * 90}
+            y={p.y + (random(`bd-y-${p.i}`) - 0.3) * 60}
+            r={3 + 8 * random(`bd-r-${p.i}`)}
           />
         ))}
     </g>
   );
 };
 
-/** A water drop with a refraction highlight and a darker lower rim. */
-const Drop: React.FC<{ x: number; y: number; r: number; o?: number }> = ({ x, y, r, o = 1 }) => (
-  <g opacity={o}>
-    {/* clear drop: faint body, darker refracting rim, bright glint, soft caustic */}
-    <circle cx={x} cy={y} r={r} fill="rgba(190,225,255,0.18)" stroke="rgba(210,235,255,0.55)" strokeWidth={Math.max(1, r * 0.12)} />
-    <path
-      d={`M ${x - r * 0.75} ${y + r * 0.3} A ${r * 0.85} ${r * 0.85} 0 0 0 ${x + r * 0.75} ${y + r * 0.3}`}
-      stroke="rgba(10,30,60,0.35)"
-      strokeWidth={Math.max(1, r * 0.16)}
-      fill="none"
-    />
-    <circle cx={x - r * 0.32} cy={y - r * 0.35} r={r * 0.24} fill="#ffffff" opacity={0.95} />
-    <circle cx={x + r * 0.3} cy={y + r * 0.38} r={r * 0.16} fill="#ffffff" opacity={0.35} />
-  </g>
-);
+/* ------------------------------------------------------------ crown splash */
 
-/** Impact: wet sheen, splash crown + spray. (Beads are HTML: see WaterBeads.) */
-const SplashLayer: React.FC<{
-  t: number;
-  s: number;
-  target: { x: number; y: number };
-  cardW: number;
-  cardH: number;
-  seed: number;
-  parcels: Parcel[];
-}> = ({ t, s, target, cardW, cardH, seed, parcels }) => {
-  const sheen = ramp(t, [0, 0.06, 1.3], [0, 1, 0]);
-  const R = (k: string) => random(`${seed}-${k}`);
+/** Crown size on the 4K stage; it rises from the lower half of the hint text. */
+const CROWN = { w: 780, h: 280, n: 40 };
+/**
+ * Rim height profile across the crown (u 0 → 1, height 0 → 1), shaped after a
+ * classic side-swept crown splash: a lobe on the left, a low bowl, a tall crest
+ * right of centre, then a shoulder and a spur on the right.
+ */
+const PROFILE: [number, number][] = [
+  [0, 0.04], [0.05, 0.5], [0.11, 0.72], [0.18, 0.46], [0.3, 0.2], [0.42, 0.26], [0.52, 0.55],
+  [0.6, 0.9], [0.68, 1], [0.76, 0.78], [0.84, 0.58], [0.92, 0.68], [0.97, 0.3], [1, 0.04],
+];
+const profileAt = (u: number) => {
+  for (let k = 1; k < PROFILE.length; k++) {
+    const [u1, h1] = PROFILE[k];
+    if (u <= u1) {
+      const [u0, h0] = PROFILE[k - 1];
+      return h0 + ((h1 - h0) * (u - u0)) / (u1 - u0);
+    }
+  }
+  return 0;
+};
+/** Fingers jetting off the rim: position, length (px) and outward lean (deg). */
+const FINGERS = [
+  { u: 0.04, len: 95, lean: -52 },
+  { u: 0.11, len: 160, lean: -26 },
+  { u: 0.5, len: 85, lean: -12 },
+  { u: 0.62, len: 200, lean: -6 },
+  { u: 0.7, len: 150, lean: 16 },
+  { u: 0.84, len: 110, lean: 32 },
+  { u: 0.93, len: 175, lean: 50 },
+];
+/** Impact timing (seconds after first contact). */
+const CROWN_T = { rise: 0.13, sweep: 0.09, collapse: [0.3, 0.58], fade: [0.42, 0.62] } as const;
 
-  // spray from every parcel that has landed: short-lived ballistic droplets
-  const spray = parcels.flatMap((p, i) => {
-    const since = s - (p.te + p.T);
-    if (since < 0 || since > 0.45) return [];
-    return Array.from({ length: 3 }, (_, k) => {
-      const ang = -Math.PI * (0.12 + 0.76 * R(`sa-${i}-${k}`));
-      const v = 420 + 900 * R(`sv-${i}-${k}`);
-      return (
-        <Drop
-          key={`sp-${i}-${k}`}
-          x={p.hit.x + Math.cos(ang) * v * since}
-          y={p.hit.y + Math.sin(ang) * v * since + 0.5 * G * since * since}
-          r={3 + 7 * R(`sr-${i}-${k}`)}
-          o={1 - since / 0.45}
-        />
-      );
+/**
+ * Impact: the poured water bursts into a translucent crown sheet across the hint text.
+ * The rim rises left → right with the pour's sweep, fingers jet off it and pinch off
+ * into drops, a spray of glass drops (big near the sheet, fine mist at the sides) flies
+ * out ballistically, then the sheet collapses under gravity and fades.
+ */
+const CrownSplash: React.FC<{ t: number; target: Pt; seed: number }> = ({ t, target, seed }) => {
+  const R = (k: string) => random(`${seed}-crown-${k}`);
+  const x0 = target.x + 20 - CROWN.w / 2;
+  const y0 = target.y + 44;
+  const collapse = ramp(t, [...CROWN_T.collapse], [0, 1]);
+  const sheetO = 1 - ramp(t, [...CROWN_T.fade], [0, 1]);
+
+  /** Rim point i at time `time` (heights grow with the left → right sweep, then fall). */
+  const rimAt = (i: number, time: number) => {
+    const u = i / (CROWN.n - 1);
+    const g = easeOut3((time - CROWN_T.sweep * u) / CROWN_T.rise);
+    const fall = ramp(time, [...CROWN_T.collapse], [0, 1]);
+    const noise = 1 + 0.18 * (R(`n${i}`) - 0.5) + 0.05 * Math.sin(time * 38 + i * 1.3);
+    const h = CROWN.h * profileAt(u) * noise * g * (1 - fall * fall);
+    const base = y0 + 22 * Math.sin(Math.PI * u);
+    return { x: x0 + CROWN.w * u + (R(`x${i}`) - 0.5) * 8, y: base - h, base, h, u, g };
+  };
+  const rim = Array.from({ length: CROWN.n }, (_, i) => rimAt(i, t));
+
+  /** Finger centreline at time `time` (bends outward toward its tip). */
+  const fingerLine = (f: (typeof FINGERS)[number], k: number, time: number, shrink: number) => {
+    const p = rimAt(Math.round(f.u * (CROWN.n - 1)), time);
+    const L = f.len * (0.85 + 0.3 * R(`fl${k}`)) * p.g * (1 - ramp(time, [...CROWN_T.collapse], [0, 1])) * (1 - shrink);
+    const a0 = deg(f.lean);
+    const a1 = deg(f.lean * 1.7);
+    const P1 = { x: p.x + Math.sin(a0) * L * 0.55, y: p.y - Math.cos(a0) * L * 0.55 };
+    const P2 = { x: p.x + Math.sin(a1) * L, y: p.y - Math.cos(a1) * L };
+    return Array.from({ length: 7 }, (_, j) => {
+      const v = j / 6;
+      return { x: (1 - v) ** 2 * p.x + 2 * (1 - v) * v * P1.x + v * v * P2.x, y: (1 - v) ** 2 * p.y + 2 * (1 - v) * v * P1.y + v * v * P2.y };
     });
+  };
+
+  const fingers = FINGERS.map((f, k) => {
+    const detachAt = 0.17 + 0.09 * R(`fd${k}`);
+    const shrink = ramp(t, [detachAt, detachAt + 0.14], [0, 0.65]);
+    const line = fingerLine(f, k, t, shrink);
+    const len = Math.hypot(line[6].x - line[0].x, line[6].y - line[0].y);
+    const r = 7 + 6 * R(`fr${k}`);
+    // tip bulb: rides the tip, then pinches off and flies on ballistically
+    let bulb: { x: number; y: number; vx: number; vy: number } | null = null;
+    if (t < detachAt) {
+      if (len > 12) bulb = { x: line[6].x, y: line[6].y, vx: 0, vy: 0 };
+    } else {
+      const tip = fingerLine(f, k, detachAt, 0)[6];
+      const a = deg(f.lean * 1.7);
+      const sp = 520 + 320 * R(`fv${k}`);
+      const dt = t - detachAt;
+      const vx = Math.sin(a) * sp;
+      const vy = -Math.cos(a) * sp + G * dt;
+      if (dt < 0.7) bulb = { x: tip.x + Math.sin(a) * sp * dt, y: tip.y - Math.cos(a) * sp * dt + 0.5 * G * dt * dt, vx, vy };
+    }
+    return { line, len, r, bulb, o: 1 - ramp(t, [detachAt + 0.5, detachAt + 0.7], [0, 1]) };
   });
+
+  // spray: drops thrown off the rim; ~70 % fine mist, the rest big glassy drops
+  const spray = Array.from({ length: 48 }, (_, k) => {
+    const t0 = 0.03 + 0.2 * R(`st${k}`);
+    const dt = t - t0;
+    if (dt < 0 || dt > 0.75) return null;
+    const u = R(`su${k}`);
+    const src = rimAt(Math.round(u * (CROWN.n - 1)), t0);
+    const ang = deg(-90 + (u - 0.5) * 120 + (R(`sa${k}`) - 0.5) * 70);
+    const sp = 380 + 820 * R(`sv${k}`);
+    const big = R(`sb${k}`) > 0.7;
+    const r = big ? 8 + 7 * R(`sr${k}`) : 2.5 + 4 * R(`sr${k}`);
+    const vx = Math.cos(ang) * sp;
+    const vy0 = Math.sin(ang) * sp;
+    return (
+      <Drop
+        key={`sp${k}`}
+        x={src.x + vx * dt}
+        y={src.y + vy0 * dt + 0.5 * G * dt * dt}
+        r={r}
+        vx={vx}
+        vy={vy0 + G * dt}
+        o={1 - ramp(dt, [0.5, 0.75], [0, 1])}
+      />
+    );
+  });
+
+  const sheet =
+    `M ${f1(rim[0].x)} ${f1(rim[0].base)} ${curve(rim, false)} ` +
+    `L ${f1(rim[CROWN.n - 1].x)} ${f1(rim[CROWN.n - 1].base)} ` +
+    curve(rim.filter((_, i) => i % 4 === 0 || i === CROWN.n - 1).reverse().map((p) => ({ x: p.x, y: p.base + 6 })), false) +
+    " Z";
 
   return (
     <g>
-      <rect x={0} y={0} width={cardW} height={cardH} rx={44} fill="url(#owlWetSheen)" opacity={sheen} />
-      {/* splash crown: sheets thrown up from the impact line */}
-      {Array.from({ length: 9 }, (_, k) => {
-        const life = ramp(t, [0, 0.08, 0.3], [0, 1, 0]);
-        if (life <= 0) return null;
-        const x = target.x - 260 + 520 * (k / 8);
-        const h = (60 + 90 * R(`ch-${k}`)) * life;
-        const lean = (k - 4) * 6;
-        return (
-          <path
-            key={`cr-${k}`}
-            d={`M ${x - 12} ${target.y} Q ${x + lean} ${target.y - h * 0.6} ${x + lean * 1.4} ${target.y - h} Q ${x + lean * 0.8} ${target.y - h * 0.5} ${x + 12} ${target.y} Z`}
-            fill={WATER_MID}
-          />
-        );
-      })}
+      {sheetO > 0.01 && (
+        <g opacity={sheetO}>
+          <defs>
+            <clipPath id="owlSheetClip">
+              <path d={sheet} />
+            </clipPath>
+          </defs>
+          {/* translucent body with a dark refracting edge */}
+          <path d={sheet} fill="url(#owlSheetFill)" stroke={EDGE} strokeWidth={4} strokeLinejoin="round" />
+          {/* inner caustic ripples following the crown's shape */}
+          <g clipPath="url(#owlSheetClip)" fill="none" strokeLinecap="round">
+            {[0.22, 0.42, 0.62, 0.8].map((frac, k) => (
+              <path
+                key={k}
+                d={curve(rim.filter((_, i) => i % 3 === 0).map((p) => ({ x: p.x, y: p.base - p.h * frac + 8 * Math.sin(p.u * 14 + frac * 9 + t * 20) })))}
+                stroke={k % 2 ? "rgba(40,110,175,0.28)" : "rgba(255,255,255,0.4)"}
+                strokeWidth={k % 2 ? 5 : 3}
+              />
+            ))}
+          </g>
+          {/* specular highlight just inside the rim */}
+          <path d={curve(rim.map((p) => ({ x: p.x, y: p.y + 8 })))} stroke="rgba(255,255,255,0.75)" strokeWidth={3} fill="none" strokeLinecap="round" />
+        </g>
+      )}
+      {fingers.map((f, k) => (
+        <g key={`f${k}`} opacity={f.o}>
+          {f.len > 6 && (
+            <path d={tube(f.line, f.line.map((_, j) => (9 - 6 * (j / 6)) * Math.min(1, f.len / 40)))} fill="url(#owlTubeFill)" stroke={EDGE} strokeWidth={2.5} strokeLinejoin="round" />
+          )}
+          {f.bulb && <Drop x={f.bulb.x} y={f.bulb.y} r={f.r} vx={f.bulb.vx} vy={f.bulb.vy} />}
+        </g>
+      ))}
       {spray}
     </g>
   );
 };
 
-/**
- * Clear 3D water beads resting on the card after the splash. Each is an HTML
- * lens: backdrop blur + slight brightening distorts whatever text is beneath it,
- * a darker refracting rim and inner shading give it volume, a sharp glint and a
- * soft caustic on the opposite side sell the transparency. They land with a
- * jiggle, wobble gently, then evaporate (shrink + fade) — no running drips.
- */
-const WaterBeads: React.FC<{ t: number; target: { x: number; y: number }; cardW: number; cardH: number; seed: number }> = ({ t, target, cardW, cardH, seed }) => {
-  const R = (k: string) => random(`${seed}-bead-${k}`);
+/** Impact: wet sheen on the card, then the crown splash. */
+const SplashLayer: React.FC<{ t: number; target: Pt; cardW: number; cardH: number; seed: number }> = ({ t, target, cardW, cardH, seed }) => {
+  const sheen = ramp(t, [0, 0.06, 1.3], [0, 1, 0]);
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {Array.from({ length: 18 }, (_, k) => {
-        const land = 0.02 + 0.16 * R(`l-${k}`);
-        const dt = t - land;
-        if (dt < 0) return null;
-        const big = k < 6; // a few large beads over the text, the rest scattered
-        const r = big ? 34 + 22 * R(`r-${k}`) : 12 + 16 * R(`r-${k}`);
-        const x = target.x + (R(`x-${k}`) - 0.5) * cardW * (big ? 0.55 : 0.85);
-        const y = target.y + (R(`y-${k}`) - 0.5) * cardH * (big ? 0.5 : 0.85);
-        const jiggle = Math.exp(-dt * 9) * Math.sin(dt * 40) * 0.18;
-        const evap = 1 - ramp(t, [1.0 + 0.4 * R(`e-${k}`), 1.6 + 0.3 * R(`e-${k}`)], [0, 1]);
-        if (evap <= 0) return null;
-        const appear = ramp(dt, [0, 0.06], [0, 1]);
-        const size = r * 2 * (0.55 + 0.45 * evap);
-        const wob = Math.sin(t * 6 + k) * 0.03;
-        return (
-          <div
-            key={k}
-            style={{
-              position: "absolute",
-              left: x - size / 2,
-              top: y - size / 2,
-              width: size,
-              height: size * 0.9,
-              borderRadius: "50% 50% 48% 52% / 55% 55% 45% 45%",
-              transform: `scale(${(1 + jiggle + wob).toFixed(3)}, ${(1 - jiggle - wob).toFixed(3)})`,
-              opacity: appear * Math.min(1, evap * 1.6),
-              backdropFilter: `blur(${(2.5 + size / 30).toFixed(1)}px) brightness(1.12) saturate(1.15)`,
-              WebkitBackdropFilter: `blur(${(2.5 + size / 30).toFixed(1)}px) brightness(1.12) saturate(1.15)`,
-              background: [
-                "radial-gradient(ellipse 22% 16% at 34% 26%, rgba(255,255,255,0.95), rgba(255,255,255,0) 100%)",
-                "radial-gradient(ellipse 30% 18% at 62% 78%, rgba(255,255,255,0.35), rgba(255,255,255,0) 100%)",
-                "radial-gradient(circle at 50% 45%, rgba(190,225,255,0.06) 50%, rgba(25,55,95,0.38) 100%)",
-              ].join(", "),
-              boxShadow: [
-                "inset 0 -5px 10px rgba(255,255,255,0.28)",
-                "inset 0 6px 12px rgba(0,25,55,0.35)",
-                "0 0 0 1.5px rgba(220,240,255,0.35)",
-                `0 ${(size * 0.08).toFixed(1)}px ${(size * 0.12).toFixed(1)}px rgba(0,0,0,0.35)`,
-              ].join(", "),
-            }}
-          />
-        );
-      })}
-    </div>
+    <g>
+      <rect x={0} y={0} width={cardW} height={cardH} rx={44} fill="url(#owlWetSheen)" opacity={sheen} />
+      {t < 1 && <CrownSplash t={t} target={target} seed={seed} />}
+    </g>
   );
 };
 

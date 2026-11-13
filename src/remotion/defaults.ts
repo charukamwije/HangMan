@@ -8,7 +8,8 @@ export const DEFAULT_INPUT = {
   hint2: "FAMOUS PLACES PEOPLE TRAVEL TO SEE",
   word: "LANDMARKS",
   hintLetter: "",
-  wrongLetters: "B, W, X, Q",
+  // E first: the most common English letter missing at 4.4 s is the comment bait.
+  wrongLetters: "E, B, W, X, Q",
   holdBack: 2,
   finalRevealAt: 29,
 };
@@ -21,7 +22,7 @@ export const DEFAULT_REEL_PROPS: ReelProps = {
   hintLetter: DEFAULT_INPUT.hintLetter,
   guesses: autoSchedule({
     word: DEFAULT_INPUT.word,
-    wrongLetters: ["B", "W", "X", "Q"],
+    wrongLetters: ["E", "B", "W", "X", "Q"],
     holdBack: DEFAULT_INPUT.holdBack,
     finalRevealAt: DEFAULT_INPUT.finalRevealAt,
     hintLetter: DEFAULT_INPUT.hintLetter,

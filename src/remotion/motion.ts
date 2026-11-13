@@ -7,7 +7,7 @@
  * the same if the composition fps ever changes.
  */
 import { Easing, interpolate, spring } from "remotion";
-import { COUNTDOWN_FROM, STRESS_BELOW_SECONDS } from "./constants";
+import { stressStartFrame } from "./timeline";
 
 const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
@@ -45,8 +45,7 @@ export type Stress = {
  * the same frames. Starts when the clock first reads below STRESS_BELOW_SECONDS.
  */
 export function stressAt(frame: number, fps: number, tickFrames: readonly number[]): Stress {
-  const startIdx = COUNTDOWN_FROM - STRESS_BELOW_SECONDS; // tick that shows 00:07
-  const start = tickFrames[startIdx];
+  const start = stressStartFrame(tickFrames); // tick that shows 00:07
   const end = tickFrames[tickFrames.length - 1]; // 00:00
   if (start === undefined || end === undefined || frame < start) return { level: 0, pulse: 0, active: false };
 

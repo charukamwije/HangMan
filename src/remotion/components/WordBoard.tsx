@@ -76,6 +76,12 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
   const settle = 1 - loopReset(frame, durationInFrames, fps, 0.2, 0.55);
   const celebrate = (solved ? spring({ frame: frame - finalRevealFrame - Math.round(0.17 * fps), fps, config: { damping: 8, stiffness: 90 } }) : 0) * settle;
 
+  // Curiosity gap: a huge faint "?" behind the slots through the decode (frame 0 = thumbnail),
+  // fading out just before the clear; it fades back in over the loop reset so the replay seam matches.
+  const fadeAt = Math.max(0, hook.clearFrame - Math.round((4 / 30) * fps));
+  const question = Math.max(frame < hook.clearFrame ? 1 - ramp(frame, [fadeAt, hook.clearFrame], [0, 1]) : 0, loopReset(frame, durationInFrames, fps, 0.5, 1));
+  const boardH = lines.length * lineHeight + (lines.length - 1) * tile * 0.25;
+
   return (
     <div
       style={{
@@ -90,6 +96,23 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
         transform: kickX || kickScale !== 1 ? `translateX(${kickX.toFixed(2)}px) scale(${kickScale})` : undefined,
       }}
     >
+      {question > 0.001 && (
+        <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: boardH, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <div
+            style={{
+              fontFamily: DISPLAY_FONT,
+              fontSize: boardH * 2.1,
+              lineHeight: 1,
+              color: theme.accent,
+              opacity: 0.26 * question,
+              textShadow: `0 0 ${tile * 0.6}px ${theme.accent}`,
+              transform: `scale(${1 + 0.04 * Math.sin((frame / fps) * Math.PI * 2)})`,
+            }}
+          >
+            ?
+          </div>
+        </div>
+      )}
       {lines.map((line, li) => (
         <div key={li} style={{ display: "flex", gap, height: lineHeight, alignItems: "flex-end" }}>
           {line.text.split("").map((ch, ci) => {

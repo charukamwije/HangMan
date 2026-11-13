@@ -14,6 +14,34 @@ const MAX_WIDTH = TOP_ROW.right - TOP_ROW.left - CLOCK.width - 60 - 2 * MOUSE_W;
 const MAX_FONT = 66;
 const fontSizeFor = (text: string) => Math.min(MAX_FONT, Math.floor((MAX_WIDTH - 150) / (Math.max(1, text.length) * 0.56)));
 
+/** Hook-text word that gets a focus punch the moment the banner flip lands. */
+const EMPHASIS = "SOLVE";
+
+/**
+ * Micro-zoom (1.25× → 1×) + chromatic-aberration split (cyan / yellow) that decays
+ * over ~8 frames from the frame the hook text has fully landed (`frame` = 0).
+ * Inline-block transform only, so the pill never re-lays out.
+ */
+const EmphasisWord: React.FC<{ word: string; frame: number; size: number }> = ({ word, frame, size }) => {
+  const k = frame >= 0 ? ramp(frame, [0, 8], [1, 0]) : 0;
+  const ease = k * k * (3 - 2 * k);
+  const split = size * 0.08 * ease;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        // grow the word's own box while it is zoomed, so it never overlaps its neighbours
+        margin: `0 ${(size * 0.24 * ease).toFixed(1)}px`,
+        transform: `scale(${1 + 0.16 * ease})`,
+        transformOrigin: "50% 60%",
+        textShadow: split > 0.2 ? `${split}px 0 0 #3fd6ff, ${-split}px 0 0 #ffd400, 0 4px 0 rgba(0,0,0,0.35)` : undefined,
+      }}
+    >
+      {word}
+    </span>
+  );
+};
+
 /**
  * Top-left banner. Opens on `introText` ("DECODING BOARD...") with a frame-0
  * punch (scale 1.1 → 1), then over `flip` the intro slides down and out while
@@ -133,7 +161,14 @@ export const HookBanner: React.FC<{
             ))}
           </span>
         )}
-        <span style={{ ...labelStyle, opacity: labelIn, transform: `translateY(${(labelIn - 1) * slide}px)` }}>{label}</span>
+        <span style={{ ...labelStyle, opacity: labelIn, transform: `translateY(${(labelIn - 1) * slide}px)` }}>
+          {label.split(" ").map((word, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && " "}
+              {word.replace(/[^A-Z]/g, "") === EMPHASIS ? <EmphasisWord word={word} frame={frame - b} size={fontSize} /> : word}
+            </React.Fragment>
+          ))}
+        </span>
       </span>
     </div>
       </div>
