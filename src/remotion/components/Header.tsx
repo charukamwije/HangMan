@@ -1,6 +1,6 @@
 import React from "react";
 import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme } from "../themes";
+import { shadeA, type Theme } from "../themes";
 import type { Stress } from "../motion";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { HookBanner } from "./HookBanner";
@@ -166,9 +166,9 @@ export const Header: React.FC<{
               marginTop: TAB_HEIGHT / 2,
               padding: `${CARD_PAD.top}px ${CARD_PAD.x}px ${CARD_PAD.bottom}px`,
               borderRadius: 48,
-              background: "linear-gradient(180deg, rgba(12,11,8,0.78), rgba(4,4,3,0.86))",
+              background: `linear-gradient(180deg, ${theme.panel[0]}, ${theme.panel[1]})`,
               border: `${CARD_BORDER}px solid ${theme.accent}${hex2(0.45 + 0.25 * breathe)}`,
-              boxShadow: `0 0 ${40 + 30 * breathe}px ${theme.accent}${hex2(0.22 + 0.12 * breathe)}, inset 0 0 60px ${theme.accent}14, 0 30px 60px rgba(0,0,0,0.7)`,
+              boxShadow: `0 0 ${40 + 30 * breathe}px ${theme.accent}${hex2(0.22 + 0.12 * breathe)}, inset 0 0 60px ${theme.accent}14, 0 30px 60px ${shadeA(theme, 0.7)}`,
             }}
           >
             {/* "HINT" tab on the top edge */}
@@ -188,9 +188,9 @@ export const Header: React.FC<{
                 fontSize: LABEL_SIZE,
                 lineHeight: 1,
                 letterSpacing: "0.3em",
-                color: "#0b0b05",
+                color: theme.onAccent,
                 background: `linear-gradient(100deg, ${theme.accent} ${shimmer - 12}%, #ffffff ${shimmer}%, ${theme.accent} ${shimmer + 12}%)`,
-                boxShadow: `0 0 30px ${theme.accent}88, 0 8px 18px rgba(0,0,0,0.6)`,
+                boxShadow: `0 0 30px ${theme.accent}88, 0 8px 18px ${shadeA(theme, 0.6)}`,
               }}
             >
               {HINT_LABEL}
@@ -212,9 +212,9 @@ export const Header: React.FC<{
                 fontSize: SUBTITLE_SIZE,
                 lineHeight: 1.2,
                 letterSpacing: "0.06em",
-                color: "#FFFFFF",
+                color: theme.text,
                 textTransform: "uppercase",
-                textShadow: `0 0 28px ${theme.accent}40, 0 6px 24px rgba(0,0,0,0.9)`,
+                textShadow: `0 0 28px ${theme.accent}40, 0 6px 24px ${shadeA(theme, 0.9)}`,
                 textWrap: "balance",
               }}
             >

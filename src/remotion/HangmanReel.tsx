@@ -53,7 +53,7 @@ export const HangmanReel: React.FC<ReelProps> = (props) => {
   const scale = Math.min(width / DESIGN_WIDTH, height / DESIGN_HEIGHT);
 
   return (
-    <AbsoluteFill style={{ backgroundColor: "#000", overflow: "hidden" }}>
+    <AbsoluteFill style={{ backgroundColor: getTheme(props.themeId).wood[2], overflow: "hidden" }}>
       <div style={{ position: "absolute", left: 0, top: 0, width: DESIGN_WIDTH, height: DESIGN_HEIGHT, transform: `scale(${scale})`, transformOrigin: "0 0" }}>
         <ReelStage {...props} />
       </div>
@@ -120,7 +120,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
     <AbsoluteFill style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }}>
       <AbsoluteFill style={{ transform: camera, transformOrigin: `50% ${WORD_CENTER_Y}px` }}>
       <Background theme={theme} />
-      <StressVignette stress={stress} />
+      <StressVignette stress={stress} theme={theme} />
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
@@ -143,13 +143,13 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         <AbsoluteFill
           style={{
             pointerEvents: "none",
-            opacity: redFlash,
+            opacity: redFlash * (theme.mode === "light" ? 0.6 : 1),
             background: `radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, ${theme.wrong} 120%)`,
-            mixBlendMode: "screen",
+            mixBlendMode: theme.glowBlend,
           }}
         />
       )}
-      {redHit > 0.001 && <AbsoluteFill style={{ pointerEvents: "none", background: theme.wrong, opacity: redHit, mixBlendMode: "screen" }} />}
+      {redHit > 0.001 && <AbsoluteFill style={{ pointerEvents: "none", background: theme.wrong, opacity: redHit * (theme.mode === "light" ? 0.45 : 1), mixBlendMode: theme.glowBlend }} />}
       {whiteHit > 0.001 && <AbsoluteFill style={{ pointerEvents: "none", background: "#ffffff", opacity: whiteHit, mixBlendMode: "screen" }} />}
       {Math.max(bloom, finalBloom) > 0.001 && (
         <AbsoluteFill
@@ -157,7 +157,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
             pointerEvents: "none",
             opacity: Math.max(bloom, finalBloom),
             background: `radial-gradient(ellipse 60% 25% at 50% ${WORD_CENTER_Y}px, ${theme.accent}, transparent 70%)`,
-            mixBlendMode: "screen",
+            mixBlendMode: theme.glowBlend,
           }}
         />
       )}

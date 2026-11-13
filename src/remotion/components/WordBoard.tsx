@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme } from "../themes";
+import { shadeA, type Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, NEVER, ramp, strikeShake } from "../motion";
 import { loopReset } from "../loop";
@@ -156,13 +156,15 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                     position: "absolute",
                     inset: `${tile * 0.06}px 0 ${tile * 0.16}px`,
                     borderRadius: tile * 0.14,
-                    background: `linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.55))`,
+                    background: theme.slotBg,
                     // Empty slots keep a clearly visible light outline; filled ones take the accent.
                     // Filled slots: solid, slightly thicker accent outline with a crisp dark keyline
                     // either side, so the edge stays sharp under the letter's glow.
-                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, 1, lift) : EMPTY_BORDER}`,
+                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, 1, lift, theme.emptyRgb) : `rgba(${theme.emptyRgb},0.45)`}`,
                     boxShadow: [
-                      shown ? "inset 0 0 0 2px rgba(0,0,0,0.75), 0 0 0 2px rgba(0,0,0,0.75), 0 4px 14px rgba(0,0,0,0.6)" : "inset 0 0 0 1px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.6)",
+                      shown
+                        ? `inset 0 0 0 2px ${shadeA(theme, 0.75)}, 0 0 0 2px ${shadeA(theme, 0.75)}, 0 4px 14px ${shadeA(theme, 0.6)}`
+                        : `inset 0 0 0 1px ${shadeA(theme, 0.5)}, 0 4px 14px ${shadeA(theme, 0.6)}`,
                       flash ? `0 0 ${80 * flash}px ${theme.accent}66, inset 0 0 ${60 * flash}px ${theme.accent}55` : "",
                     ]
                       .filter(Boolean)
@@ -182,8 +184,8 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                       fontFamily: DISPLAY_FONT,
                       fontSize: tile * 1.08,
                       lineHeight: 1,
-                      color: flash > 0.5 ? "#ffffff" : theme.accent,
-                      textShadow: `0 0 ${glow * 0.4}px ${theme.accent}, 0 0 ${glow}px ${theme.accent}99, 0 0 ${glow * 1.4}px ${theme.accent}40`,
+                      color: flash > 0.5 && theme.mode === "dark" ? "#ffffff" : theme.accent,
+                      textShadow: `0 0 ${glow * 0.4 * theme.glow}px ${theme.accent}, 0 0 ${glow * theme.glow}px ${theme.accent}99, 0 0 ${glow * 1.4 * theme.glow}px ${theme.accent}40`,
                       transform: `translateY(${interpolate(pop, [0, 1], [slamFrom.y, 0]) - tile * 0.6 * lift}px) scale(${interpolate(pop, [0, 1], [slamFrom.s, 1]) * (1 - 0.3 * lift)})`,
                       opacity: Math.min(1, pop * 1.5) * (1 - lift),
                     }}
@@ -201,11 +203,13 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
   );
 };
 
-const EMPTY_BORDER = "rgba(255,255,255,0.45)";
-/** Filled-slot outline (accent at `alpha`), blended back to the empty outline as `toEmpty` → 1. */
-function slotBorder(accent: string, alpha: number, toEmpty: number) {
+/** Filled-slot outline (accent at `alpha`), blended back to the empty outline (`emptyRgb` @ 0.45) as `toEmpty` → 1. */
+function slotBorder(accent: string, alpha: number, toEmpty: number, emptyRgb: string) {
   if (toEmpty <= 0) return `${accent}${alpha >= 1 ? "ff" : "99"}`;
   const n = parseInt(accent.slice(1, 7), 16);
-  const mix = (c: number) => Math.round(c + (255 - c) * toEmpty);
+  const [er, eg, eb] = emptyRgb.split(",").map(Number);
+  const target = [er, eg, eb];
+  let k = 0;
+  const mix = (c: number) => Math.round(c + (target[k++] - c) * toEmpty);
   return `rgba(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)}, ${(alpha + (0.45 - alpha) * toEmpty).toFixed(3)})`;
 }

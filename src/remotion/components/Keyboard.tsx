@@ -1,6 +1,6 @@
 import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import type { Theme } from "../themes";
+import { shadeA, type Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, ramp, strikeShake } from "../motion";
 import { loopReset } from "../loop";
@@ -46,10 +46,10 @@ export const Keyboard: React.FC<{
         transform: `translateX(calc(-50% + ${shakeX.toFixed(2)}px))`,
         padding: PAD,
         borderRadius: 72,
-        background: "linear-gradient(180deg, rgba(18,14,10,0.58), rgba(6,5,4,0.72))",
+        background: theme.mode === "dark" ? "linear-gradient(180deg, rgba(18,14,10,0.58), rgba(6,5,4,0.72))" : `linear-gradient(180deg, ${theme.panel[0]}, ${theme.panel[1]})`,
         backdropFilter: "blur(28px) saturate(1.2)",
-        border: "3px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 40px 120px rgba(0,0,0,0.75), inset 0 2px 0 rgba(255,255,255,0.06)",
+        border: `3px solid ${theme.panelBorder}`,
+        boxShadow: `0 40px 120px ${shadeA(theme, 0.75)}, inset 0 2px 0 rgba(255,255,255,0.06)`,
         display: "flex",
         flexDirection: "column",
         gap: GAP,
@@ -119,15 +119,15 @@ const Key: React.FC<{ letter: string; state: KeyState; since: number; theme: The
 
   const styles: Record<KeyState, React.CSSProperties> = {
     idle: {
-      background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
-      border: "3px solid rgba(255,255,255,0.20)",
-      color: "#FFFFFF",
-      textShadow: "0 4px 12px rgba(0,0,0,0.6)",
+      background: theme.key.bg,
+      border: `3px solid ${theme.key.border}`,
+      color: theme.key.text,
+      textShadow: theme.key.shadow,
     },
     correct: {
       background: theme.accent,
       border: `3px solid ${theme.accent}`,
-      color: "#0b0b05",
+      color: theme.onAccent,
       boxShadow: `0 0 ${36 + 80 * flash}px ${theme.accent}${flash > 0.1 ? "cc" : "77"}, inset 0 -8px 0 rgba(0,0,0,0.18)`,
     },
     wrong: {
@@ -140,14 +140,14 @@ const Key: React.FC<{ letter: string; state: KeyState; since: number; theme: The
   /** Settled "used" keys: flat, low contrast, no glow — clearly unavailable but quiet. */
   const disabled: Record<Exclude<KeyState, "idle">, React.CSSProperties> = {
     correct: {
-      background: "rgba(0,0,0,0.35)",
+      background: theme.usedKey.bg,
       border: `2px solid ${theme.accent}26`,
       color: `${theme.accent}40`,
     },
     wrong: {
-      background: "rgba(0,0,0,0.35)",
+      background: theme.usedKey.bg,
       border: "2px solid rgba(255,46,46,0.14)",
-      color: "rgba(255,255,255,0.10)",
+      color: theme.usedKey.text,
     },
   };
 

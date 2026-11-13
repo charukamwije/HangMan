@@ -1,6 +1,43 @@
-export type ThemeId = "dark-academia" | "midnight-noir" | "emerald-library";
+export type ThemeId =
+  | "dark-academia"
+  | "midnight-noir"
+  | "emerald-library"
+  | "ivory-hall"
+  | "morning-study"
+  | "sage-garden";
 
-export type Theme = {
+export type ThemeMode = "dark" | "light";
+
+/** Scene surfaces that depend on whether the room is dark or light (panels, keys, slots, shading). */
+type Surface = {
+  mode: ThemeMode;
+  /** Text colour on accent-filled chips and keys. */
+  onAccent: string;
+  /** "r,g,b" used for drop/text shadows, dims and vignettes. */
+  shade: string;
+  /** Strength multiplier for vignettes, dims and drop shadows (1 = full cinematic dark). */
+  vignette: number;
+  /** Strength multiplier for neon glows around accent letters. */
+  glow: number;
+  /** Blend mode for full-frame flashes and blooms (screen vanishes on light scenes). */
+  glowBlend: "screen" | "multiply";
+  /** Overlay over the bookshelf so UI text reads (top → bottom). */
+  backdropShade: string;
+  /** Shelf plank gradient. */
+  shelfFrame: string;
+  /** Header card + keyboard tray glass (top, bottom). */
+  panel: [string, string];
+  panelBorder: string;
+  key: { bg: string; border: string; text: string; shadow: string };
+  usedKey: { bg: string; text: string };
+  slotBg: string;
+  /** "r,g,b" of the empty-slot outline. */
+  emptyRgb: string;
+  /** Light themes only: the sunlit window-wall backdrop (<LightRoom>). Dark themes use the library. */
+  room: { sky: [string, string]; trim: string; foliage: string };
+};
+
+export type Theme = Surface & {
   id: ThemeId;
   name: string;
   /** "HINT" label, timer, slot outlines, revealed letters. */
@@ -16,8 +53,57 @@ export type Theme = {
   piece: string;
 };
 
+const DARK: Surface = {
+  mode: "dark",
+  onAccent: "#0b0b05",
+  shade: "0,0,0",
+  vignette: 1,
+  glow: 1,
+  glowBlend: "screen",
+  backdropShade:
+    "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0.5) 38%, rgba(0,0,0,0.62) 55%, rgba(0,0,0,0.78) 75%, rgba(0,0,0,0.88) 100%)",
+  shelfFrame: "linear-gradient(180deg, #4a2c17 0%, #2a170b 60%, #120904 100%)",
+  panel: ["rgba(12,11,8,0.78)", "rgba(4,4,3,0.86)"],
+  panelBorder: "rgba(255,255,255,0.10)",
+  key: {
+    bg: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))",
+    border: "rgba(255,255,255,0.20)",
+    text: "#FFFFFF",
+    shadow: "0 4px 12px rgba(0,0,0,0.6)",
+  },
+  usedKey: { bg: "rgba(0,0,0,0.35)", text: "rgba(255,255,255,0.10)" },
+  slotBg: "linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.55))",
+  emptyRgb: "255,255,255",
+  room: { sky: ["#000000", "#000000"], trim: "#000000", foliage: "#000000" },
+};
+
+const LIGHT: Surface = {
+  mode: "light",
+  onAccent: "#FFFFFF",
+  shade: "60,40,20",
+  vignette: 0.3,
+  glow: 0.35,
+  glowBlend: "multiply",
+  backdropShade:
+    "linear-gradient(180deg, rgba(255,250,240,0.12) 0%, rgba(255,250,240,0.05) 22%, rgba(255,250,240,0.14) 38%, rgba(255,250,240,0.22) 55%, rgba(255,250,240,0.3) 75%, rgba(255,250,240,0.35) 100%)",
+  shelfFrame: "linear-gradient(180deg, #c9a274 0%, #a8804f 60%, #7d5a33 100%)",
+  panel: ["rgba(255,251,243,0.86)", "rgba(246,238,224,0.92)"],
+  panelBorder: "rgba(60,40,20,0.14)",
+  key: {
+    bg: "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(244,236,222,0.95))",
+    border: "rgba(60,40,20,0.22)",
+    text: "#1b140e",
+    shadow: "0 2px 0 rgba(255,255,255,0.7)",
+  },
+  usedKey: { bg: "rgba(60,40,20,0.08)", text: "rgba(27,20,14,0.18)" },
+  slotBg: "linear-gradient(180deg, rgba(255,255,255,0.78), rgba(240,230,212,0.88))",
+  emptyRgb: "60,40,20",
+  room: { sky: ["#cfe3f2", "#f6efe0"], trim: "#fbf7ef", foliage: "#8fae7c" },
+};
+
 export const THEMES: Record<ThemeId, Theme> = {
   "dark-academia": {
+    ...DARK,
     id: "dark-academia",
     name: "Queen's Gambit Dark Academia",
     accent: "#DFFF00",
@@ -29,6 +115,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     piece: "#e9dcc4",
   },
   "midnight-noir": {
+    ...DARK,
     id: "midnight-noir",
     name: "Midnight Noir Chess Club",
     accent: "#CCFF00",
@@ -40,6 +127,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     piece: "#dfe6f2",
   },
   "emerald-library": {
+    ...DARK,
     id: "emerald-library",
     name: "Emerald Reading Room",
     accent: "#DFFF00",
@@ -50,8 +138,50 @@ export const THEMES: Record<ThemeId, Theme> = {
     books: ["#1d3b27", "#4a2a17", "#2b2416", "#0f2a22", "#5a3d1c", "#33251a"],
     piece: "#efe6cf",
   },
+  "ivory-hall": {
+    ...LIGHT,
+    id: "ivory-hall",
+    name: "Ivory Tournament Hall",
+    accent: "#0E7A4B",
+    text: "#1b140e",
+    wrong: "#D61F1F",
+    wood: ["#f4ead8", "#e6d6b8", "#cbb48c"],
+    lamp: "#fff1c9",
+    books: ["#b5654a", "#7a8f6a", "#c9a66b", "#5d7a8c", "#a8706b", "#8a6d4a", "#d4b88a"],
+    piece: "#2a211b",
+  },
+  "morning-study": {
+    ...LIGHT,
+    id: "morning-study",
+    name: "Morning Study",
+    accent: "#1E3A8A",
+    text: "#1b140e",
+    wrong: "#D61F1F",
+    wood: ["#f3eee4", "#dfd3bd", "#bfa98a"],
+    lamp: "#ffe9b0",
+    books: ["#6b7fa8", "#b08a5e", "#9a5a4a", "#8fa3a0", "#c7b08a", "#5e6b84"],
+    shelfFrame: "linear-gradient(180deg, #d1b58e 0%, #b0915f 60%, #86673e 100%)",
+    room: { sky: ["#bcd4ee", "#f3ecdf"], trim: "#f7f3ea", foliage: "#7f9c86" },
+    piece: "#2b2522",
+  },
+  "sage-garden": {
+    ...LIGHT,
+    id: "sage-garden",
+    name: "Sage Garden Club",
+    accent: "#0F6E6E",
+    room: { sky: ["#d9ead9", "#f4f1e2"], trim: "#f6f7ef", foliage: "#79a06a" },
+    text: "#1b140e",
+    wrong: "#C81E1E",
+    wood: ["#eef1e6", "#d7dcc6", "#b3bb9c"],
+    lamp: "#fff4d0",
+    books: ["#7f9a72", "#c98b5a", "#a9b48a", "#6d7f63", "#d1a874", "#8c6f52"],
+    piece: "#26302a",
+  },
 };
 
 export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
 
 export const getTheme = (id: ThemeId | string): Theme => THEMES[id as ThemeId] ?? THEMES["dark-academia"];
+
+/** `rgba()` from the theme's "r,g,b" shade, with alpha scaled by its vignette strength. */
+export const shadeA = (theme: Theme, alpha: number) => `rgba(${theme.shade},${(alpha * theme.vignette).toFixed(3)})`;

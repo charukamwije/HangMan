@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { AbsoluteFill, interpolate, random, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 import { AUDIO, DESIGN_HEIGHT, DESIGN_WIDTH } from "../constants";
-import type { Theme } from "../themes";
+import { shadeA, type Theme } from "../themes";
 import { KenBurns } from "./KenBurns";
 import { loopReset } from "../loop";
 
@@ -77,8 +77,13 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
     [],
   );
 
+  const base = `linear-gradient(180deg, ${theme.wood[0]} 0%, ${theme.wood[1]} 55%, ${theme.wood[2]} 100%)`;
+
+  // Light themes: a plain backdrop, just the theme's soft vertical gradient (no scene, lamp or dust).
+  if (theme.mode === "light") return <AbsoluteFill style={{ background: base }} />;
+
   return (
-    <AbsoluteFill style={{ background: `linear-gradient(180deg, ${theme.wood[0]} 0%, ${theme.wood[1]} 55%, ${theme.wood[2]} 100%)` }}>
+    <AbsoluteFill style={{ background: base }}>
       <KenBurns reset={back}>
         {/* --- Library shelves (depth-of-field blurred) --- */}
         <AbsoluteFill style={{ transform: `scale(1.04) translateX(${drift}px)`, transformOrigin: "50% 48%" }}>
@@ -92,8 +97,8 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
                   width: DESIGN_WIDTH + 200,
                   top: SHELF_TOP + s * SHELF_HEIGHT + SHELF_HEIGHT - 34,
                   height: 34,
-                  background: "linear-gradient(180deg, #4a2c17 0%, #2a170b 60%, #120904 100%)",
-                  boxShadow: "0 18px 30px rgba(0,0,0,0.7)",
+                  background: theme.shelfFrame,
+                  boxShadow: `0 18px 30px ${shadeA(theme, 0.7)}`,
                 }}
               />
             ))}
@@ -122,7 +127,7 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
             ))}
           </div>
           {/* darken the shelves where text sits: lightest behind the header, darkest under the keys */}
-          <AbsoluteFill style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.3) 22%, rgba(0,0,0,0.5) 38%, rgba(0,0,0,0.62) 55%, rgba(0,0,0,0.78) 75%, rgba(0,0,0,0.88) 100%)" }} />
+          <AbsoluteFill style={{ background: theme.backdropShade }} />
         </AbsoluteFill>
 
         {/* --- Warm library lamp + rim light --- */}

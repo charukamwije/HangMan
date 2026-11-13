@@ -44,6 +44,9 @@ export type RenderJobOptions = {
 
 const ROOT = process.cwd();
 const OUT_DIR = path.join(ROOT, "renders");
+// Remotion's render server must not land on the Next dev port (3000): on Windows Next listens on
+// IPv6 so Remotion thinks 3000 is free, then Chromium's "localhost" hits Next and gets a 404.
+const RENDER_PORT = Number(process.env.REMOTION_RENDER_PORT) || 3123;
 
 // Survive Next.js dev hot-reloads.
 const g = globalThis as unknown as { __reelJobs?: Map<string, RenderJob>; __reelBundle?: Promise<string>; __reelQueue?: Promise<void> };
@@ -101,12 +104,13 @@ async function runJob(job: RenderJob) {
     job.status = "bundling";
     const serveUrl = await getServeUrl();
 
-    const composition = await selectComposition({ serveUrl, id: job.compositionId, inputProps: job.inputProps });
+    const composition = await selectComposition({ serveUrl, id: job.compositionId, inputProps: job.inputProps, port: RENDER_PORT });
     job.totalFrames = composition.durationInFrames;
     job.status = "rendering";
 
     await renderMedia({
       serveUrl,
+      port: RENDER_PORT,
       composition,
       inputProps: job.inputProps,
       outputLocation: job.outputPath,

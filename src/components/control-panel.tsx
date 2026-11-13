@@ -103,10 +103,16 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
 
       <Section icon={<Palette />} title="Aesthetic Theme">
         <NativeSelect value={s.themeId} onChange={(e) => s.update({ themeId: e.target.value as ThemeId })}>
-          {Object.values(THEMES).map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
+          {(["dark", "light"] as const).map((mode) => (
+            <optgroup key={mode} label={mode === "dark" ? "Dark" : "Light"}>
+              {Object.values(THEMES)
+                .filter((t) => t.mode === mode)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+            </optgroup>
           ))}
         </NativeSelect>
         <div className="flex gap-1.5">

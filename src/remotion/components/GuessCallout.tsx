@@ -3,7 +3,7 @@ import { interpolate, random, Sequence, spring, useCurrentFrame, useVideoConfig 
 import { LOWER_SAFE_CENTER_X as SAFE_CENTER_X } from "../constants";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { ramp } from "../motion";
-import type { Theme } from "../themes";
+import { shadeA, type Theme } from "../themes";
 import type { ResolvedGuess } from "../timeline";
 
 const LETTER = 480;
@@ -79,7 +79,7 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
           position: "absolute",
           inset: 0,
           opacity: backdrop,
-          background: `radial-gradient(900px 700px at ${SAFE_CENTER_X}px ${CALLOUT_Y}px, rgba(0,0,0,0.85), transparent 75%)`,
+          background: `radial-gradient(900px 700px at ${SAFE_CENTER_X}px ${CALLOUT_Y}px, ${shadeA(theme, 0.85)}, transparent 75%)`,
         }}
       />
       <div style={{ position: "absolute", left: SAFE_CENTER_X, top: CALLOUT_Y, width: 0, height: 0 }}>
@@ -135,8 +135,8 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
             lineHeight: 1,
             // White impact flash for 2 frames, then the verdict colour (accent = correct, red = wrong).
             color: f < 2 ? "#ffffff" : color,
-            textShadow: `0 0 40px ${color}, 0 0 120px ${color}aa, 0 24px 60px rgba(0,0,0,0.9)`,
-            WebkitTextStroke: `10px rgba(0,0,0,0.55)`,
+            textShadow: `0 0 40px ${color}, 0 0 120px ${color}aa, 0 24px 60px ${shadeA(theme, 0.9)}`,
+            WebkitTextStroke: `10px ${theme.mode === "dark" ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.85)"}`,
             paintOrder: "stroke fill",
             opacity,
             transform: `translate(${jitter}px, ${exitY}px) rotate(${exitRot}deg) scale(${scale * exitScale})`,
@@ -163,12 +163,12 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
               borderRadius: 999,
               background: color,
               border: "4px solid rgba(255,255,255,0.85)",
-              boxShadow: `0 0 50px ${color}, 0 14px 30px rgba(0,0,0,0.8)`,
+              boxShadow: `0 0 50px ${color}, 0 14px 30px ${shadeA(theme, 0.8)}`,
               fontFamily: BODY_FONT,
               fontWeight: 900,
               fontSize: 72,
               letterSpacing: "0.3em",
-              color: correct ? "#0b0b05" : "#ffffff",
+              color: correct ? theme.onAccent : "#ffffff",
             }}
           >
             {correct ? praise : "WRONG"}

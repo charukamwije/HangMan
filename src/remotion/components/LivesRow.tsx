@@ -2,7 +2,7 @@ import React from "react";
 import { Easing, interpolate, random, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { ramp } from "../motion";
 import { loopReset } from "../loop";
-import type { Theme } from "../themes";
+import { shadeA, type Theme } from "../themes";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { MAX_LIVES, RIGHT_RAIL, SAFE_ZONE } from "../constants";
 import { Pawn } from "./ChessPieces";
@@ -78,7 +78,7 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
           lineHeight: 1.08,
           letterSpacing: "0.08em",
           color: theme.text,
-          textShadow: `0 0 30px ${theme.accent}66, 0 8px 30px rgba(0,0,0,0.9)`,
+          textShadow: `0 0 30px ${theme.accent}66, 0 8px 30px ${shadeA(theme, 0.9)}`,
           opacity: outro,
           transform: `scale(${interpolate(outro, [0, 1], [0.7, 1])})`,
         }}

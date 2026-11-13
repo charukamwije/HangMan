@@ -39,15 +39,23 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
   // LED brightness: a small flicker on every tick, brighter + throbbing under stress, blinking at 00:00.
   const led = Math.min(1, (0.88 + 0.12 * flash + 0.12 * pulse * level) * doneBlink);
 
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: TOP_ROW.top,
-        right: DESIGN_WIDTH - TOP_ROW.right,
-        width: S.width,
-        padding: S.padding,
-        borderRadius: S.radius,
+  const light = theme.mode === "light";
+  const ledOn = light ? LED_ON_LIGHT : LED_ON;
+  const ledOff = light ? LED_OFF_LIGHT : LED_OFF;
+  // Light themes: cream glass panel (same as the header card) with a soft warm shadow; red ring/glow only under stress.
+  const panelStyle: React.CSSProperties = light
+    ? {
+        background: `radial-gradient(120% 90% at 50% 40%, rgba(255,60,40,${(0.1 * pulse * level).toFixed(3)}), transparent 70%), linear-gradient(180deg, ${theme.panel[0]}, ${theme.panel[1]})`,
+        border: `${borderW}px solid ${theme.panelBorder}`,
+        boxShadow: [
+          `0 0 0 3px rgba(220,40,30,${(0.12 + 0.4 * level).toFixed(3)})`,
+          `0 0 ${glow * level}px rgba(255,40,30,${(0.35 * level).toFixed(3)})`,
+          `inset 0 0 ${30 + 40 * pulse}px rgba(255,40,30,${(0.12 * pulse * level).toFixed(3)})`,
+          "inset 0 3px 0 rgba(255,255,255,0.8)",
+          `0 24px 48px rgba(${theme.shade},0.22)`,
+        ].join(", "),
+      }
+    : {
         // Smoked-glass LED panel in a dark bezel.
         background: `radial-gradient(120% 90% at 50% 40%, rgba(60,0,0,${0.55 + 0.25 * pulse * level}), rgba(8,0,0,0.95) 70%), #050000`,
         border: `${borderW}px solid #1a0505`,
@@ -59,6 +67,19 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
           "inset 0 3px 0 rgba(255,255,255,0.06)",
           "0 30px 60px rgba(0,0,0,0.6)",
         ].join(", "),
+      };
+  const ledGlow = light ? 2 + 6 * flash + 10 * pulse * level : 10 + 14 * flash;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: TOP_ROW.top,
+        right: DESIGN_WIDTH - TOP_ROW.right,
+        width: S.width,
+        padding: S.padding,
+        borderRadius: S.radius,
+        ...panelStyle,
         transform: `scale(${scale + rollPop})`,
         transformOrigin: "100% 0%",
         textAlign: "center",
@@ -70,8 +91,8 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
           fontWeight: 800,
           fontSize: S.label,
           letterSpacing: "0.32em",
-          color: LED_ON,
-          textShadow: `0 0 12px ${LED_ON}`,
+          color: ledOn,
+          textShadow: light ? "none" : `0 0 12px ${LED_ON}`,
           opacity: (0.75 + 0.25 * level) * (done ? doneBlink : 1),
           marginBottom: 10,
           paddingLeft: "0.32em",
@@ -79,13 +100,13 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
       >
         {done ? "TIME'S UP" : active ? "HURRY UP" : "TIME LEFT"}
       </div>
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, filter: `drop-shadow(0 0 ${10 + 14 * flash}px ${LED_ON}aa)` }}>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, filter: `drop-shadow(0 0 ${ledGlow}px ${ledOn}${light ? "66" : "aa"})` }}>
         {/* fixed-width seven-segment digits so the clock never jitters */}
         {text.split("").map((c, i) =>
           c === ":" ? (
-            <LedColon key={i} height={DIGIT_H} brightness={led} />
+            <LedColon key={i} height={DIGIT_H} brightness={led} on={ledOn} />
           ) : (
-            <LedDigit key={i} digit={Number(c)} height={DIGIT_H} brightness={led} />
+            <LedDigit key={i} digit={Number(c)} height={DIGIT_H} brightness={led} on={ledOn} off={ledOff} />
           ),
         )}
       </div>
@@ -96,6 +117,9 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
 // ------------------------------------------------------------ seven-segment
 const LED_ON = "#ff2a1f";
 const LED_OFF = "rgba(255,40,30,0.07)";
+/** Light themes: a deeper red reads better on cream; unlit segments are a faint warm ghost. */
+const LED_ON_LIGHT = "#e01b12";
+const LED_OFF_LIGHT = "rgba(150,40,25,0.07)";
 const DIGIT_H = 124;
 
 /** Segment polygons on a 60×100 grid (classic hexagonal LED segments, slight italic via skew). */
@@ -110,21 +134,21 @@ const SEG: Record<string, string> = {
 };
 const DIGIT_SEGMENTS = ["abcdef", "bc", "abged", "abgcd", "fgbc", "afgcd", "afgedc", "abc", "abcdefg", "abcdfg"];
 
-const LedDigit: React.FC<{ digit: number; height: number; brightness: number }> = ({ digit, height, brightness }) => {
+const LedDigit: React.FC<{ digit: number; height: number; brightness: number; on: string; off: string }> = ({ digit, height, brightness, on: onColor, off }) => {
   const on = DIGIT_SEGMENTS[digit] ?? "";
   return (
     <svg viewBox="0 0 60 100" width={height * 0.6} height={height} style={{ overflow: "visible", transform: "skewX(-6deg)" }}>
       {Object.entries(SEG).map(([k, pts]) => (
-        <polygon key={k} points={pts} fill={on.includes(k) ? LED_ON : LED_OFF} opacity={on.includes(k) ? brightness : 1} />
+        <polygon key={k} points={pts} fill={on.includes(k) ? onColor : off} opacity={on.includes(k) ? brightness : 1} />
       ))}
     </svg>
   );
 };
 
-const LedColon: React.FC<{ height: number; brightness: number }> = ({ height, brightness }) => (
+const LedColon: React.FC<{ height: number; brightness: number; on: string }> = ({ height, brightness, on }) => (
   <svg viewBox="0 0 16 100" width={height * 0.16} height={height} style={{ overflow: "visible" }}>
-    <rect x="3" y="28" width="10" height="10" rx="2" fill={LED_ON} opacity={brightness} />
-    <rect x="3" y="62" width="10" height="10" rx="2" fill={LED_ON} opacity={brightness} />
+    <rect x="3" y="28" width="10" height="10" rx="2" fill={on} opacity={brightness} />
+    <rect x="3" y="62" width="10" height="10" rx="2" fill={on} opacity={brightness} />
   </svg>
 );
 

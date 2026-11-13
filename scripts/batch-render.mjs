@@ -53,6 +53,8 @@ const nameFor = (p) => slug(p.id ?? `${new Date().toISOString().slice(0, 10)}-${
 console.log(`Bundling Remotion project… (${jobs.length} puzzle${jobs.length === 1 ? "" : "s"}, ${resolution})`);
 const serveUrl = await bundle({ entryPoint: path.join(ROOT, "src", "remotion", "index.ts"), publicDir: path.join(ROOT, "public") });
 const outDir = path.join(ROOT, "renders");
+// Keep off the Next dev port (3000) so this works while `npm run dev` is running.
+const port = Number(process.env.REMOTION_RENDER_PORT) || 3123;
 fs.mkdirSync(outDir, { recursive: true });
 
 let failed = 0;
@@ -61,10 +63,11 @@ for (const [n, { file, index, puzzle }] of jobs.entries()) {
   const outputLocation = path.join(outDir, `${nameFor(puzzle)}-${resolution}.mp4`);
   try {
     // Throws a readable "Invalid HangmanPuzzleData" error before any frame renders.
-    const composition = await selectComposition({ serveUrl, id: compositionId, inputProps: puzzle });
+    const composition = await selectComposition({ serveUrl, id: compositionId, inputProps: puzzle, port });
     let last = -1;
     await renderMedia({
       serveUrl,
+      port,
       composition,
       inputProps: puzzle,
       outputLocation,

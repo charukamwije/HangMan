@@ -26,6 +26,8 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
   // Attach to the player once it has mounted (it is loaded dynamically).
   useEffect(() => {
     let raf = 0;
+    let frameRaf = 0;
+    let pendingFrame = 0;
     let detach: (() => void) | undefined;
     const attach = () => {
       const p = playerRef.current;
@@ -33,7 +35,18 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
         raf = requestAnimationFrame(attach);
         return;
       }
-      const onFrame = (e: { detail: { frame: number } }) => setFrame(e.detail.frame);
+      // The Player emits "frameupdate" from inside its own useEffect. Calling setFrame there directly
+      // is a setState-in-effect on every frame, which trips React's "Maximum update depth exceeded"
+      // check after ~50 frames of playback. Defer to the next animation frame (coalesced) instead.
+      const onFrame = (e: { detail: { frame: number } }) => {
+        pendingFrame = e.detail.frame;
+        if (!frameRaf) {
+          frameRaf = requestAnimationFrame(() => {
+            frameRaf = 0;
+            setFrame(pendingFrame);
+          });
+        }
+      };
       const onPlay = () => setPlaying(true);
       const onPause = () => setPlaying(false);
       p.addEventListener("frameupdate", onFrame);
@@ -50,6 +63,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
     attach();
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(frameRaf);
       detach?.();
     };
   }, [playerRef]);

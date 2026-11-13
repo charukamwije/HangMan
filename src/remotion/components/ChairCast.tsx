@@ -35,6 +35,9 @@ const SEAT_H = 78; // seat height above the floor (= the characters' leg length)
 const BOX = { w: 160, h: 260, cx: 80, floor: 258 };
 
 const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
+/** Walking: max fore/aft foot reach from the hip (box px), and the speed at which steps reach full size. */
+const STRIDE = 24;
+const WALK_FULL_SPEED = 300;
 
 export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ keyboardTop, word }) => {
   const frame = useCurrentFrame();
@@ -54,17 +57,28 @@ export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ key
   const offX = -200;
   const xAt = (time: number) =>
     time < tIn
-      ? interpolate(time, [v.at, tIn], [offX, CHAIR_CX], { ...CLAMP, easing: Easing.out(Easing.cubic) })
+      ? interpolate(time, [v.at, tIn], [offX, CHAIR_CX], { ...CLAMP, easing: Easing.out(Easing.quad) })
       : time < tUp
         ? CHAIR_CX
-        : interpolate(time, [tUp, tGone], [CHAIR_CX, offX], { ...CLAMP, easing: Easing.in(Easing.cubic) });
+        : interpolate(time, [tUp, tGone], [CHAIR_CX, offX], { ...CLAMP, easing: Easing.in(Easing.quad) });
   const x = xAt(t);
   const vel = (x - xAt(t - 1 / fps)) * fps; // px/s, signed
-  const gait = Math.min(1, Math.abs(vel) / 450);
-  const phase = (x / 34) * Math.PI;
-  // Waddle: rock side to side, bob on each step, lean into the direction of travel.
-  const rock = Math.sin(phase) * 6 * gait;
-  const bob = -Math.abs(Math.sin(phase)) * 7 * gait;
+  const gaitFor = (speed: number) => Math.min(1, speed / WALK_FULL_SPEED);
+  const gait = gaitFor(Math.abs(vel));
+  // Step phase is integrated from the DISTANCE walked (not the x position), so it always runs
+  // forward whichever way the character walks, and one half-cycle covers exactly one stride:
+  // the planted foot stays put on the floor instead of sliding.
+  let phase = 0;
+  if (visiting) {
+    for (let f = Math.ceil(v.at * fps) + 1; f <= frame; f++) {
+      const d = Math.abs(xAt(f / fps) - xAt((f - 1) / fps));
+      phase += (d * Math.PI) / (2 * Math.max(8, STRIDE * gaitFor(d * fps)));
+    }
+  }
+  // Waddle: rock side to side, rise as the legs pass each other, lean into the direction of travel.
+  const rock = Math.sin(phase) * 4 * gait;
+  const lift = (0.5 + 0.5 * Math.cos(2 * phase)) * 4 * gait; // highest mid-stride, lowest with legs apart
+  const bob = -lift;
   const lean = Math.sign(vel) * 4 * gait;
 
   // Sit: eased hop up onto the seat with a little squash on landing; stand: eased back down.
@@ -135,7 +149,7 @@ export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ key
               filter: "drop-shadow(0 6px 6px rgba(0,0,0,0.45))",
             }}
           >
-            <Animal id={id} sit={sit} phase={phase} gait={gait} dir={vel < -1 ? -1 : 1} mouth={mouth} blink={blink} gesture={gesture} />
+            <Animal id={id} sit={sit} phase={phase} gait={gait} lift={lift} dir={vel < -1 ? -1 : 1} mouth={mouth} blink={blink} gesture={gesture} />
           </div>
         </>
       )}
@@ -307,7 +321,8 @@ const CHAIR_CX = chairSeatCenterX();
  *  - Spec: blurred specular glints on the curved surfaces facing the light.
  *  - Limbs are tube-shaded (dark edge → base → highlight streak).
  */
-type Pose = { sit: number; phase: number; gait: number; dir: number; mouth: number; blink: number; gesture: number };
+/** `lift`: how far the whole body is raised this frame while walking (box px); the feet cancel it so they stay on the floor. */
+type Pose = { sit: number; phase: number; gait: number; lift: number; dir: number; mouth: number; blink: number; gesture: number };
 
 const Vol: React.FC<{ id: string; base: string; light?: number }> = ({ id, base, light = 0.5 }) => (
   <radialGradient id={id} cx="0.4" cy="0.36" r="0.72" fx="0.3" fy="0.24">
@@ -378,16 +393,23 @@ const Animal: React.FC<{ id: CastId } & Pose> = ({ id, ...p }) => (
  */
 const Legs: React.FC<{ p: Pose; color: string; foot: string; w?: number }> = ({ p, color, foot, w = 18 }) => {
   const HIP_Y = 172;
-  const L1 = 40; // thigh
-  const L2 = 40; // shin
+  // Slightly longer than the 76 px hip→floor drop, so a standing leg keeps a soft knee bend
+  // and the full stride never over-stretches it.
+  const L1 = 42; // thigh
+  const L2 = 42; // shin
   const dir = p.dir || 1;
   const legs = [-1, 1].map((side) => {
-    const hip = { x: 80 + side * 17, y: HIP_Y };
+    // Walking sideways the hips line up (body turns side-on), so the legs pass one behind the
+    // other instead of scissoring across each other; standing/seated they sit 34 px apart.
+    const hipSpread = 17 * (1 - 0.7 * p.gait * (1 - p.sit));
+    const hip = { x: 80 + side * hipSpread, y: HIP_Y };
     // ---- walking: 2-bone IK. The ankle follows a step cycle; the knee bends forward (travel direction).
+    // Stance (cos < 0): foot planted, sweeping back under the body. Swing (cos > 0): lifted, moving forward.
     const ph = p.phase + (side < 0 ? 0 : Math.PI);
     const ankleW = {
-      x: hip.x + dir * Math.sin(ph) * 18 * p.gait,
-      y: 248 - Math.max(0, Math.cos(ph)) * 16 * p.gait, // foot lifts while it swings forward
+      x: hip.x + dir * Math.sin(ph) * STRIDE * p.gait,
+      // + lift: cancels the body's walking bob, so planted feet stay on the floor
+      y: 248 + p.lift * (1 - p.sit) - Math.max(0, Math.cos(ph)) * 14 * p.gait,
     };
     const dx = ankleW.x - hip.x;
     const dy = ankleW.y - hip.y;
@@ -396,9 +418,9 @@ const Legs: React.FC<{ p: Pose; color: string; foot: string; w?: number }> = ({ 
     const h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
     const ux = dx / D;
     const uy = dy / D;
-    // perpendicular pointing toward the travel direction (knees bend forward)
-    const px = -uy * dir;
-    const py = ux * dir;
+    // perpendicular pointing toward the travel direction (knees bend forward, not bird-like backward)
+    const px = uy * dir;
+    const py = -ux * dir;
     const kneeW = { x: hip.x + ux * a + px * h, y: hip.y + uy * a + py * h };
     // ---- seated (front view): thighs come toward us (foreshortened), knees bent, shins hang down.
     const kneeS = { x: hip.x + side * 12, y: 204 }; // knees forward + apart, just below the belly
@@ -408,7 +430,7 @@ const Legs: React.FC<{ p: Pose; color: string; foot: string; w?: number }> = ({ 
     const ankle = mix(ankleW, ankleS);
     // foot: toes point the way it walks; seated, the foot faces us
     const toe = dir * 7 * (1 - p.sit);
-    const lifted = 248 - ankleW.y;
+    const lifted = Math.max(0, Math.cos(ph)) * 14 * p.gait;
     const footTilt = -dir * Math.min(18, lifted * 1.2) * (1 - p.sit);
     return { side, hip, knee, ankle, toe, footTilt };
   });
