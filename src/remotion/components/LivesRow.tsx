@@ -86,9 +86,9 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
         {/* Comment-bait CTA: a specific question gets more replies than a yes/no. Drawn icon, no emoji glyph. */}
         <ChatIcon color={theme.accent} size={150} />
         <div style={{ textAlign: "left" }}>
-          WHAT LETTER DID
+          COMMENT THE WORD
           <br />
-          YOU GUESS FIRST?
+          YOU GUESSED!
         </div>
       </div>
     </div>

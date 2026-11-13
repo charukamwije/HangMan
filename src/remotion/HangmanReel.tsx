@@ -10,6 +10,7 @@ import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
 import { GuessCallouts } from "./components/GuessCallout";
 import { ChairCast } from "./components/ChairCast";
+import { CommentNote } from "./components/CommentNote";
 import { Pigeons } from "./components/Pigeons";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
@@ -135,6 +136,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         wrongFrames={timeline.wrongFrames}
         shakePx={KEYBOX_SHAKE}
       />
+      <CommentNote theme={theme} top={KEYBOARD_BOTTOM + 16} finalRevealFrame={timeline.finalRevealFrame} />
       <ChairCast keyboardTop={keyboardTop} word={timeline.word} />
       <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
       </AbsoluteFill>

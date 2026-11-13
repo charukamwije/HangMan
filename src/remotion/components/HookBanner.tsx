@@ -17,12 +17,60 @@ const fontSizeFor = (text: string) => Math.min(MAX_FONT, Math.floor((MAX_WIDTH -
 /** Hook-text word that gets a focus punch the moment the banner flip lands. */
 const EMPHASIS = "SOLVE";
 
+/** Marquee styling: gold trim/bulbs, plate corner radius and rim width. */
+const GOLD = "#ffcf3a";
+const RADIUS = 34;
+const RIM = 6;
+const BULB = 11;
+const BULB_GAP = 34;
+
+const shade = (hex: string, amt: number) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const ch = (v: number) => Math.round(Math.max(0, Math.min(255, amt >= 0 ? v + (255 - v) * amt : v * (1 + amt))));
+  return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => ch(v).toString(16).padStart(2, "0")).join("")}`;
+};
+
+/**
+ * Two rows of little marquee bulbs just inside the rim (top + bottom edge), lit in an
+ * alternating chase that steps every 5 frames (period 10 frames: 90 per 30 s, seamless on the loop).
+ */
+const MarqueeBulbs: React.FC<{ width: number; frame: number }> = ({ width, frame }) => {
+  const usable = width - 2 * RADIUS;
+  const n = Math.max(2, Math.floor(usable / BULB_GAP) + 1);
+  const step = usable / (n - 1);
+  const phase = Math.floor(frame / 5) % 2;
+  const bulb = (i: number, edge: "top" | "bottom") => {
+    const on = (i + (edge === "top" ? 0 : 1) + phase) % 2 === 0;
+    return (
+      <span
+        key={`${edge}-${i}`}
+        style={{
+          position: "absolute",
+          left: RADIUS + i * step - BULB / 2,
+          [edge]: 5,
+          width: BULB,
+          height: BULB,
+          borderRadius: "50%",
+          background: on ? `radial-gradient(circle at 40% 35%, #ffffff 0%, #fff1b0 35%, ${GOLD} 100%)` : "rgba(80,10,10,0.55)",
+          boxShadow: on ? `0 0 10px ${GOLD}, 0 0 3px #ffffff` : "inset 0 1px 2px rgba(0,0,0,0.6)",
+        }}
+      />
+    );
+  };
+  return (
+    <span style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {Array.from({ length: n }, (_, i) => bulb(i, "top"))}
+      {Array.from({ length: n }, (_, i) => bulb(i, "bottom"))}
+    </span>
+  );
+};
+
 /**
  * Micro-zoom (1.25× → 1×) + chromatic-aberration split (cyan / yellow) that decays
  * over ~8 frames from the frame the hook text has fully landed (`frame` = 0).
  * Inline-block transform only, so the pill never re-lays out.
  */
-const EmphasisWord: React.FC<{ word: string; frame: number; size: number }> = ({ word, frame, size }) => {
+const EmphasisWord: React.FC<{ word: string; frame: number; size: number; shadow: string }> = ({ word, frame, size, shadow }) => {
   const k = frame >= 0 ? ramp(frame, [0, 8], [1, 0]) : 0;
   const ease = k * k * (3 - 2 * k);
   const split = size * 0.08 * ease;
@@ -34,7 +82,9 @@ const EmphasisWord: React.FC<{ word: string; frame: number; size: number }> = ({
         margin: `0 ${(size * 0.24 * ease).toFixed(1)}px`,
         transform: `scale(${1 + 0.16 * ease})`,
         transformOrigin: "50% 60%",
-        textShadow: split > 0.2 ? `${split}px 0 0 #3fd6ff, ${-split}px 0 0 #ffd400, 0 4px 0 rgba(0,0,0,0.35)` : undefined,
+        // marquee gold, so the key word pops off the red plate
+        color: GOLD,
+        textShadow: split > 0.2 ? `${split}px 0 0 #3fd6ff, ${-split}px 0 0 #ffd400, 0 4px 0 rgba(0,0,0,0.35)` : shadow,
       }}
     >
       {word}
@@ -89,6 +139,11 @@ export const HookBanner: React.FC<{
   const bannerW = Math.min(MAX_WIDTH, Math.ceil(26 + 24 + 32 + 40 + 8 + Math.max(intro.length, label.length) * fontSize * 0.6));
   const crew = crewState(t, bannerW);
   const holderBlink = t % 4 < 0.1;
+  // Sheen pass every 3.75 s (8 per 30 s, so it wraps cleanly on the loop).
+  const sheen = interpolate((t % 3.75) / 3.75, [0, 0.35, 1], [-30, 120, 120]);
+  // Chunky 3D letters: a stepped dark-red extrusion under white faces, then a soft shadow.
+  const ex = shade(theme.wrong, -0.6);
+  const textExtrude = `0 2px 0 ${ex}, 0 4px 0 ${ex}, 0 6px 0 ${ex}, 0 9px 6px rgba(0,0,0,0.45)`;
 
   const labelStyle: React.CSSProperties = {
     gridArea: "1 / 1",
@@ -97,7 +152,7 @@ export const HookBanner: React.FC<{
     lineHeight: 1,
     letterSpacing: "0.06em",
     color: "#FFFFFF",
-    textShadow: "0 4px 0 rgba(0,0,0,0.35), 0 0 24px rgba(0,0,0,0.4)",
+    textShadow: textExtrude,
     paddingTop: 6,
   };
 
@@ -105,7 +160,7 @@ export const HookBanner: React.FC<{
     <div
       style={{
         position: "absolute",
-        top: TOP_ROW.top + (CLOCK.height - (MAX_FONT + 52)) / 2, // vertically centred on the clock
+        top: TOP_ROW.top + (CLOCK.height - (MAX_FONT + 72)) / 2, // vertically centred on the clock
         left: TOP_ROW.left + MOUSE_W,
         width: bannerW,
       }}
@@ -122,25 +177,56 @@ export const HookBanner: React.FC<{
         display: "flex",
         alignItems: "center",
         gap: 24,
-        padding: "16px 40px 16px 32px",
-        borderRadius: 999,
-        background: `linear-gradient(180deg, ${theme.wrong}, #a8141a)`,
-        border: "4px solid rgba(255,255,255,0.85)",
-        boxShadow: `0 0 ${30 + 40 * beat}px ${theme.wrong}aa, 0 24px 50px rgba(0,0,0,0.65), inset 0 3px 0 rgba(255,255,255,0.35)`,
+        padding: "22px 40px 22px 30px",
+        borderRadius: RADIUS,
+        // Marquee plate: glossy red face inside a bevelled gold rim (border-box layer).
+        border: `${RIM}px solid transparent`,
+        background: [
+          `linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 46%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.18) 100%) padding-box`,
+          `linear-gradient(180deg, ${theme.wrong} 0%, ${shade(theme.wrong, -0.35)} 100%) padding-box`,
+          `linear-gradient(180deg, #fff3b8 0%, ${GOLD} 30%, #b7781c 62%, #ffe08a 100%) border-box`,
+        ].join(", "),
+        boxShadow: [
+          // extruded depth under the plate, then the red glow and a soft drop shadow
+          `0 10px 0 ${shade(theme.wrong, -0.62)}`,
+          `0 10px 0 2px rgba(0,0,0,0.35)`,
+          `0 0 ${30 + 40 * beat}px ${theme.wrong}99`,
+          "0 30px 50px rgba(0,0,0,0.6)",
+          `inset 0 -6px 12px ${shade(theme.wrong, -0.55)}`,
+        ].join(", "),
         transform: `scale(${scale}) rotate(-1.5deg)`,
         transformOrigin: "0% 50%",
         whiteSpace: "nowrap",
       }}
     >
+      {/* chasing marquee bulbs along the top and bottom edges */}
+      <MarqueeBulbs width={bannerW - 2 * RIM} frame={frame} />
+      {/* light sheen sweeping across the plate */}
+      <span style={{ position: "absolute", inset: 0, borderRadius: RADIUS - RIM, overflow: "hidden", pointerEvents: "none" }}>
+        <span
+          style={{
+            position: "absolute",
+            top: -20,
+            bottom: -20,
+            left: `${sheen}%`,
+            width: 90,
+            transform: "skewX(-20deg)",
+            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.32), transparent)",
+          }}
+        />
+      </span>
+      {/* beacon bulb */}
       <span
         style={{
+          position: "relative",
           flex: "0 0 auto",
-          width: 26,
-          height: 26,
+          width: 30,
+          height: 30,
           borderRadius: "50%",
-          background: theme.accent,
-          boxShadow: `0 0 ${12 + 22 * beat}px ${theme.accent}`,
-          opacity: 0.55 + 0.45 * beat,
+          background: `radial-gradient(circle at 35% 30%, #ffffff 0%, ${GOLD} 45%, #b7781c 100%)`,
+          border: "3px solid rgba(70,10,10,0.55)",
+          boxShadow: `0 0 ${10 + 24 * beat}px ${GOLD}, 0 0 ${4 + 8 * beat}px #ffffff`,
+          opacity: 0.6 + 0.4 * beat,
         }}
       />
       <span style={{ display: "grid", overflow: "hidden" }}>
@@ -165,7 +251,7 @@ export const HookBanner: React.FC<{
           {label.split(" ").map((word, i) => (
             <React.Fragment key={i}>
               {i > 0 && " "}
-              {word.replace(/[^A-Z]/g, "") === EMPHASIS ? <EmphasisWord word={word} frame={frame - b} size={fontSize} /> : word}
+              {word.replace(/[^A-Z]/g, "") === EMPHASIS ? <EmphasisWord word={word} frame={frame - b} size={fontSize} shadow={textExtrude} /> : word}
             </React.Fragment>
           ))}
         </span>
