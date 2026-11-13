@@ -13,10 +13,11 @@ import { Pawn } from "./ChessPieces";
  * silhouette under a crimson ✖ (upright, so the row stays tidy). At the final reveal
  * the row hands over to a call-to-action. Visible from frame 0.
  */
-export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalRevealFrame: number; top: number }> = ({
+/** `promptFrame`: when the lives row hands over to the "COMMENT THE WORD YOU GUESSED!" prompt (just after the last guess). */
+export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; promptFrame: number; top: number }> = ({
   theme,
   wrongFrames,
-  finalRevealFrame,
+  promptFrame,
   top,
 }) => {
   const frame = useCurrentFrame();
@@ -24,7 +25,7 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; finalReve
   const lives = Math.max(MAX_LIVES, wrongFrames.length);
   // Loop reset: "DID YOU GET IT?" hands back to the pawn row in the first 35 % of the reset.
   const outro =
-    spring({ frame: frame - finalRevealFrame - Math.round(0.33 * fps), fps, config: { damping: 14 } }) * (1 - loopReset(frame, durationInFrames, fps, 0.05, 0.35));
+    spring({ frame: frame - promptFrame, fps, config: { damping: 14 } }) * (1 - loopReset(frame, durationInFrames, fps, 0.05, 0.35));
 
   // Lives are lost from the RIGHT end of the row toward the left; on the loop reset they
   // drop back in the order they were lost.

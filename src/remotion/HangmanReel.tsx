@@ -24,7 +24,9 @@ const LIVES_HEIGHT = 200;
 const GAP_BOARD_LIVES = 130; // lifts board + hint a little off the pawns
 /** Guess callout centre, below the keyboard top: it plays over the upper key rows so the word board stays visible. */
 const CALLOUT_BELOW_KEYS_TOP = 280;
-const KEYBOARD_BOTTOM = DESIGN_HEIGHT - SAFE_ZONE.bottom - 20; // 3020: whole key box sits above YouTube's channel/title (≈ 3080)
+/** Seconds after the last guessed letter before the end comment prompt comes in. */
+const PROMPT_AFTER_LAST_GUESS = 0.6;
+const KEYBOARD_BOTTOM =DESIGN_HEIGHT - SAFE_ZONE.bottom - 20; // 3020: whole key box sits above YouTube's channel/title (≈ 3080)
 /** 5 px at 1080 wide → 10 design px; the stage scale turns it back into 5 px / 10 px on output. */
 const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
 
@@ -78,7 +80,11 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const { fps, durationInFrames } = useVideoConfig();
   const theme = getTheme(props.themeId);
   const timeline = useReelTimeline(props);
-  const stress = stressAt(frame, fps, timeline.tickFrames);
+  // "COMMENT THE WORD YOU GUESSED!" comes in just after the last letter guessed (once its callout
+  // has landed), not at the final reveal, so it stays up long enough to read before the loop.
+  const lastGuess = Math.max(-1, ...timeline.guesses.filter((g) => g.frame < timeline.finalRevealFrame).map((g) => g.frame));
+  const promptFrame = lastGuess >= 0 ? lastGuess + Math.round(PROMPT_AFTER_LAST_GUESS * fps) : timeline.finalRevealFrame;
+  const stress =stressAt(frame, fps, timeline.tickFrames);
 
   const board = measureWordBoard(timeline.word || " ");
   const keyboardTop = KEYBOARD_BOTTOM - KEYBOARD_HEIGHT;
@@ -127,7 +133,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
 
       <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerFlip={timeline.hook.bannerFrames} hintReveal={timeline.hook.hintRevealFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
-      <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} finalRevealFrame={timeline.finalRevealFrame} top={livesTop} />
+      <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} promptFrame={promptFrame} top={livesTop} />
       <Keyboard
         theme={theme}
         top={keyboardTop}
@@ -136,7 +142,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         wrongFrames={timeline.wrongFrames}
         shakePx={KEYBOX_SHAKE}
       />
-      <CommentNote theme={theme} top={KEYBOARD_BOTTOM + 16} finalRevealFrame={timeline.finalRevealFrame} />
+      <CommentNote theme={theme} top={KEYBOARD_BOTTOM + 16} promptFrame={promptFrame} />
       <ChairCast keyboardTop={keyboardTop} word={timeline.word} />
       <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
       </AbsoluteFill>

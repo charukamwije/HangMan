@@ -11,11 +11,11 @@ import type { Theme } from "../themes";
  * comes in (same spring as <LivesRow>'s outro) and fades back in during the loop reset, so the
  * replay opens with it showing.
  */
-export const CommentNote: React.FC<{ theme: Theme; top: number; finalRevealFrame: number }> = ({ theme, top, finalRevealFrame }) => {
+export const CommentNote: React.FC<{ theme: Theme; top: number; promptFrame: number }> = ({ theme, top, promptFrame }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const outro =
-    spring({ frame: frame - finalRevealFrame - Math.round(0.33 * fps), fps, config: { damping: 14 } }) * (1 - loopReset(frame, durationInFrames, fps, 0.05, 0.35));
+    spring({ frame: frame - promptFrame, fps, config: { damping: 14 } }) * (1 - loopReset(frame, durationInFrames, fps, 0.05, 0.35));
 
   return (
     <div
