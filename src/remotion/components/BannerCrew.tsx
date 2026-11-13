@@ -44,6 +44,9 @@ export type CrewState = {
   /** Rotation for the banner (deg) and its pivot (the corner still held). */
   angle: number;
   origin: string;
+  /** Idle follow: the banner rides the holders' hands (lift in px, tilt in deg about its top centre). */
+  idleDy: number;
+  idleTilt: number;
   left: MousePose;
   right: MousePose;
   pinner: { s: number } | null;
@@ -51,14 +54,55 @@ export type CrewState = {
   pin: { since: number; popped: number | null } | null;
 };
 
-export type MousePose = { dx: number; dy: number; hand: { x: number; y: number }; surprise: number; lean: number };
+/** Idle life: tail swish (deg), ear twitch (0..1), head look (-1 left … 1 right), nose wiggle (px), body sway (deg). */
+export type MouseIdle = { tail: number; ear: number; look: number; nose: number; sway: number };
+export type MousePose = { dx: number; dy: number; hand: { x: number; y: number }; surprise: number; lean: number; idle?: MouseIdle };
 
 const REST: MousePose = { dx: 0, dy: 0, hand: HOLD, surprise: 0, lean: 0 };
+
+/**
+ * One holder's idle loop (all periods divide 30 s, so the reel loops seamlessly): a gentle bob,
+ * an occasional heave to re-adjust the grip, looking around, ear twitches, tail swish and a
+ * sniffing nose. `ph` offsets each mouse so they never move in lockstep; `amt` fades it out.
+ */
+const mouseIdle = (t: number, ph: number, amt: number): { dy: number; idle: MouseIdle } => {
+  const u = (t + ph) % 6;
+  const heave = ramp(u, [2.0, 2.25, 2.55, 2.9], [0, 1, 1, 0]); // hitch the corner up a little
+  const v = (t + ph * 1.7) % 7.5;
+  const look = ramp(v, [0.8, 1.0, 2.2, 2.4, 4.6, 4.8, 5.8, 6.0], [0, 1, 1, 0, 0, -0.8, -0.8, 0]);
+  const ear = Math.max(ramp(u, [0.6, 0.7, 0.85], [0, 1, 0]), ramp(u, [4.1, 4.2, 4.35], [0, 1, 0]));
+  const sniff = ramp(v, [3.0, 3.1, 3.9, 4.0], [0, 1, 1, 0]);
+  return {
+    dy: (3 * Math.sin(((t + ph) / 2.5) * Math.PI * 2) - 9 * heave) * amt,
+    idle: {
+      tail: 14 * Math.sin(((t + ph) / 1.5) * Math.PI * 2) * amt,
+      ear: ear * amt,
+      look: look * amt,
+      nose: 1.6 * Math.sin(t * 30) * sniff * amt,
+      sway: 2 * Math.sin(((t + ph) / 3) * Math.PI * 2) * amt,
+    },
+  };
+};
 
 /** Crew state at time t (seconds). `bannerW` = banner width in px (for the swing geometry). */
 export function crewState(t: number, bannerW: number): CrewState {
   const drop = CREW_SCHEDULE.drops.find((d) => t >= d.at && t < d.at + DROP_SECONDS);
-  const state: CrewState = { angle: 0, origin: "0% 0%", left: REST, right: REST, pinner: null, pin: null };
+  // Idle life fades out around each drop (and back in after), so the gags play exactly as before.
+  const busy = Math.max(0, ...CREW_SCHEDULE.drops.map((d) => ramp(t, [d.at - 0.35, d.at, d.at + DROP_SECONDS, d.at + DROP_SECONDS + 0.5], [0, 1, 1, 0])));
+  const amt = 1 - busy;
+  const li = mouseIdle(t, 0, amt);
+  const ri = mouseIdle(t, 2.3, amt);
+  const state: CrewState = {
+    angle: 0,
+    origin: "0% 0%",
+    // each corner sits exactly in its mouse's hands: lift = average, tilt = difference across the banner
+    idleDy: (li.dy + ri.dy) / 2,
+    idleTilt: (Math.atan2(ri.dy - li.dy, bannerW) * 180) / Math.PI,
+    left: { ...REST, dy: li.dy, idle: li.idle },
+    right: { ...REST, dy: ri.dy, idle: ri.idle },
+    pinner: null,
+    pin: null,
+  };
 
   if (drop) {
     const s = t - drop.at;
@@ -77,6 +121,8 @@ export function crewState(t: number, bannerW: number): CrewState {
     const hand = s < 0.3 ? flail : { x: flail.x + (corner.x - flail.x) * reach, y: flail.y + (corner.y - flail.y) * reach };
     const freePose: MousePose = { dx, dy, hand, surprise: ramp(s, [0, 0.08, 0.6, 0.8], [0, 1, 1, 0]), lean: 0 };
     const bracePose: MousePose = { ...REST, lean: ramp(s, [0, 0.2, 1.2, DROP_SECONDS], [0, 1, 1, 0]) };
+    state.idleDy = 0;
+    state.idleTilt = 0;
     if (drop.side === "right") {
       state.angle = a;
       state.origin = "0% 0%";
@@ -104,7 +150,7 @@ export function crewState(t: number, bannerW: number): CrewState {
 /** Two holders, positioned in the banner wrapper's coordinates (banner top-left = 0,0). */
 export const Holders: React.FC<{ crew: CrewState; bannerW: number; blink: boolean }> = ({ crew, bannerW, blink }) => (
   <>
-    <div style={{ position: "absolute", left: -MOUSE_W + crew.left.dx, top: MOUSE_TOP + crew.left.dy, width: MOUSE_W, height: MOUSE_H, transform: `rotate(${(-6 * crew.left.lean).toFixed(1)}deg)`, transformOrigin: "50% 90%" }}>
+    <div style={{ position: "absolute", left: -MOUSE_W + crew.left.dx, top: MOUSE_TOP + crew.left.dy, width: MOUSE_W, height: MOUSE_H, transform: `rotate(${(-6 * crew.left.lean + (crew.left.idle?.sway ?? 0)).toFixed(2)}deg)`, transformOrigin: "50% 90%" }}>
       <Mouse pose={crew.left} blink={blink} />
     </div>
     <div
@@ -114,7 +160,7 @@ export const Holders: React.FC<{ crew: CrewState; bannerW: number; blink: boolea
         top: MOUSE_TOP + crew.right.dy,
         width: MOUSE_W,
         height: MOUSE_H,
-        transform: `scaleX(-1) rotate(${(-6 * crew.right.lean).toFixed(1)}deg)`,
+        transform: `scaleX(-1) rotate(${(-6 * crew.right.lean + (crew.right.idle?.sway ?? 0)).toFixed(2)}deg)`,
         transformOrigin: "50% 90%",
       }}
     >
@@ -123,54 +169,134 @@ export const Holders: React.FC<{ crew: CrewState; bannerW: number; blink: boolea
   </>
 );
 
-/** Cartoon mouse facing right (viewBox 100 × 150). Hands reach `pose.hand`. */
+const shadeHex = (hex: string, amt: number) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  const ch = (v: number) => Math.round(Math.max(0, Math.min(255, amt >= 0 ? v + (255 - v) * amt : v * (1 + amt))));
+  return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => ch(v).toString(16).padStart(2, "0")).join("")}`;
+};
+
+/** Volumetric fill: key light top-left, core shadow toward the rim, faint bounce light on the far edge. */
+const MVol: React.FC<{ id: string; base: string; light?: number }> = ({ id, base, light = 0.5 }) => (
+  <radialGradient id={id} cx="0.4" cy="0.36" r="0.72" fx="0.3" fy="0.24">
+    <stop offset="0" stopColor={shadeHex(base, light)} />
+    <stop offset="0.3" stopColor={shadeHex(base, light * 0.25)} />
+    <stop offset="0.68" stopColor={base} />
+    <stop offset="0.9" stopColor={shadeHex(base, -0.4)} />
+    <stop offset="1" stopColor={shadeHex(base, -0.2)} />
+  </radialGradient>
+);
+
+/** Tube-shaded limb along a path (dark edge → base → highlight streak). */
+const MLimb: React.FC<{ d: string; color: string; w: number }> = ({ d, color, w }) => (
+  <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+    <path d={d} stroke={shadeHex(color, -0.5)} strokeWidth={w + 2.5} />
+    <path d={d} stroke={shadeHex(color, -0.12)} strokeWidth={w} />
+    <path d={d} stroke={color} strokeWidth={w * 0.6} transform={`translate(${-w * 0.12} ${-w * 0.08})`} />
+    <path d={d} stroke={shadeHex(color, 0.55)} strokeWidth={Math.max(1.2, w * 0.18)} transform={`translate(${-w * 0.22} ${-w * 0.16})`} opacity={0.8} />
+  </g>
+);
+
+/**
+ * 3D-shaded cartoon mouse facing right (viewBox 100 × 150). Hands reach `pose.hand`.
+ * Every part is lit the same way (key light top-left): volumetric gradients, tube-shaded
+ * arms + tail, soft contact shadows where parts meet, and glossy glints on eyes and nose.
+ */
 const Mouse: React.FC<{ pose: MousePose; blink?: boolean; tint?: string }> = ({ pose, blink, tint = "#a3a3ad" }) => {
   const sh = { x: 54, y: 78 };
   const eyeR = 4 + 2.5 * pose.surprise;
+  const idle = pose.idle ?? { tail: 0, ear: 0, look: 0, nose: 0, sway: 0 };
+  // head looks around: shifts a little and tips up when looking back over its shoulder
+  const headX = 3 * idle.look;
+  const headY = -1.5 * Math.abs(idle.look);
+  const pupil = 1.6 * idle.look;
+  const k = tint.slice(1); // per-tint gradient ids (the pinner is a different colour)
+  const line = shadeHex(tint, -0.55);
+  const PINK = "#f2a7b4";
+  const armPath = (off: number) => `M ${sh.x + off} ${sh.y} Q ${(sh.x + pose.hand.x) / 2 + 6} ${(sh.y + pose.hand.y) / 2 + 10} ${pose.hand.x} ${pose.hand.y + off}`;
   const arm = (off: number) => (
     <g>
-      <path d={`M ${sh.x + off} ${sh.y} Q ${(sh.x + pose.hand.x) / 2 + 6} ${(sh.y + pose.hand.y) / 2 + 10} ${pose.hand.x} ${pose.hand.y + off}`} stroke="#5d5d66" strokeWidth={9} fill="none" strokeLinecap="round" />
-      <path d={`M ${sh.x + off} ${sh.y} Q ${(sh.x + pose.hand.x) / 2 + 6} ${(sh.y + pose.hand.y) / 2 + 10} ${pose.hand.x} ${pose.hand.y + off}`} stroke={tint} strokeWidth={5} fill="none" strokeLinecap="round" />
-      <circle cx={pose.hand.x} cy={pose.hand.y + off} r={6} fill="#f4b3bd" stroke="#5d5d66" strokeWidth={2} />
+      <MLimb d={armPath(off)} color={tint} w={7} />
+      <circle cx={pose.hand.x} cy={pose.hand.y + off} r={6} fill={`url(#mPaw-${k})`} stroke={shadeHex(PINK, -0.5)} strokeWidth={1.2} />
+      <circle cx={pose.hand.x - 2} cy={pose.hand.y + off - 2} r={1.8} fill="#ffffff" opacity={0.7} />
     </g>
   );
   return (
     <svg viewBox="0 0 100 150" width={MOUSE_W} height={MOUSE_H} style={{ overflow: "visible", filter: "drop-shadow(0 8px 8px rgba(0,0,0,0.55))" }}>
-      {/* tail */}
-      <path d="M 30 128 C 6 132 4 108 16 100 C 26 94 22 84 12 82" stroke="#d99aa6" strokeWidth={4} fill="none" strokeLinecap="round" />
-      {arm(-4)}
-      {/* body */}
-      <ellipse cx={46} cy={108} rx={26} ry={32} fill={tint} stroke="#5d5d66" strokeWidth={2.5} />
-      <ellipse cx={50} cy={114} rx={15} ry={20} fill="#e6e1e6" />
-      {/* feet */}
-      <ellipse cx={36} cy={140} rx={11} ry={5} fill="#f4b3bd" stroke="#5d5d66" strokeWidth={2} />
-      <ellipse cx={58} cy={140} rx={11} ry={5} fill="#f4b3bd" stroke="#5d5d66" strokeWidth={2} />
-      {/* ears */}
-      <circle cx={30} cy={40} r={15} fill={tint} stroke="#5d5d66" strokeWidth={2.5} />
-      <circle cx={30} cy={40} r={9} fill="#f4b3bd" />
-      <circle cx={66} cy={36} r={15} fill={tint} stroke="#5d5d66" strokeWidth={2.5} />
-      <circle cx={66} cy={36} r={9} fill="#f4b3bd" />
-      {/* head (looks toward the banner) */}
-      <ellipse cx={52} cy={60} rx={24} ry={21} fill={tint} stroke="#5d5d66" strokeWidth={2.5} />
-      <path d="M 70 58 Q 84 62 78 70 Q 70 72 66 68 Z" fill={tint} stroke="#5d5d66" strokeWidth={2} />
-      <circle cx={80} cy={66} r={4} fill="#e2708a" />
-      {/* whiskers */}
-      <g stroke="#4a4a52" strokeWidth={1.4}>
-        <path d="M 76 68 L 96 64" />
-        <path d="M 76 70 L 96 72" />
+      <defs>
+        <MVol id={`mFur-${k}`} base={tint} />
+        <MVol id={`mHead-${k}`} base={tint} light={0.6} />
+        <MVol id={`mBelly-${k}`} base="#ece6ec" light={0.6} />
+        <MVol id={`mEar-${k}`} base={tint} light={0.45} />
+        <MVol id={`mEarIn-${k}`} base={PINK} light={0.4} />
+        <MVol id={`mPaw-${k}`} base={PINK} light={0.5} />
+        <MVol id={`mNose-${k}`} base="#e2708a" light={0.7} />
+        <linearGradient id={`mTail-${k}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={shadeHex(PINK, -0.1)} />
+          <stop offset="1" stopColor={shadeHex(PINK, -0.35)} />
+        </linearGradient>
+        <filter id="mSoft" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation={2.2} />
+        </filter>
+        <filter id="mGlint" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation={0.8} />
+        </filter>
+      </defs>
+      {/* tail (tube-shaded) */}
+      <g transform={`rotate(${idle.tail.toFixed(2)} 30 128)`}>
+        <path d="M 30 128 C 6 132 4 108 16 100 C 26 94 22 84 12 82" stroke={shadeHex(PINK, -0.5)} strokeWidth={5.5} fill="none" strokeLinecap="round" />
+        <path d="M 30 128 C 6 132 4 108 16 100 C 26 94 22 84 12 82" stroke={`url(#mTail-${k})`} strokeWidth={3.6} fill="none" strokeLinecap="round" />
+        <path d="M 29 126.6 C 7 130 5.6 108 16.6 100.8" stroke="#ffffff" strokeWidth={1} fill="none" strokeLinecap="round" opacity={0.45} />
       </g>
-      {/* eye */}
-      {blink && !pose.surprise ? (
-        <path d="M 56 56 Q 61 59 66 56" stroke="#1a1a1e" strokeWidth={2.5} fill="none" strokeLinecap="round" />
-      ) : (
-        <g>
-          {pose.surprise > 0.05 && <circle cx={61} cy={55} r={eyeR + 2.5} fill="#ffffff" />}
-          <circle cx={61} cy={55} r={eyeR} fill="#1a1a1e" />
-          <circle cx={62.5} cy={53.5} r={1.4} fill="#ffffff" />
+      {arm(-4)}
+      {/* body + belly */}
+      <ellipse cx={46} cy={108} rx={26} ry={32} fill={`url(#mFur-${k})`} stroke={line} strokeWidth={1.6} />
+      <ellipse cx={50} cy={114} rx={15} ry={20} fill={`url(#mBelly-${k})`} />
+      <ellipse cx={36} cy={92} rx={7} ry={4} fill="#ffffff" opacity={0.35} filter="url(#mGlint)" transform="rotate(-30 36 92)" />
+      {/* feet (contact shadow first) */}
+      <ellipse cx={47} cy={143} rx={24} ry={4} fill="#000" opacity={0.35} filter="url(#mSoft)" />
+      <ellipse cx={36} cy={140} rx={11} ry={5} fill={`url(#mPaw-${k})`} stroke={shadeHex(PINK, -0.5)} strokeWidth={1.2} />
+      <ellipse cx={58} cy={140} rx={11} ry={5} fill={`url(#mPaw-${k})`} stroke={shadeHex(PINK, -0.5)} strokeWidth={1.2} />
+      {/* shadow the head casts on the body */}
+      <ellipse cx={50} cy={82} rx={20} ry={6} fill="#000" opacity={0.35} filter="url(#mSoft)" />
+      <g transform={`translate(${headX.toFixed(2)} ${headY.toFixed(2)})`}>
+        {/* ears (flick outward on a twitch): cupped, darker inside toward the base */}
+        <g transform={`rotate(${(-14 * idle.ear).toFixed(2)} 40 50)`}>
+          <circle cx={30} cy={40} r={15} fill={`url(#mEar-${k})`} stroke={line} strokeWidth={1.6} />
+          <circle cx={30.5} cy={40.5} r={9.5} fill={`url(#mEarIn-${k})`} />
+          <ellipse cx={33} cy={45} rx={6} ry={3.5} fill="#000" opacity={0.18} filter="url(#mSoft)" />
         </g>
-      )}
-      {/* "O" mouth when surprised */}
-      {pose.surprise > 0.05 && <ellipse cx={70} cy={74} rx={2.5 * pose.surprise} ry={3.5 * pose.surprise} fill="#5a1a22" />}
+        <g transform={`rotate(${(10 * idle.ear).toFixed(2)} 60 46)`}>
+          <circle cx={66} cy={36} r={15} fill={`url(#mEar-${k})`} stroke={line} strokeWidth={1.6} />
+          <circle cx={66.5} cy={36.5} r={9.5} fill={`url(#mEarIn-${k})`} />
+          <ellipse cx={64} cy={42} rx={6} ry={3.5} fill="#000" opacity={0.18} filter="url(#mSoft)" />
+        </g>
+        {/* head + snout */}
+        <ellipse cx={52} cy={60} rx={24} ry={21} fill={`url(#mHead-${k})`} stroke={line} strokeWidth={1.6} />
+        <path d="M 70 58 Q 84 62 78 70 Q 70 72 66 68 Z" fill={`url(#mHead-${k})`} stroke={line} strokeWidth={1.4} />
+        <ellipse cx={42} cy={50} rx={8} ry={4.5} fill="#ffffff" opacity={0.4} filter="url(#mGlint)" transform="rotate(-25 42 50)" />
+        {/* glossy nose */}
+        <circle cx={80} cy={66 + idle.nose} r={4.2} fill={`url(#mNose-${k})`} />
+        <circle cx={78.8} cy={64.6 + idle.nose} r={1.3} fill="#ffffff" opacity={0.85} />
+        {/* whiskers */}
+        <g stroke="#4a4a52" strokeWidth={1.2} opacity={0.85}>
+          <path d="M 76 68 L 96 64" />
+          <path d="M 76 70 L 96 72" />
+        </g>
+        {/* eye: glossy, with a socket shadow */}
+        {blink && !pose.surprise ? (
+          <path d="M 56 56 Q 61 59 66 56" stroke="#1a1a1e" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+        ) : (
+          <g>
+            <circle cx={61} cy={56} r={eyeR + 2.6} fill="#000" opacity={0.18} filter="url(#mGlint)" />
+            {pose.surprise > 0.05 && <circle cx={61} cy={55} r={eyeR + 2.5} fill="#ffffff" />}
+            <circle cx={61 + pupil} cy={55} r={eyeR} fill="#141418" />
+            <circle cx={62.5 + pupil} cy={53.3} r={1.6} fill="#ffffff" />
+            <circle cx={59.6 + pupil} cy={57} r={0.7} fill="#ffffff" opacity={0.7} />
+          </g>
+        )}
+        {/* "O" mouth when surprised */}
+        {pose.surprise > 0.05 && <ellipse cx={70} cy={74} rx={2.5 * pose.surprise} ry={3.5 * pose.surprise} fill="#5a1a22" />}
+      </g>
       {arm(4)}
     </svg>
   );

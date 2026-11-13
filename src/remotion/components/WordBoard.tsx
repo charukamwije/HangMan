@@ -160,7 +160,8 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                     // Empty slots keep a clearly visible light outline; filled ones take the accent.
                     // Filled slots: solid, slightly thicker accent outline with a crisp dark keyline
                     // either side, so the edge stays sharp under the letter's glow.
-                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, 1, lift, theme.emptyRgb) : `rgba(${theme.emptyRgb},0.45)`}`,
+                    // Once its letter is in, the outline dims (bright as it lands, settling to a soft accent) so the letter stands out.
+                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, ramp(since / fps, [0, 0.25, 0.75], [1, 1, FILLED_OUTLINE_ALPHA]), lift, theme.emptyRgb) : `rgba(${theme.emptyRgb},0.45)`}`,
                     boxShadow: [
                       shown
                         ? `inset 0 0 0 2px ${shadeA(theme, 0.75)}, 0 0 0 2px ${shadeA(theme, 0.75)}, 0 4px 14px ${shadeA(theme, 0.6)}`
@@ -203,9 +204,11 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
   );
 };
 
+/** Outline strength of a filled slot once its letter has settled (accent alpha). */
+const FILLED_OUTLINE_ALPHA = 0.32;
+
 /** Filled-slot outline (accent at `alpha`), blended back to the empty outline (`emptyRgb` @ 0.45) as `toEmpty` → 1. */
 function slotBorder(accent: string, alpha: number, toEmpty: number, emptyRgb: string) {
-  if (toEmpty <= 0) return `${accent}${alpha >= 1 ? "ff" : "99"}`;
   const n = parseInt(accent.slice(1, 7), 16);
   const [er, eg, eb] = emptyRgb.split(",").map(Number);
   const target = [er, eg, eb];

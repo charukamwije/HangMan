@@ -167,7 +167,13 @@ export const HookBanner: React.FC<{
     >
       <PinnerAndPin crew={crew} bannerW={bannerW} />
       {/* the banner swings around whichever top corner is still held */}
-      <div style={{ transform: crew.angle ? `rotate(${crew.angle.toFixed(2)}deg)` : undefined, transformOrigin: crew.origin }}>
+      {/* drop gag: swings round the corner still held; otherwise it rides the holders' idle bob */}
+      <div
+        style={{
+          transform: crew.angle ? `rotate(${crew.angle.toFixed(2)}deg)` : `translateY(${crew.idleDy.toFixed(2)}px) rotate(${crew.idleTilt.toFixed(3)}deg)`,
+          transformOrigin: crew.angle ? crew.origin : "50% 0%",
+        }}
+      >
     <div
       style={{
         position: "relative",

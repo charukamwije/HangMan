@@ -67,6 +67,10 @@ export const HintOwl: React.FC<{
   const breathe = Math.sin((t / 1.5) * Math.PI * 2);
   const bob = breathe * 3 + (active ? laugh * Math.abs(Math.sin(s * 28)) * -5 : 0);
   const blink = !active ? ramp(t % 3, [0, 0.05, 0.1], [0, 1, 0]) : 0;
+  // Idle life between throws, eased out around each throw so the throw itself is untouched.
+  const idleAmt = Number.isFinite(s) ? Math.min(ramp(s, [1.7, 2.2], [0, 1]), 1) : 1;
+  const nextThrow = throwFrames.find((f) => f > frame);
+  const idle = idleLife(t, idleAmt * (nextThrow !== undefined ? ramp((nextThrow - frame) / fps, [0, 0.35], [0, 1]) : 1));
 
   const boxLeft = cardW - BOX.w + 16;
   const boxTop = -SEAT_Y;
@@ -128,7 +132,9 @@ export const HintOwl: React.FC<{
       <div style={{ position: "absolute", left: boxLeft, top: boxTop + bob, width: BOX.w, height: BOX.h, pointerEvents: "none" }}>
         <svg viewBox={`0 0 ${BOX.w} ${BOX.h}`} width={BOX.w} height={BOX.h} style={{ overflow: "visible", filter: "drop-shadow(0 12px 14px rgba(0,0,0,0.6))" }}>
           <OwlDefs />
-          <Owl look={look} blink={Math.max(blink, 0.55 * laugh)} laugh={laugh} breathe={breathe} />
+          <g transform={`rotate(${idle.sway.toFixed(2)} 170 240)`}>
+            <Owl look={look} blink={Math.max(blink, 0.55 * laugh, idle.squint)} laugh={laugh} breathe={breathe} idle={idle} />
+          </g>
           <g transform={`translate(${PIVOT.x} ${PIVOT.y}) rotate(${angle.toFixed(1)})`}>
             <Bucket fill={active ? 1 - ramp(s, [0.2, 0.34], [0, 1]) : 1} />
           </g>
@@ -502,10 +508,43 @@ const SCALLOPS = Array.from({ length: 30 }, (_, k) => ({
   y: 128 + 100 * random(`sc-y-${k}`),
 }));
 
-const Owl: React.FC<{ look: number; blink: number; laugh: number; breathe: number }> = ({ look, blink, laugh, breathe }) => {
-  const headTurn = -9 * look;
-  const pdx = -5 * look;
-  const pdy = 4 * look;
+type IdleLife = { faceX: number; headRot: number; pupilX: number; pupilY: number; browL: number; browR: number; squint: number; hoot: number; tuft: number; sway: number };
+
+/**
+ * Small, owl-like idle behaviour on a 7.5 s cycle (4 per 30 s, so it loops seamlessly):
+ * snappy head turns (toward the hint, hold, toward the viewer, back), a curious head tilt with one
+ * brow raised, darting pupils (saccades every 0.75 s), a suspicious squint, a little "hoot",
+ * ear-tuft twitches and a slow weight shift. `amt` (0..1) fades it all in/out around throws.
+ */
+const idleLife = (t: number, amt: number): IdleLife => {
+  const u = t % 7.5;
+  // owls turn their heads in quick snaps and then hold
+  const lookX = ramp(u, [0, 1.2, 1.38, 2.8, 2.98, 4.6, 4.78, 6.4, 6.58, 7.5], [0, 0, -1, -1, 0, 0, 1, 1, 0, 0]);
+  const tilt = ramp(u, [3.15, 3.4, 4.15, 4.4], [0, 1, 1, 0]);
+  const k = Math.floor(t / 0.75) % 40;
+  const sacX = (random(`owl-sx-${k}`) - 0.5) * 5;
+  const sacY = (random(`owl-sy-${k}`) - 0.5) * 3;
+  const interested = ramp(u, [1.38, 1.6, 2.6, 2.8], [0, 1, 1, 0]);
+  const tuftTwitch = Math.max(ramp(u, [0.5, 0.58, 0.7], [0, 1, 0]), ramp(u, [5.4, 5.48, 5.6, 5.68, 5.8], [0, 1, 0, 1, 0]));
+  return {
+    faceX: 7 * lookX * amt,
+    headRot: (-3 * lookX + 11 * tilt) * amt,
+    pupilX: (4 * lookX + sacX) * amt,
+    pupilY: sacY * amt,
+    browL: (-5 * interested) * amt,
+    browR: (-5 * interested - 7 * tilt) * amt,
+    squint: 0.38 * ramp(u, [5.0, 5.25, 5.9, 6.1], [0, 1, 1, 0]) * amt,
+    hoot: ramp(u, [2.05, 2.15, 2.35, 2.45], [0, 1, 1, 0]) * amt,
+    tuft: 7 * tuftTwitch * amt,
+    sway: 1.6 * Math.sin((t / 5) * Math.PI * 2) * amt,
+  };
+};
+
+const Owl: React.FC<{ look: number; blink: number; laugh: number; breathe: number; idle: IdleLife }> = ({ look, blink, laugh, breathe, idle }) => {
+  const headTurn = -9 * look + idle.headRot;
+  const pdx = -5 * look + idle.pupilX;
+  const pdy = 4 * look + idle.pupilY;
+  const beakOpen = Math.max(laugh, 0.6 * idle.hoot);
   const chestScale = 1 + 0.015 * breathe;
   const eye = (cx: number) => (
     <g key={cx}>
@@ -558,7 +597,7 @@ const Owl: React.FC<{ look: number; blink: number; laugh: number; breathe: numbe
           [124, 66, -1],
           [216, 66, 1],
         ] as const).map(([x, y, side]) => (
-          <g key={x}>
+          <g key={x} transform={`rotate(${(side * idle.tuft).toFixed(2)} ${x} ${y + 12})`}>
             {[0, 1, 2].map((k) => (
               <path
                 key={k}
@@ -569,6 +608,8 @@ const Owl: React.FC<{ look: number; blink: number; laugh: number; breathe: numbe
           </g>
         ))}
         <ellipse cx={170} cy={104} rx={68} ry={58} fill="url(#owlHead)" />
+        {/* the face slides inside the head as it turns, which reads as the head swivelling */}
+        <g transform={`translate(${idle.faceX.toFixed(2)} 0)`}>
         {/* facial disc with a ruffled rim */}
         <path
           d="M 170 70 C 138 54 100 70 102 104 C 104 140 140 150 170 142 C 200 150 236 140 238 104 C 240 70 202 54 170 70 Z"
@@ -596,14 +637,15 @@ const Owl: React.FC<{ look: number; blink: number; laugh: number; breathe: numbe
         })}
         {/* dark brow wedge + pale "eyebrows" */}
         <path d="M 158 80 L 170 116 L 182 80 Q 170 74 158 80 Z" fill="#6b4626" opacity={0.75} />
-        <path d="M 124 86 Q 144 74 162 86" stroke="#f6ead2" strokeWidth={4} fill="none" strokeLinecap="round" opacity={0.85} />
-        <path d="M 178 86 Q 196 74 216 86" stroke="#f6ead2" strokeWidth={4} fill="none" strokeLinecap="round" opacity={0.85} />
+        <path d="M 124 86 Q 144 74 162 86" stroke="#f6ead2" strokeWidth={4} fill="none" strokeLinecap="round" opacity={0.85} transform={`translate(0 ${idle.browL.toFixed(2)})`} />
+        <path d="M 178 86 Q 196 74 216 86" stroke="#f6ead2" strokeWidth={4} fill="none" strokeLinecap="round" opacity={0.85} transform={`translate(0 ${idle.browR.toFixed(2)})`} />
         {eye(145)}
         {eye(195)}
-        {/* hooked beak; lower mandible drops when laughing */}
-        <path d={`M 164 126 Q 170 ${150 + 6 * laugh} 176 126 Z`} fill="#3a3632" opacity={laugh} />
+        {/* hooked beak; lower mandible drops when laughing (and a little for an idle "hoot") */}
+        <path d={`M 164 126 Q 170 ${150 + 6 * beakOpen} 176 126 Z`} fill="#3a3632" opacity={beakOpen} />
         <path d="M 162 112 C 162 124 166 136 170 142 C 174 136 178 124 178 112 C 174 107 166 107 162 112 Z" fill="url(#owlBeak)" />
         <path d="M 166 114 Q 168 122 170 128" stroke="#cfc8bf" strokeWidth={1.6} fill="none" opacity={0.7} />
+        </g>
       </g>
     </g>
   );
