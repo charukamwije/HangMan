@@ -4,8 +4,9 @@ import { ramp } from "../motion";
 
 /**
  * The banner crew: two mice hold the hook banner's top corners; now and then
- * one loses its grip, that end swings down, and the mouse leaps down, catches
- * the corner and hauls it back up. A third mouse abseils in, pins a thread to
+ * one loses its grip and that end swings down. The mouse stays put, pulls out a
+ * crook stick, hooks it over the fallen corner, leans back and hauls it up to
+ * level, then tucks the stick away. Heads turn and nod to follow the action. A third mouse abseils in, pins a thread to
  * the wall above the banner and climbs away — until the pin pops out.
  *
  * Everything is a pure function of time on a fixed schedule (seconds), so the
@@ -21,7 +22,7 @@ export const CREW_SCHEDULE = {
   pinner: { at: 16.0, duration: 3.8 },
   pinPopAt: 23.5,
 };
-const DROP_SECONDS = 1.5;
+const DROP_SECONDS = 2.1;
 
 export const MOUSE_W = 100;
 const MOUSE_H = 150;
@@ -32,9 +33,9 @@ const MOUSE_TOP = -26;
 
 type Side = "left" | "right";
 
-/** Banner tilt (deg) s seconds into a drop: slip, swing, settle, haul back up. */
+/** Banner tilt (deg) s seconds into a drop: slip, swing, settle, hang while the stick is fetched, haul back up. */
 const dropAngle = (s: number) =>
-  interpolate(s, [0, 0.28, 0.4, 0.52, 0.65, DROP_SECONDS], [0, 15, 11.5, 13.5, 13, 0], {
+  interpolate(s, [0, 0.28, 0.4, 0.52, 0.65, 1.0, 1.75, DROP_SECONDS], [0, 15, 11.5, 13.5, 13, 13, 0, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.inOut(Easing.sin),
@@ -56,7 +57,36 @@ export type CrewState = {
 
 /** Idle life: tail swish (deg), ear twitch (0..1), head look (-1 left … 1 right), nose wiggle (px), body sway (deg). */
 export type MouseIdle = { tail: number; ear: number; look: number; nose: number; sway: number };
-export type MousePose = { dx: number; dy: number; hand: { x: number; y: number }; surprise: number; lean: number; idle?: MouseIdle };
+type Pt = { x: number; y: number };
+/** Head on the neck: rotation (deg, + = nod down toward the front) and gaze offset for the pupil. */
+export type MouseHead = { rot: number; gx: number; gy: number };
+/** Crook stick held in both hands: grip point, the hook's attachment point, and visibility 0..1. */
+export type MouseStick = { grip: Pt; tip: Pt; vis: number };
+export type MousePose = { dx: number; dy: number; hand: Pt; surprise: number; lean: number; idle?: MouseIdle; head?: MouseHead; stick?: MouseStick };
+
+/** Neck pivot (head rotates around it) and head centre, in mouse coords. */
+const NECK = { x: 50, y: 78 };
+const HEAD_C = { x: 54, y: 60 };
+/** Where the hands hold the crook stick, in mouse coords. */
+const GRIP = { x: 60, y: 82 };
+
+/** Natural head aim at a target point: the head turns/nods part of the way, the eyes do the rest. */
+const aimHead = (target: Pt, amt: number): MouseHead => {
+  const dx = target.x - HEAD_C.x;
+  const dy = target.y - HEAD_C.y;
+  const ang = (Math.atan2(dy, dx) * 180) / Math.PI; // 0 = straight ahead (the banner), + = down
+  const d = Math.hypot(dx, dy) || 1;
+  return { rot: Math.max(-14, Math.min(30, ang * 0.5)) * amt, gx: (dx / d) * 1.8 * amt, gy: (dy / d) * 1.8 * amt };
+};
+
+/** Rotate a point about a pivot (deg). */
+const rotAbout = (p: Pt, c: Pt, deg: number): Pt => {
+  const r = (deg * Math.PI) / 180;
+  const x = p.x - c.x;
+  const y = p.y - c.y;
+  return { x: c.x + x * Math.cos(r) - y * Math.sin(r), y: c.y + x * Math.sin(r) + y * Math.cos(r) };
+};
+const lerpPt = (a: Pt, b: Pt, k: number): Pt => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
 
 const REST: MousePose = { dx: 0, dy: 0, hand: HOLD, surprise: 0, lean: 0 };
 
@@ -110,17 +140,40 @@ export function crewState(t: number, bannerW: number): CrewState {
     const rad = (a * Math.PI) / 180;
     const cornerDy = bannerW * Math.sin(rad); // how far the free corner has fallen
     const cornerDx = bannerW * (Math.cos(rad) - 1); // and how far it has swung inward
-    // The mouse stays put while the corner slips away, then leaps down to it and rides it back up.
-    const follow = s < 0.3 ? 0 : s < 0.62 ? Easing.out(Easing.cubic)(ramp(s, [0.3, 0.62], [0, 1])) : 1;
-    const dy = cornerDy * follow;
-    const dx = cornerDx * follow;
-    // Hands: flail upward while slipping, then reach for (and keep) the corner.
-    const reach = ramp(s, [0.3, 0.55], [0, 1]);
+    // The mouse stays put. It pulls out a crook stick, hooks it over the fallen corner's top edge,
+    // leans back and hauls the corner up to level, then tucks the stick away and grips the corner again.
+    const lean = ramp(s, [1.0, 1.15, 1.6, 1.8], [0, 0.8, 0.8, 0]);
+    // The mouse box leans (rotates about its feet) while pulling; work in its leaned frame so the
+    // hook lands exactly on the corner on screen.
+    const FEET = { x: 50, y: 135 };
+    // (cornerDx < 0 = the corner swings inward, toward the banner = +x in either mouse's own frame)
+    const corner = rotAbout({ x: HOLD.x - cornerDx, y: HOLD.y + cornerDy }, FEET, 6 * lean);
+    const hookAt = { x: corner.x - 10, y: corner.y - 10 }; // the crook curls over the top edge from here
+    const stickRest = { x: GRIP.x + 34, y: GRIP.y + 22 }; // stick held short, pointing down-forward
+    const reachK = Easing.inOut(Easing.cubic)(ramp(s, [0.42, 0.9], [0, 1]));
+    const awayK = Easing.inOut(Easing.cubic)(ramp(s, [1.78, 2.02], [0, 1]));
+    const tip = lerpPt(lerpPt(stickRest, hookAt, reachK), stickRest, awayK);
+    const vis = Math.min(ramp(s, [0.3, 0.42], [0, 1]), 1 - ramp(s, [1.96, 2.08], [0, 1]));
+    // Hands: flail while it slips, grab the stick, and after it's put away, take the corner again.
     const flail = { x: HOLD.x - 18 + 10 * Math.sin(s * 40), y: HOLD.y - 26 + 6 * Math.cos(s * 37) };
-    const corner = { x: HOLD.x + (cornerDx - dx), y: HOLD.y + (cornerDy - dy) };
-    const hand = s < 0.3 ? flail : { x: flail.x + (corner.x - flail.x) * reach, y: flail.y + (corner.y - flail.y) * reach };
-    const freePose: MousePose = { dx, dy, hand, surprise: ramp(s, [0, 0.08, 0.6, 0.8], [0, 1, 1, 0]), lean: 0 };
-    const bracePose: MousePose = { ...REST, lean: ramp(s, [0, 0.2, 1.2, DROP_SECONDS], [0, 1, 1, 0]) };
+    const toStick = ramp(s, [0.26, 0.4], [0, 1]);
+    const backToHold = ramp(s, [1.9, 2.08], [0, 1]);
+    const hand = lerpPt(lerpPt(flail, GRIP, toStick), HOLD, backToHold);
+    // Head: watches the corner fall, then follows the hook down and back up.
+    const watch = s < 0.45 ? corner : tip;
+    const lookAmt = ramp(s, [0, 0.12, 1.88, 2.06], [0, 1, 1, 0]);
+    const freePose: MousePose = {
+      dx: 0,
+      dy: 0,
+      hand,
+      surprise: ramp(s, [0, 0.08, 0.5, 0.7], [0, 1, 1, 0]),
+      lean,
+      head: aimHead(watch, lookAmt),
+      stick: vis > 0.01 ? { grip: GRIP, tip, vis } : undefined,
+    };
+    const braceLean = ramp(s, [0, 0.2, 1.6, DROP_SECONDS], [0, 1, 1, 0]);
+    // The other mouse braces, and glances along the banner at the drama.
+    const bracePose: MousePose = { ...REST, lean: braceLean, head: aimHead({ x: HOLD.x + 200, y: HOLD.y + 60 }, braceLean) };
     state.idleDy = 0;
     state.idleTilt = 0;
     if (drop.side === "right") {
@@ -197,6 +250,31 @@ const MLimb: React.FC<{ d: string; color: string; w: number }> = ({ d, color, w 
 );
 
 /**
+ * Wooden crook stick (a shepherd's crook in mouse size): a straight, tube-shaded shaft from just
+ * behind the grip to `tip`, then a fixed J-hook that curls up, over and down to the right, so at
+ * `tip` it hangs over the banner's top edge. Grows out from the grip as `vis` goes 0 → 1.
+ */
+const CrookStick: React.FC<{ stick: MouseStick }> = ({ stick }) => {
+  const { grip, vis } = stick;
+  const tip = lerpPt(grip, stick.tip, vis);
+  const len = Math.hypot(tip.x - grip.x, tip.y - grip.y) || 1;
+  const ux = (tip.x - grip.x) / len;
+  const uy = (tip.y - grip.y) / len;
+  const butt = { x: grip.x - ux * 14 * vis, y: grip.y - uy * 14 * vis };
+  const k = vis; // the hook scales in with the stick
+  const hook = `M ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} C ${(tip.x + 2 * k).toFixed(1)} ${(tip.y - 18 * k).toFixed(1)} ${(tip.x + 26 * k).toFixed(1)} ${(tip.y - 18 * k).toFixed(1)} ${(tip.x + 25 * k).toFixed(1)} ${(tip.y + 4 * k).toFixed(1)} L ${(tip.x + 22 * k).toFixed(1)} ${(tip.y + 12 * k).toFixed(1)}`;
+  const WOOD = "#9a6230";
+  return (
+    <g>
+      <MLimb d={`M ${butt.x.toFixed(1)} ${butt.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)}`} color={WOOD} w={5} />
+      <MLimb d={hook} color={WOOD} w={5} />
+      {/* brass ferrule where the hook meets the shaft */}
+      <circle cx={tip.x} cy={tip.y} r={3.6 * k} fill="#d6a645" stroke="#6a4a14" strokeWidth={1} />
+    </g>
+  );
+};
+
+/**
  * 3D-shaded cartoon mouse facing right (viewBox 100 × 150). Hands reach `pose.hand`.
  * Every part is lit the same way (key light top-left): volumetric gradients, tube-shaded
  * arms + tail, soft contact shadows where parts meet, and glossy glints on eyes and nose.
@@ -205,10 +283,13 @@ const Mouse: React.FC<{ pose: MousePose; blink?: boolean; tint?: string }> = ({ 
   const sh = { x: 54, y: 78 };
   const eyeR = 4 + 2.5 * pose.surprise;
   const idle = pose.idle ?? { tail: 0, ear: 0, look: 0, nose: 0, sway: 0 };
-  // head looks around: shifts a little and tips up when looking back over its shoulder
+  // head looks around: pivots on the neck (turn/nod) and shifts a touch; the eyes lead the head
+  const aim = pose.head ?? { rot: 0, gx: 0, gy: 0 };
   const headX = 3 * idle.look;
   const headY = -1.5 * Math.abs(idle.look);
-  const pupil = 1.6 * idle.look;
+  const headRot = aim.rot + 6 * idle.look;
+  const pupil = 1.6 * idle.look + aim.gx;
+  const pupilY = aim.gy;
   const k = tint.slice(1); // per-tint gradient ids (the pinner is a different colour)
   const line = shadeHex(tint, -0.55);
   const PINK = "#f2a7b4";
@@ -258,7 +339,7 @@ const Mouse: React.FC<{ pose: MousePose; blink?: boolean; tint?: string }> = ({ 
       <ellipse cx={58} cy={140} rx={11} ry={5} fill={`url(#mPaw-${k})`} stroke={shadeHex(PINK, -0.5)} strokeWidth={1.2} />
       {/* shadow the head casts on the body */}
       <ellipse cx={50} cy={82} rx={20} ry={6} fill="#000" opacity={0.35} filter="url(#mSoft)" />
-      <g transform={`translate(${headX.toFixed(2)} ${headY.toFixed(2)})`}>
+      <g transform={`translate(${headX.toFixed(2)} ${headY.toFixed(2)}) rotate(${headRot.toFixed(2)} ${NECK.x} ${NECK.y})`}>
         {/* ears (flick outward on a twitch): cupped, darker inside toward the base */}
         <g transform={`rotate(${(-14 * idle.ear).toFixed(2)} 40 50)`}>
           <circle cx={30} cy={40} r={15} fill={`url(#mEar-${k})`} stroke={line} strokeWidth={1.6} />
@@ -289,14 +370,15 @@ const Mouse: React.FC<{ pose: MousePose; blink?: boolean; tint?: string }> = ({ 
           <g>
             <circle cx={61} cy={56} r={eyeR + 2.6} fill="#000" opacity={0.18} filter="url(#mGlint)" />
             {pose.surprise > 0.05 && <circle cx={61} cy={55} r={eyeR + 2.5} fill="#ffffff" />}
-            <circle cx={61 + pupil} cy={55} r={eyeR} fill="#141418" />
-            <circle cx={62.5 + pupil} cy={53.3} r={1.6} fill="#ffffff" />
-            <circle cx={59.6 + pupil} cy={57} r={0.7} fill="#ffffff" opacity={0.7} />
+            <circle cx={61 + pupil} cy={55 + pupilY} r={eyeR} fill="#141418" />
+            <circle cx={62.5 + pupil} cy={53.3 + pupilY} r={1.6} fill="#ffffff" />
+            <circle cx={59.6 + pupil} cy={57 + pupilY} r={0.7} fill="#ffffff" opacity={0.7} />
           </g>
         )}
         {/* "O" mouth when surprised */}
         {pose.surprise > 0.05 && <ellipse cx={70} cy={74} rx={2.5 * pose.surprise} ry={3.5 * pose.surprise} fill="#5a1a22" />}
       </g>
+      {pose.stick && <CrookStick stick={pose.stick} />}
       {arm(4)}
     </svg>
   );
