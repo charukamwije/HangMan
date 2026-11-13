@@ -1,6 +1,6 @@
 import React from "react";
 import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { DISPLAY_FONT } from "../fonts";
+import { YT_FONT } from "../fonts";
 import { ramp } from "../motion";
 import { KEYBOARD_HEIGHT } from "./Keyboard";
 
@@ -674,9 +674,55 @@ const FLOAT_ACCEL = 0.7;
 const FLOAT_CLEAR = 450;
 /** r: half-width of the balloon (design px); font: label size in balloon units (1 = r). */
 const BALLOON = {
-  like: { label: "LIKE", base: "#1e88ff", r: 150, font: 0.74 },
-  subscribe: { label: "SUBSCRIBE", base: "#ff2433", r: 175, font: 0.42 },
+  // YouTube's own button wording and face: sentence case, Roboto Medium
+  // motif: the badge printed all over the balloon (like / play-button), textHalf/band: label area kept clear
+  like: { label: "Like", base: "#1e88ff", r: 150, font: 0.66, motif: "like", textHalf: 0.72, band: 0.3 },
+  subscribe: { label: "Subscribe", base: "#ff2433", r: 175, font: 0.35, motif: "subscribe", textHalf: 0.92, band: 0.22 },
 } as const;
+type Motif = "like" | "subscribe";
+
+/** Thumbs-up glyph on a 24×24 grid (Material "thumb_up" shape). */
+const THUMB_PATH =
+  "M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z";
+
+/**
+ * Where the printed badges sit on the unit balloon: a staggered grid over the round part,
+ * skipping the label row. Each badge is smaller and squashed toward the rim, so the print
+ * reads as wrapping around the curved surface.
+ */
+const motifSpots = (textHalf: number, band: number) => {
+  const spots: { x: number; y: number; s: number; sx: number; sy: number }[] = [];
+  for (let row = 0, y = -2.02; y < -0.35; row++, y += 0.3) {
+    for (let x = -1 + (row % 2 ? 0.17 : 0); x <= 1.001; x += 0.34) {
+      const nx = x / 0.98;
+      const ny = (y + 1.25) / 0.98;
+      const d = Math.hypot(nx, ny);
+      if (d > 0.97) continue;
+      if (Math.abs(y - LABEL_Y) < band && Math.abs(x) < textHalf) continue;
+      const depth = Math.sqrt(Math.max(0, 1 - d * d));
+      spots.push({
+        x,
+        y,
+        s: 0.24 * (0.45 + 0.55 * depth),
+        sx: 0.45 + 0.55 * Math.sqrt(Math.max(0, 1 - nx * nx)),
+        sy: 0.45 + 0.55 * Math.sqrt(Math.max(0, 1 - ny * ny)),
+      });
+    }
+  }
+  return spots;
+};
+
+/** One printed badge, centred on (0,0), `s` wide: a like badge or a play-button badge. */
+const MotifBadge: React.FC<{ motif: Motif; s: number; color: string }> = ({ motif, s, color }) =>
+  motif === "like" ? (
+    // a filled white thumbs-up straight on the latex (no badge disc behind it)
+    <path d={THUMB_PATH} fill="#ffffff" transform={`translate(${-s * 0.45} ${-s * 0.46}) scale(${(s * 0.9) / 24})`} />
+  ) : (
+    <g>
+      <rect x={-s / 2} y={-s * 0.35} width={s} height={s * 0.7} rx={s * 0.2} fill="#ffffff" />
+      <path d={`M ${-s * 0.13} ${-s * 0.17} L ${s * 0.2} 0 L ${-s * 0.13} ${s * 0.17} Z`} fill={color} />
+    </g>
+  );
 
 /**
  * Unit balloon (half-width 1), knot at the origin, body pointing up (−y): fuller at the
@@ -706,7 +752,10 @@ const Balloon: React.FC<{
   base: string;
   r: number;
   font: number;
-}> = ({ mouth, hand, hover, local: u, release: releaseAt, t, label, base, r: R, font }) => {
+  motif: Motif;
+  textHalf: number;
+  band: number;
+}> = ({ mouth, hand, hover, local: u, release: releaseAt, t, label, base, r: R, font, motif, textHalf, band }) => {
   // --- size: inflated in a few puffs (each breath swells it a little more)
   const blowK = Math.min(1, u / BLOW);
   const breath = Math.sin(blowK * Math.PI * 4) * 0.035 * (1 - blowK);
@@ -744,7 +793,8 @@ const Balloon: React.FC<{
   const textIn = ramp(u, [BLOW + RISE * 0.3, BLOW + RISE], [0, 1]);
   const light = shade(base, 0.6);
   const dark = shade(base, -0.45);
-  const gid = `balloon-${label}`;
+  const gid = `balloon-${motif}`;
+  const spots = motifSpots(textHalf, band);
 
   return (
     <svg width={1} height={1} style={{ position: "absolute", left: 0, top: 0, overflow: "visible", zIndex: 6, opacity }}>
@@ -761,6 +811,15 @@ const Balloon: React.FC<{
         <filter id={`${gid}-shadow`} x="-50%" y="-50%" width="200%" height="200%">
           <feDropShadow dx={0} dy={0.08} stdDeviation={0.07} floodColor="#000" floodOpacity={0.45} />
         </filter>
+        <clipPath id={`${gid}-clip`}>
+          <path d={BODY_PATH} />
+        </clipPath>
+        {/* curvature shading laid over the print: lit top-left, darker toward the rim */}
+        <radialGradient id={`${gid}-curve`} cx="0.38" cy="0.32" r="0.8">
+          <stop offset="0" stopColor="#000" stopOpacity={0} />
+          <stop offset="0.6" stopColor="#000" stopOpacity={0.06} />
+          <stop offset="1" stopColor="#000" stopOpacity={0.4} />
+        </radialGradient>
       </defs>
       {u >= BLOW && (
         <path
@@ -773,6 +832,17 @@ const Balloon: React.FC<{
       )}
       <g transform={`translate(${knot.x.toFixed(1)} ${knot.y.toFixed(1)}) rotate(${angle.toFixed(2)}) scale(${(r * (1 + settle)).toFixed(2)} ${(r * (1 - settle)).toFixed(2)})`}>
         <path d={BODY_PATH} fill={`url(#${gid}-fill)`} filter={`url(#${gid}-shadow)`} />
+        {/* badges printed all over the latex, then the same curvature shading on top of them */}
+        <g clipPath={`url(#${gid}-clip)`}>
+          <g opacity={0.92}>
+            {spots.map((p, i) => (
+              <g key={i} transform={`translate(${p.x.toFixed(3)} ${p.y.toFixed(3)}) scale(${p.sx.toFixed(3)} ${p.sy.toFixed(3)})`}>
+                <MotifBadge motif={motif} s={p.s} color={base} />
+              </g>
+            ))}
+          </g>
+          <path d={BODY_PATH} fill={`url(#${gid}-curve)`} />
+        </g>
         {/* rim, then glossy highlights (big soft one top-left, a sharp glint, faint bounce light) */}
         <path d={BODY_PATH} fill="none" stroke={shade(base, -0.55)} strokeWidth={0.04} opacity={0.5} />
         <ellipse cx={-0.42} cy={-1.72} rx={0.26} ry={0.14} fill="#ffffff" opacity={0.8} transform="rotate(-35 -0.42 -1.72)" filter={`url(#${gid}-soft)`} />
@@ -785,7 +855,8 @@ const Balloon: React.FC<{
             y={LABEL_Y}
             textAnchor="middle"
             dominantBaseline="central"
-            fontFamily={DISPLAY_FONT}
+            fontFamily={YT_FONT}
+            fontWeight={500}
             fontSize={font}
             fill="#ffffff"
             stroke={dark}

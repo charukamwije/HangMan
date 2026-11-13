@@ -2,7 +2,7 @@ import React from "react";
 import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { shadeA, type Theme } from "../themes";
 import type { Stress } from "../motion";
-import { BODY_FONT, DISPLAY_FONT } from "../fonts";
+import { BODY_FONT } from "../fonts";
 import { HookBanner } from "./HookBanner";
 import { CLOCK, CountdownTimer } from "./CountdownTimer";
 import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
@@ -21,6 +21,25 @@ const ROW_CLEARANCE = 50;
 const SUBTITLE_SIZE = 84;
 /** Small neon tab on the card's top edge. */
 const HINT_LABEL = "HINT";
+
+/** Lightbulb drawn in the chip's text colour: filled glass, two base bands, three light rays. */
+const BulbIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ flex: "0 0 auto", overflow: "visible" }}>
+    {/* rays */}
+    <g stroke={color} strokeWidth={1.8} strokeLinecap="round">
+      <path d="M 12 0.6 V 2.2" />
+      <path d="M 3.6 3.8 L 4.8 5" />
+      <path d="M 20.4 3.8 L 19.2 5" />
+    </g>
+    {/* glass + neck */}
+    <path d="M 12 4.2 C 8.2 4.2 5.6 7 5.6 10.3 C 5.6 12.8 7 14.4 8.2 15.6 C 8.9 16.3 9.2 17 9.2 17.8 H 14.8 C 14.8 17 15.1 16.3 15.8 15.6 C 17 14.4 18.4 12.8 18.4 10.3 C 18.4 7 15.8 4.2 12 4.2 Z" fill={color} />
+    {/* highlight on the glass, in the chip colour showing through */}
+    <path d="M 9.3 7.6 C 8.4 8.3 8 9.3 8 10.3" stroke="rgba(255,255,255,0.55)" strokeWidth={1.4} strokeLinecap="round" fill="none" />
+    {/* screw base */}
+    <rect x={9.2} y={18.7} width={5.6} height={1.6} rx={0.8} fill={color} />
+    <rect x={9.9} y={21} width={4.2} height={1.6} rx={0.8} fill={color} />
+  </svg>
+);
 const LABEL_SIZE = 66;
 const TAB_HEIGHT = LABEL_SIZE + 34;
 const CARD_PAD = { x: 80, top: 78, bottom: 56 };
@@ -181,18 +200,21 @@ export const Header: React.FC<{
                 transform: flipping ? `translateX(-50%) perspective(700px) rotateX(${(360 * flip).toFixed(1)}deg)` : "translateX(-50%)",
                 display: "flex",
                 alignItems: "center",
-                padding: "0 46px 0 calc(46px + 0.3em)",
-                fontWeight: 400,
+                gap: 16,
+                padding: "0 46px 0 40px",
+                // same face as the hint text below (Inter ExtraBold)
+                fontWeight: 800,
                 borderRadius: 999,
-                fontFamily: DISPLAY_FONT,
+                fontFamily: BODY_FONT,
                 fontSize: LABEL_SIZE,
                 lineHeight: 1,
-                letterSpacing: "0.3em",
+                letterSpacing: "0.1em",
                 color: theme.onAccent,
                 background: `linear-gradient(100deg, ${theme.accent} ${shimmer - 12}%, #ffffff ${shimmer}%, ${theme.accent} ${shimmer + 12}%)`,
                 boxShadow: `0 0 30px ${theme.accent}88, 0 8px 18px ${shadeA(theme, 0.6)}`,
               }}
             >
+              <BulbIcon size={LABEL_SIZE * 0.95} color={theme.onAccent} />
               {HINT_LABEL}
             </div>
             {wet > 0.01 && (

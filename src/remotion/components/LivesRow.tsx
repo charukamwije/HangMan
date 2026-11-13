@@ -3,7 +3,7 @@ import { Easing, interpolate, random, spring, useCurrentFrame, useVideoConfig } 
 import { ramp } from "../motion";
 import { loopReset } from "../loop";
 import { shadeA, type Theme } from "../themes";
-import { BODY_FONT, DISPLAY_FONT } from "../fonts";
+import { BODY_FONT, HAND_FONT } from "../fonts";
 import { MAX_LIVES, RIGHT_RAIL, SAFE_ZONE } from "../constants";
 import { Pawn } from "./ChessPieces";
 
@@ -401,15 +401,16 @@ const SpeechBubble: React.FC<{ text: string; x: number; y: number; pop: number; 
           position: "relative",
           marginLeft: 18,
           marginBottom: 30,
-          padding: "14px 30px 10px",
+          padding: "12px 30px 12px",
           borderRadius: 34,
           background: "#ffffff",
           border: "5px solid #141414",
           boxShadow: "0 10px 20px rgba(0,0,0,0.55)",
-          fontFamily: DISPLAY_FONT,
+          // hand-lettered, like someone scrawled it in the bubble
+          fontFamily: HAND_FONT,
           fontSize: size,
-          lineHeight: 1,
-          letterSpacing: "0.04em",
+          lineHeight: 1.1,
+          letterSpacing: "0.02em",
           color: "#c4161c",
           whiteSpace: "nowrap",
         }}
