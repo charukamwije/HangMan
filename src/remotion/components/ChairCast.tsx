@@ -1,6 +1,6 @@
 import React from "react";
-import { Easing, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import { BODY_FONT } from "../fonts";
+import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { DISPLAY_FONT } from "../fonts";
 import { ramp } from "../motion";
 import { KEYBOARD_HEIGHT } from "./Keyboard";
 
@@ -8,21 +8,19 @@ import { KEYBOARD_HEIGHT } from "./Keyboard";
  * A little library chair (3/4 front view) in the gap left of the keyboard's two
  * short bottom rows. Once per video one animal character (picked from the
  * answer, so a puzzle always gets the same one) waddles in, hops onto the
- * chair, says a line in a speech bubble, then waddles off.
+ * chair, blows up two balloons (blue "LIKE", then red "SUBSCRIBE"), holds each
+ * up on its string, lets it float away, then waddles off.
  *
  * Characters are original, front-facing animal mascots built from a few clean,
  * sphere-shaded shapes (key light top-left). Every transition is eased.
- * The visit sits between 8.0 s and ~14.6 s, so frame 0 and the loop point always
- * show the empty chair, and it finishes before the 15 s hint switch.
+ * The 15 s visit runs 6.0 s → 21.0 s: frame 0 and the loop point always show the
+ * empty chair, and it is over before stress mode (00:07 left, 22 s).
  */
-export const CAST_VISIT = { at: 8.0, walkIn: 1.0, sit: 0.45, talk: 4.2, stand: 0.35, walkOut: 0.8 } as const;
+export const CAST_VISIT = { at: 6.0, walkIn: 2.2, sit: 0.7, talk: 9.7, stand: 0.6, walkOut: 1.8 } as const;
 
 type CastId = "biscuit" | "marigold" | "pip";
-const CAST: Record<CastId, { line: string }> = {
-  biscuit: { line: "Can't guess this? How will you ever fetch my snacks? Subscribe & learn something!" },
-  marigold: { line: "You don't know this?! Less time bothering the neighbours. Subscribe and learn something!" },
-  pip: { line: "I subscribed, that's why I know everything. Want to learn? Subscribe!" },
-};
+/** Where each character's lips are in its 160×260 box (balloons are blown from here). */
+const MOUTH_Y: Record<CastId, number> = { biscuit: 92, marigold: 80, pip: 95 };
 const IDS: CastId[] = ["biscuit", "marigold", "pip"];
 const hash = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261);
 export const castFor = (word: string): CastId => IDS[hash(word) % IDS.length];
@@ -37,7 +35,7 @@ const BOX = { w: 160, h: 260, cx: 80, floor: 258 };
 const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 /** Walking: max fore/aft foot reach from the hip (box px), and the speed at which steps reach full size. */
 const STRIDE = 24;
-const WALK_FULL_SPEED = 300;
+const WALK_FULL_SPEED = 170;
 
 export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ keyboardTop, word }) => {
   const frame = useCurrentFrame();
@@ -57,10 +55,10 @@ export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ key
   const offX = -200;
   const xAt = (time: number) =>
     time < tIn
-      ? interpolate(time, [v.at, tIn], [offX, CHAIR_CX], { ...CLAMP, easing: Easing.out(Easing.quad) })
+      ? interpolate(time, [v.at, tIn], [offX, CHAIR_CX], { ...CLAMP, easing: Easing.inOut(Easing.sin) })
       : time < tUp
         ? CHAIR_CX
-        : interpolate(time, [tUp, tGone], [CHAIR_CX, offX], { ...CLAMP, easing: Easing.in(Easing.quad) });
+        : interpolate(time, [tUp, tGone], [CHAIR_CX, offX], { ...CLAMP, easing: Easing.inOut(Easing.sin) });
   const x = xAt(t);
   const vel = (x - xAt(t - 1 / fps)) * fps; // px/s, signed
   const gaitFor = (speed: number) => Math.min(1, speed / WALK_FULL_SPEED);
@@ -89,33 +87,35 @@ export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ key
   const land = t >= tSat && t < tSat + 0.35 ? Math.sin(((t - tSat) / 0.35) * Math.PI) * 0.05 : 0;
   const breathe = sit > 0.95 ? Math.sin(t * Math.PI * 2 * 0.8) * 0.012 : 0;
 
-  const talkAmt = ramp(t, [tSat, tSat + 0.25, tTalkEnd - 0.3, tTalkEnd], [0, 1, 1, 0]);
-  const mouth = Math.abs(Math.sin(t * 15)) * talkAmt;
+  // Balloon call-to-action while seated: a blue "LIKE" balloon, then a red "SUBSCRIBE" one. Each is
+  // blown up at the lips, tied and raised on its string in the character's hand, held up (bobbing),
+  // then let go (`release`) to float all the way up and out of the top of the frame, which takes
+  // FLOAT seconds and carries on after the character has left.
+  const b1 = tSat + 0.2;
+  const b2 = b1 + 4.75;
+  const balloons = [
+    { start: b1, release: b1 + 3.5, ...BALLOON.like },
+    { start: b2, release: tTalkEnd - 1.2, ...BALLOON.subscribe },
+  ];
+  const locals = balloons.map((b) => ({ b, u: t - b.start, rel: b.release - b.start }));
+  const blowing = visiting && locals.some(({ u }) => u >= 0 && u < BLOW);
   const blink = (t % 3.2) < 0.12 ? 1 : 0;
-  const gesture = talkAmt * (0.75 + 0.25 * Math.sin(t * 5));
-
-  // Speech bubble: springs in after sitting, types the line, then shrinks + fades out.
-  // One sentence at a time: the talk time is split evenly; each sentence types in, holds, then
-  // the bubble squashes and springs back with the next one.
-  const sentences = CAST[id].line.split(/(?<=[.!?])\s+/).filter(Boolean);
-  const bubbleT = t - (tSat + 0.05);
-  const span = (tTalkEnd - 0.3 - (tSat + 0.05)) / sentences.length;
-  const si = Math.max(0, Math.min(sentences.length - 1, Math.floor(bubbleT / span)));
-  const local = bubbleT - si * span;
-  const sentence = sentences[si];
-  const typed = Math.floor(sentence.length * ramp(local, [0.12, 0.12 + Math.min(0.7, span * 0.45)], [0, 1]));
-  // first sentence springs in from nothing; later ones get a quick squash-and-pop
-  const pop =
-    bubbleT < 0
-      ? 0
-      : si === 0
-        ? spring({ frame: Math.round(bubbleT * fps), fps, config: { damping: 12, stiffness: 180, mass: 0.7 } })
-        : interpolate(local, [0, 0.07, 0.22], [0.82, 0.82, 1], { ...CLAMP, easing: Easing.out(Easing.back(2)) });
-  const swap = si > 0 ? ramp(local, [0, 0.06], [0.4, 1]) : 1;
-  const bubbleOut = interpolate(t, [tTalkEnd - 0.3, tTalkEnd], [1, 0], { ...CLAMP, easing: Easing.in(Easing.cubic) });
+  // arm raised holding the string from tie-off until it's let go
+  const holding = Math.max(0, ...locals.map(({ u, rel }) => ramp(u, [BLOW, BLOW + 0.3, rel, rel + 0.3], [0, 1, 1, 0])));
+  // lips puckered while blowing; a happy open mouth while showing the balloon off
+  const mouth = blowing ? 0.1 : 0.35 * holding;
+  const gesture = holding * (0.9 + 0.1 * Math.sin(t * 3));
 
   const boxLeft = x - BOX.cx;
   const boxTop = floorY - BOX.floor;
+  const bodyTop = boxTop + bob + hop;
+  // blown from the corner of the mouth (towards the keyboard), so both eyes stay visible
+  const mouthAt = { x: x + 22, y: bodyTop + MOUTH_Y[id] };
+  // the raised hand (same arm maths as the characters' gesturing arm)
+  const raise = 24 * gesture;
+  const handAt = { x: boxLeft + 120 + raise * 0.4, y: bodyTop + 168 - raise * 1.6 };
+  // where a held balloon's knot hovers: up and to the right of the hand
+  const hoverAt = { x: CHAIR_CX + 150, y: boxTop + 10 };
   const edgeFade = ramp(x, [offX + 30, offX + 140], [0, 1]);
 
   return (
@@ -153,8 +153,8 @@ export const ChairCast: React.FC<{ keyboardTop: number; word: string }> = ({ key
           </div>
         </>
       )}
-      {visiting && pop > 0.01 && bubbleOut > 0.001 && (
-        <Bubble x={CHAIR_CX + 46} y={boxTop + 30} pop={pop * (0.85 + 0.15 * bubbleOut)} opacity={bubbleOut * swap} line={sentence} typed={typed} />
+      {locals.map(({ b, u, rel }) =>
+        u >= 0 && u < rel + FLOAT ? <Balloon key={b.label} mouth={mouthAt} hand={handAt} hover={hoverAt} local={u} t={t} {...b} release={rel} /> : null,
       )}
     </>
   );
@@ -663,57 +663,142 @@ const Fox: React.FC<Pose> = (p) => {
   );
 };
 
-/* ------------------------------------------------------------ bubble */
+/* ------------------------------------------------------------ balloon call-to-action */
+
+/** Balloon phases (s): blow up at the lips, rise to the hover spot, and once let go, float up out of frame. */
+const BLOW = 1.7;
+const RISE = 0.8;
+const FLOAT = 4.2;
+/** Float-away: time to pick up speed after the hand lets go (s), and the clearance above the frame top (px). */
+const FLOAT_ACCEL = 0.7;
+const FLOAT_CLEAR = 450;
+/** r: half-width of the balloon (design px); font: label size in balloon units (1 = r). */
+const BALLOON = {
+  like: { label: "LIKE", base: "#1e88ff", r: 150, font: 0.74 },
+  subscribe: { label: "SUBSCRIBE", base: "#ff2433", r: 175, font: 0.42 },
+} as const;
 
 /**
- * 3D speech bubble: a glossy face on top of an extruded "slab" (offset darker layer),
- * slightly tilted in perspective, with a 3D tail. It sizes itself to the current
- * sentence (laid out invisibly, typed text drawn on top, so it never grows mid-typing).
+ * Unit balloon (half-width 1), knot at the origin, body pointing up (−y): fuller at the
+ * top, tapering to a pinched neck, with a small tied knot below it.
  */
-const Bubble: React.FC<{ x: number; y: number; pop: number; opacity: number; line: string; typed: number }> = ({ x, y, pop, opacity, line, typed }) => {
-  const DEPTH = 12;
-  const R = 38;
-  const face: React.CSSProperties = {
-    position: "relative",
-    padding: "20px 32px 24px",
-    borderRadius: R,
-    border: "5px solid #121418",
-    background: "linear-gradient(180deg, #ffffff 0%, #f4f6fa 55%, #dfe4ec 100%)",
-    boxShadow: "inset 0 -8px 0 rgba(30,40,60,0.08), inset 0 3px 0 rgba(255,255,255,0.9)",
+const BODY_PATH =
+  "M 0 -2.2 C 0.62 -2.2 1 -1.77 1 -1.25 C 1 -0.67 0.45 -0.19 0.07 -0.05 L -0.07 -0.05 C -0.45 -0.19 -1 -0.67 -1 -1.25 C -1 -1.77 -0.62 -2.2 0 -2.2 Z";
+const KNOT_PATH = "M -0.07 -0.06 L 0.07 -0.06 L 0.13 0.09 Q 0 0.04 -0.13 0.09 Z";
+/** Centre of the round part, where the label sits (unit coords). */
+const LABEL_Y = -1.22;
+
+/**
+ * A glossy latex balloon. Blown up at the lips in a few puffs (lying on its side, neck at the
+ * mouth), it is tied off and rises upright to hover above the character's raised hand on a
+ * string, bobbing and swaying; finally the hand lets go and it floats all the way up and out
+ * of the top of the frame (no fade), swaying and trailing its string.
+ */
+const Balloon: React.FC<{
+  mouth: { x: number; y: number };
+  hand: { x: number; y: number };
+  hover: { x: number; y: number };
+  local: number;
+  /** seconds after `start` when the hand lets go */
+  release: number;
+  t: number;
+  label: string;
+  base: string;
+  r: number;
+  font: number;
+}> = ({ mouth, hand, hover, local: u, release: releaseAt, t, label, base, r: R, font }) => {
+  // --- size: inflated in a few puffs (each breath swells it a little more)
+  const blowK = Math.min(1, u / BLOW);
+  const breath = Math.sin(blowK * Math.PI * 4) * 0.035 * (1 - blowK);
+  const grow = 0.08 + 0.92 * Easing.inOut(Easing.cubic)(blowK) + breath;
+  // stretchy "boing" as it lifts off once tied
+  const settle = u > BLOW ? Math.sin((u - BLOW) * 18) * 0.05 * Math.max(0, 1 - (u - BLOW) / 0.6) : 0;
+  const r = R * Math.max(0.08, grow);
+
+  // --- knot position + orientation
+  const rise = interpolate(u, [BLOW, BLOW + RISE], [0, 1], { ...CLAMP, easing: Easing.inOut(Easing.cubic) });
+  // Float-away: picks up speed smoothly, then rises at a steady pace, sized so that exactly
+  // FLOAT s after release the balloon (and its trailing string) have cleared the frame top.
+  const tau = Math.max(0, u - releaseAt);
+  const freed = tau > 0;
+  const climb = (s: number) => s - FLOAT_ACCEL * (1 - Math.exp(-s / FLOAT_ACCEL)); // smooth accel → constant speed
+  const floatDist = hover.y + FLOAT_CLEAR;
+  const up = (floatDist * climb(tau)) / climb(FLOAT);
+  const drift = 90 * Math.min(1, tau / FLOAT) + Math.sin(tau * 1.7) * 22 * Math.min(1, tau);
+  const bobY = Math.sin(t * 2.2) * 10 * rise;
+  const swayX = Math.sin(t * 1.4 + 0.6) * 8 * rise;
+  const knot = {
+    x: mouth.x + (hover.x - mouth.x) * rise + swayX + drift,
+    y: mouth.y + (hover.y - mouth.y) * rise + bobY - up,
   };
+  // blowing: on its side pointing away from the lips (slightly up); held/floating: upright, swaying
+  const angle = 80 * (1 - rise) + (Math.sin(t * 1.4) * 5 + swayX * 0.4) * rise + Math.sin(tau * 1.7 + 1) * 6 * Math.min(1, tau);
+  const opacity = 1;
+
+  // --- string: tied on after blowing; runs to the hand while held, trails below once let go
+  const end = freed ? { x: knot.x - 24 + Math.sin(tau * 2.4) * 18, y: knot.y + 200 } : hand;
+  const midX = (knot.x + end.x) / 2 + Math.sin(t * 2.6) * 14;
+  const midY = (knot.y + end.y) / 2;
+  const stringOpacity = ramp(u, [BLOW, BLOW + 0.15], [0, 1]);
+
+  const textIn = ramp(u, [BLOW + RISE * 0.3, BLOW + RISE], [0, 1]);
+  const light = shade(base, 0.6);
+  const dark = shade(base, -0.45);
+  const gid = `balloon-${label}`;
+
   return (
-    <div
-      style={{
-        position: "absolute",
-        left: x,
-        top: y,
-        transform: `translateY(-100%) perspective(900px) rotateX(10deg) rotateY(-12deg) scale(${(0.3 + 0.7 * pop).toFixed(3)})`,
-        transformOrigin: "0% 100%",
-        opacity,
-        pointerEvents: "none",
-        zIndex: 6,
-        filter: "drop-shadow(0 18px 18px rgba(0,0,0,0.55))",
-      }}
-    >
-      <div style={{ position: "relative", display: "inline-block", maxWidth: 560, marginLeft: 24, marginBottom: 34 + DEPTH }}>
-        {/* extruded slab below the face */}
-        <div style={{ position: "absolute", inset: 0, transform: `translateY(${DEPTH}px)`, borderRadius: R, background: "linear-gradient(180deg, #9aa4b6, #5e6878)", border: "5px solid #121418" }} />
-        {/* tail: slab then face */}
-        <svg width={60} height={56} viewBox="0 0 60 56" style={{ position: "absolute", left: 14, bottom: -44 - DEPTH, overflow: "visible" }}>
-          <path d={`M 8 ${DEPTH - 4} L 2 ${50 + DEPTH * 0.4} L 40 ${DEPTH - 4} Z`} fill="#6e788a" stroke="#121418" strokeWidth={5} strokeLinejoin="round" />
-          <path d="M 8 0 L 2 48 L 40 0 Z" fill="#e4e8ef" stroke="#121418" strokeWidth={5} strokeLinejoin="round" />
-        </svg>
-        <div style={face}>
-          {/* covers the tail's top stroke where it joins the face */}
-          <div style={{ position: "absolute", left: 18, bottom: -6, width: 34, height: 10, background: "#e0e5ec" }} />
-          {/* glossy highlight band */}
-          <div style={{ position: "absolute", left: 22, right: 22, top: 8, height: 14, borderRadius: 999, background: "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0))" }} />
-          <div style={{ position: "relative", fontFamily: BODY_FONT, fontWeight: 800, fontSize: 44, lineHeight: 1.2, color: "#1b1d22", textShadow: "0 1px 0 #ffffff" }}>
-            <span style={{ visibility: "hidden" }}>{line}</span>
-            <span style={{ position: "absolute", left: 0, right: 0, top: 0 }}>{line.slice(0, typed)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <svg width={1} height={1} style={{ position: "absolute", left: 0, top: 0, overflow: "visible", zIndex: 6, opacity }}>
+      <defs>
+        <radialGradient id={`${gid}-fill`} cx="0.36" cy="0.3" r="0.85">
+          <stop offset="0" stopColor={light} />
+          <stop offset="0.45" stopColor={base} />
+          <stop offset="0.9" stopColor={dark} />
+          <stop offset="1" stopColor={shade(base, -0.25)} />
+        </radialGradient>
+        <filter id={`${gid}-soft`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation={0.04} />
+        </filter>
+        <filter id={`${gid}-shadow`} x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx={0} dy={0.08} stdDeviation={0.07} floodColor="#000" floodOpacity={0.45} />
+        </filter>
+      </defs>
+      {u >= BLOW && (
+        <path
+          d={`M ${knot.x.toFixed(1)} ${knot.y.toFixed(1)} Q ${midX.toFixed(1)} ${midY.toFixed(1)} ${end.x.toFixed(1)} ${end.y.toFixed(1)}`}
+          stroke="#f4f1ea"
+          strokeWidth={3}
+          fill="none"
+          opacity={stringOpacity}
+        />
+      )}
+      <g transform={`translate(${knot.x.toFixed(1)} ${knot.y.toFixed(1)}) rotate(${angle.toFixed(2)}) scale(${(r * (1 + settle)).toFixed(2)} ${(r * (1 - settle)).toFixed(2)})`}>
+        <path d={BODY_PATH} fill={`url(#${gid}-fill)`} filter={`url(#${gid}-shadow)`} />
+        {/* rim, then glossy highlights (big soft one top-left, a sharp glint, faint bounce light) */}
+        <path d={BODY_PATH} fill="none" stroke={shade(base, -0.55)} strokeWidth={0.04} opacity={0.5} />
+        <ellipse cx={-0.42} cy={-1.72} rx={0.26} ry={0.14} fill="#ffffff" opacity={0.8} transform="rotate(-35 -0.42 -1.72)" filter={`url(#${gid}-soft)`} />
+        <ellipse cx={-0.68} cy={-1.36} rx={0.06} ry={0.06} fill="#ffffff" opacity={0.7} />
+        <ellipse cx={0.5} cy={-0.62} rx={0.22} ry={0.07} fill="#ffffff" opacity={0.18} transform="rotate(-50 0.5 -0.62)" />
+        <path d={KNOT_PATH} fill={dark} />
+        {textIn > 0 && (
+          <text
+            x={0}
+            y={LABEL_Y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontFamily={DISPLAY_FONT}
+            fontSize={font}
+            fill="#ffffff"
+            stroke={dark}
+            strokeWidth={0.05}
+            paintOrder="stroke"
+            opacity={textIn}
+            // stays (nearly) upright whatever the balloon does, keeping just a hint of its sway
+            transform={`rotate(${(-angle * 0.8).toFixed(2)} 0 ${LABEL_Y})`}
+          >
+            {label}
+          </text>
+        )}
+      </g>
+    </svg>
   );
 };
