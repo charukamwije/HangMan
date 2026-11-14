@@ -27,7 +27,9 @@ const SEAT_Y = 238;
 /** How far the owl rises above the card's top edge (Header reserves this headroom). */
 export const OWL_ABOVE = SEAT_Y;
 /** Bucket handle pivot, inside BOX. */
-const PIVOT = { x: 74, y: 156 };
+const PIVOT = { x: 266, y: 156 }; // on the owl's right (viewer's right); the throw swings it across in front of the owl
+/** The owl is drawn symmetric about this x; the holding wing is mirrored across it to reach the right-hand bucket. */
+const OWL_MID_X = 170;
 
 const G = 3200; // px/s² on the 4K stage
 const EMIT = [0.22, 0.34] as const;
@@ -45,7 +47,17 @@ const bucketAngle = (s: number) =>
     easing: Easing.inOut(Easing.quad),
   });
 
-type Parcel = { te: number; T: number; m: { x: number; y: number }; v: { x: number; y: number }; hit: { x: number; y: number } };
+/**
+ * Refill (seconds into a throw, after the bucket has swung back to rest at 0.95 s):
+ * the wall tap's lever opens, a stream pours into the bucket and fills it, the lever closes.
+ */
+const REFILL = { open: [0.95, 1.05], pour: [1.02, 1.55], fill: [1.08, 1.58], close: [1.55, 1.65] } as const;
+/** Tap spout outlet in BOX coordinates: high enough that the swinging bucket clears the tap. */
+const SPOUT = { x: PIVOT.x + 10, y: 50 };
+/** Where the pour meets the water surface (BOX coordinates, bucket at rest). */
+const surfaceY = (fill: number) => PIVOT.y + 34 + 10 * (1 - fill);
+
+type Parcel ={ te: number; T: number; m: { x: number; y: number }; v: { x: number; y: number }; hit: { x: number; y: number } };
 
 export const HintOwl: React.FC<{
   throwFrames: readonly number[];
@@ -105,6 +117,17 @@ export const HintOwl: React.FC<{
 
   const splashT = active ? s - (EMIT[0] + FLIGHT - 0.015) : -1;
 
+  // Bucket level: empties during the throw, then refills from the tap once it is back at rest.
+  const fill = !active ? 1 : s < REFILL.open[0] ? 1 - ramp(s, [0.2, 0.34], [0, 1]) : ramp(s, [...REFILL.fill], [0, 1]);
+  const tapOpen = active ? Math.min(ramp(s, [...REFILL.open], [0, 1]), 1 - ramp(s, [...REFILL.close], [0, 1])) : 0;
+  // Pour: the head falls from the spout when the tap opens, the tail follows once it closes.
+  const fallY = (dt: number) => (dt <= 0 ? 0 : 420 * dt + 2400 * dt * dt);
+  const pourEnd = Math.min(surfaceY(fill) + bob, PIVOT.y + 36 + bob); // never past the bucket's front lip
+  const pourHead = active ? Math.min(SPOUT.y + fallY(s - REFILL.pour[0]), pourEnd) : SPOUT.y;
+  const pourTail = active ? SPOUT.y + fallY(s - REFILL.pour[1]) : SPOUT.y;
+  const pouring = active && s >= REFILL.pour[0] && pourTail < pourEnd;
+  const splashing = pouring && pourHead >= pourEnd - 0.5;
+
   return (
     <>
       <svg width={cardW} height={cardH} style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}>
@@ -128,6 +151,13 @@ export const HintOwl: React.FC<{
         {live.length > 1 && <Stream pts={live} s={s} />}
       </svg>
 
+      {/* wall tap above the bucket (fixed to the wall: it doesn't bob with the owl) */}
+      <div style={{ position: "absolute", left: boxLeft, top: boxTop, width: BOX.w, height: BOX.h, pointerEvents: "none" }}>
+        <svg viewBox={`0 0 ${BOX.w} ${BOX.h}`} width={BOX.w} height={BOX.h} style={{ overflow: "visible", filter: "drop-shadow(0 8px 10px rgba(0,0,0,0.55))" }}>
+          <Tap open={tapOpen} />
+        </svg>
+      </div>
+
       {/* the owl + bucket on the card's top-right corner */}
       <div style={{ position: "absolute", left: boxLeft, top: boxTop + bob, width: BOX.w, height: BOX.h, pointerEvents: "none" }}>
         <svg viewBox={`0 0 ${BOX.w} ${BOX.h}`} width={BOX.w} height={BOX.h} style={{ overflow: "visible", filter: "drop-shadow(0 12px 14px rgba(0,0,0,0.6))" }}>
@@ -136,11 +166,18 @@ export const HintOwl: React.FC<{
             <Owl look={look} blink={Math.max(blink, 0.55 * laugh, idle.squint)} laugh={laugh} breathe={breathe} idle={idle} />
           </g>
           <g transform={`translate(${PIVOT.x} ${PIVOT.y}) rotate(${angle.toFixed(1)})`}>
-            <Bucket fill={active ? 1 - ramp(s, [0.2, 0.34], [0, 1]) : 1} />
+            <Bucket fill={fill} />
           </g>
           <HoldingWing />
         </svg>
       </div>
+
+      {/* the refill pour, on top so it reaches the water surface inside the bucket's mouth */}
+      {pouring && (
+        <svg width={BOX.w} height={BOX.h} viewBox={`0 0 ${BOX.w} ${BOX.h}`} style={{ position: "absolute", left: boxLeft, top: boxTop, overflow: "visible", pointerEvents: "none" }}>
+          <TapPour top={Math.max(SPOUT.y, pourTail)} bottom={pourHead} t={s} splash={splashing} />
+        </svg>
+      )}
     </>
   );
 };
@@ -651,23 +688,132 @@ const Owl: React.FC<{ look: number; blink: number; laugh: number; breathe: numbe
   );
 };
 
-/** The near wing reaching out to the bucket handle; primaries curl around it. */
+/** The near wing reaching out to the bucket handle (mirrored to the owl's right); primaries curl around it. */
+/** Wing art is authored for a left-hand bucket; this is the pivot x in that unmirrored space. */
+const WX = 2 * OWL_MID_X - PIVOT.x;
 const HoldingWing: React.FC = () => (
-  <g>
+  <g transform={`translate(${2 * OWL_MID_X} 0) scale(-1 1)`}>
     <path
-      d={`M 128 146 C 112 150 96 152 ${PIVOT.x + 6} ${PIVOT.y - 6} C 98 166 116 170 132 172 Z`}
+      d={`M 128 146 C 112 150 96 152 ${WX + 6} ${PIVOT.y - 6} C 98 166 116 170 132 172 Z`}
       fill="url(#owlWing)"
       stroke="#2a1a0b"
       strokeWidth={2}
     />
     {[0, 1, 2, 3].map((k) => (
-      <path key={k} d={`M ${PIVOT.x + 6 + k * 9} ${PIVOT.y - 4 + k * 2} q -10 4 -8 12`} stroke="#2a1a0b" strokeWidth={6} strokeLinecap="round" fill="none" />
+      <path key={k} d={`M ${WX + 6 + k * 9} ${PIVOT.y - 4 + k * 2} q -10 4 -8 12`} stroke="#2a1a0b" strokeWidth={6} strokeLinecap="round" fill="none" />
     ))}
     {[0, 1, 2].map((k) => (
       <path key={`b${k}`} d={`M ${100 + k * 10} ${154 + k * 3} q 6 4 12 0`} stroke="#c9a676" strokeWidth={2} fill="none" opacity={0.6} />
     ))}
   </g>
 );
+
+/** Supply pipe (BOX coordinates): riser x, overhead run height (clear of the owl's ear tufts
+ * and the open lever), and how far right it runs (well past the screen edge). */
+const RISER_X = 330;
+const RUN_Y = -62;
+const RUN_END = 1400;
+const COUPLINGS = [410];
+const CLAMPS = [372, 470];
+
+/**
+ * Brass tap (BOX coordinates) fed by a supply pipe that runs off the right of the screen,
+ * a curved spout ending at SPOUT,
+ * and a red-knobbed lever on the valve that swings up as `open` goes 0 → 1.
+ */
+const Tap: React.FC<{ open: number }> = ({ open }) => {
+  const pipeY = SPOUT.y - 22; // tap body centreline
+  const valveX = (SPOUT.x + RISER_X) / 2;
+  // riser up from the tap, rounded elbow, then the long run to the right
+  const supply = `M ${RISER_X} ${pipeY} L ${RISER_X} ${RUN_Y + 16} Q ${RISER_X} ${RUN_Y} ${RISER_X + 16} ${RUN_Y} L ${RUN_END} ${RUN_Y}`;
+  return (
+    <g>
+      <defs>
+        <linearGradient id="tapBrass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#6b4a12" />
+          <stop offset="0.3" stopColor="#f3d27a" />
+          <stop offset="0.55" stopColor="#c8952f" />
+          <stop offset="1" stopColor="#4f360c" />
+        </linearGradient>
+        <radialGradient id="tapFlange" cx="0.4" cy="0.35" r="0.7">
+          <stop offset="0" stopColor="#f6dc8e" />
+          <stop offset="0.6" stopColor="#b8862b" />
+          <stop offset="1" stopColor="#5a3d0e" />
+        </radialGradient>
+      </defs>
+      {/* supply pipe: rises from the valve body, then runs right above the owl's head and off the edge of the screen */}
+      <path d={supply} stroke="#3d2a08" strokeWidth={17} fill="none" strokeLinejoin="round" />
+      <path d={supply} stroke="#c8952f" strokeWidth={13} fill="none" strokeLinejoin="round" />
+      <path d={`M ${RISER_X + 18} ${RUN_Y - 3.5} L ${RUN_END} ${RUN_Y - 3.5}`} stroke="#fff4c8" strokeWidth={2.2} opacity={0.75} />
+      <path d={`M ${RISER_X + 18} ${RUN_Y + 4} L ${RUN_END} ${RUN_Y + 4}`} stroke="#6b4a12" strokeWidth={3} opacity={0.8} />
+      <path d={`M ${RISER_X - 3.5} ${RUN_Y + 18} L ${RISER_X - 3.5} ${pipeY - 18}`} stroke="#fff4c8" strokeWidth={2.2} opacity={0.75} />
+      <path d={`M ${RISER_X + 4} ${RUN_Y + 18} L ${RISER_X + 4} ${pipeY - 18}`} stroke="#6b4a12" strokeWidth={3} opacity={0.8} />
+      {/* couplings along the run and the riser, and wall clamps holding it up */}
+      {COUPLINGS.map((x) => (
+        <rect key={x} x={x - 5} y={RUN_Y - 10.5} width={10} height={21} rx={2} fill="url(#tapBrass)" stroke="#3d2a08" strokeWidth={2} />
+      ))}
+      <rect x={RISER_X - 10.5} y={(RUN_Y + pipeY) / 2 - 5} width={21} height={10} rx={2} fill="url(#tapBrass)" stroke="#3d2a08" strokeWidth={2} />
+      {CLAMPS.map((x) => (
+        <g key={x}>
+          <rect x={x - 4} y={RUN_Y - 22} width={8} height={14} fill="#2a2a2e" />
+          <path d={`M ${x - 9} ${RUN_Y - 8} Q ${x} ${RUN_Y + 16} ${x + 9} ${RUN_Y - 8}`} stroke="#2a2a2e" strokeWidth={4} fill="none" />
+          <circle cx={x} cy={RUN_Y - 18} r={2.2} fill="#8a8a92" />
+        </g>
+      ))}
+      {/* tap body: short stub from the riser to the curved spout */}
+      <path d={`M ${RISER_X - 6} ${pipeY} L ${SPOUT.x + 14} ${pipeY} Q ${SPOUT.x} ${pipeY} ${SPOUT.x} ${pipeY + 14} L ${SPOUT.x} ${SPOUT.y - 3}`} stroke="#3d2a08" strokeWidth={17} fill="none" strokeLinecap="butt" />
+      <path d={`M ${RISER_X - 6} ${pipeY} L ${SPOUT.x + 14} ${pipeY} Q ${SPOUT.x} ${pipeY} ${SPOUT.x} ${pipeY + 14} L ${SPOUT.x} ${SPOUT.y - 3}`} stroke="url(#tapBrass)" strokeWidth={13} fill="none" strokeLinecap="butt" />
+      <path d={`M ${RISER_X - 8} ${pipeY - 3} L ${SPOUT.x + 16} ${pipeY - 3}`} stroke="#fff4c8" strokeWidth={2} opacity={0.7} strokeLinecap="round" />
+      {/* elbow fitting where the riser meets the tap */}
+      <circle cx={RISER_X} cy={pipeY} r={10} fill="url(#tapFlange)" stroke="#3d2a08" strokeWidth={2} />
+      {/* spout mouth */}
+      <rect x={SPOUT.x - 9} y={SPOUT.y - 6} width={18} height={7} rx={2} fill="url(#tapBrass)" stroke="#3d2a08" strokeWidth={2} />
+      <ellipse cx={SPOUT.x} cy={SPOUT.y + 1} rx={6} ry={1.8} fill="#1d1404" />
+      {/* valve bonnet + lever (closed: lying along the pipe; open: swung up) */}
+      <rect x={valveX - 8} y={pipeY - 20} width={16} height={14} rx={3} fill="url(#tapBrass)" stroke="#3d2a08" strokeWidth={2} />
+      <g transform={`rotate(${(75 * open).toFixed(1)} ${valveX} ${pipeY - 20})`}>
+        <path d={`M ${valveX} ${pipeY - 20} L ${valveX - 30} ${pipeY - 24}`} stroke="#3d2a08" strokeWidth={7} strokeLinecap="round" />
+        <path d={`M ${valveX} ${pipeY - 20} L ${valveX - 30} ${pipeY - 24}`} stroke="url(#tapBrass)" strokeWidth={4.5} strokeLinecap="round" />
+        <circle cx={valveX - 33} cy={pipeY - 24} r={7} fill="#d23a2e" stroke="#5a1410" strokeWidth={2} />
+        <circle cx={valveX - 35} cy={pipeY - 26.5} r={2.2} fill="#ffffff" opacity={0.7} />
+      </g>
+      <circle cx={valveX} cy={pipeY - 20} r={3.5} fill="#f3d27a" stroke="#3d2a08" strokeWidth={1.5} />
+    </g>
+  );
+};
+
+/** The refill stream from the tap: a glassy column between `top` and `bottom`, with a little splash at the surface. */
+const TapPour: React.FC<{ top: number; bottom: number; t: number; splash: boolean }> = ({ top, bottom, t, splash }) => {
+  if (bottom - top < 1) return null;
+  const x = SPOUT.x;
+  const wob = (y: number) => Math.sin(y * 0.12 - t * 40) * 0.9;
+  const w0 = 7; // at the spout
+  const w1 = 4.5; // thinner as it speeds up
+  const n = 8;
+  const pts = Array.from({ length: n + 1 }, (_, k) => {
+    const y = top + ((bottom - top) * k) / n;
+    const w = w0 + (w1 - w0) * ((y - SPOUT.y) / Math.max(1, bottom - SPOUT.y));
+    return { y, w, dx: wob(y) };
+  });
+  const body =
+    `M ${pts.map((p) => `${x - p.w + p.dx} ${p.y}`).join(" L ")} ` +
+    `L ${[...pts].reverse().map((p) => `${x + p.w + p.dx} ${p.y}`).join(" L ")} Z`;
+  return (
+    <g>
+      <path d={body} fill="url(#bucketWater)" opacity={0.9} />
+      <path d={body} fill="none" stroke="rgba(32,96,160,0.8)" strokeWidth={1.2} />
+      <path d={`M ${pts.map((p) => `${x - p.w * 0.35 + p.dx} ${p.y}`).join(" L ")}`} stroke="#ffffff" strokeWidth={1.6} opacity={0.75} fill="none" />
+      {splash && (
+        <g>
+          <ellipse cx={x} cy={bottom} rx={13 + 3 * Math.sin(t * 50)} ry={3} fill="none" stroke="#e6f5ff" strokeWidth={1.8} opacity={0.8} />
+          {[-1, 1].map((d) => (
+            <circle key={d} cx={x + d * (8 + 3 * Math.abs(Math.sin(t * 37 + d)))} cy={bottom - 4 - 4 * Math.abs(Math.sin(t * 31 + d))} r={1.8} fill="#e6f5ff" opacity={0.85} />
+          ))}
+        </g>
+      )}
+    </g>
+  );
+};
 
 /** Wooden bucket hanging from its handle; local origin = the handle pivot. `fill` 1 = full. */
 const Bucket: React.FC<{ fill: number }> = ({ fill }) => (

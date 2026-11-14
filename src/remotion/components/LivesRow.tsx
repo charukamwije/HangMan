@@ -203,10 +203,24 @@ const ESCAPE = {
   drag: 0.9, // horizontal air drag, 1/s
   spin: 260, // constant tumble rate set by the push-off, deg/s (angular momentum is conserved)
 } as const;
+/**
+ * Parachute (seconds after the hop): a short tumbling freefall, then the canopy pops open,
+ * the pawn brakes hard towards a slow terminal speed, swings upright under it and drifts
+ * down-right, swaying, off the bottom of the screen.
+ */
+const CHUTE = {
+  deployAt: 0.3, // freefall before the canopy opens
+  open: 0.22, // canopy inflate time
+  terminal: 640, // px/s descent under canopy
+  brake: 6, // 1/s, how fast it slows from freefall to terminal speed
+  driftX: 120, // px/s steady drift to the right under canopy
+  sway: 9, // deg pendulum sway under canopy
+  gone: 3.3, // off screen by now (≥ 1.7 k px below the ledge)
+} as const;
 const walkSpeed = (dist: number) => Math.max(ESCAPE.minSpeed, dist / ESCAPE.maxWalk);
 const walkTime = (dist: number) => dist / walkSpeed(dist);
 /** Seconds after the guess when the pawn is surely off screen. */
-const escapeEnd = (dist: number) => ESCAPE.walkAt + walkTime(dist) + ESCAPE.crouch + 1.7;
+const escapeEnd = (dist: number) => ESCAPE.walkAt + walkTime(dist) + ESCAPE.crouch + CHUTE.gone;
 
 /** Frustrated outbursts; one is picked per lost life (seeded by the guess frame). */
 const FRUSTRATION = ["NOOO!", "UGH!", "WHY ME?!", "NOT FAIR!", "ARGH!", "I QUIT!", "SERIOUSLY?!", "COME ON!", "OH NO!", "GRRR!", "SO RUDE!", "UNBELIEVABLE!"];
@@ -313,7 +327,7 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
   const walkDur = walkTime(walkDist);
   const crouchAt = ESCAPE.walkAt + walkDur;
   const hopAt = crouchAt + ESCAPE.crouch;
-  if (s > hopAt + 1.7) return <div style={{ width: PAWN, height: PAWN * 1.6 }} />; // long gone; keep its slot
+  if (s > hopAt + CHUTE.gone) return <div style={{ width: PAWN, height: PAWN * 1.6 }} />; // long gone; keep its slot
 
   const punch = spring({ frame: since, fps, config: { damping: 12, stiffness: 420, mass: 0.6 } });
   const scale = interpolate(punch, [0, 1], [1.3, 1]);
@@ -335,12 +349,30 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
   const airborne = s >= hopAt;
   const stretch = airborne ? ramp(air, [0, 0.06, 0.22], [0, 1, 0]) : 0;
   // Ballistic flight: constant gravity (y), linear air drag on the forward speed (x).
-  const hopX = airborne ? (ESCAPE.hopX / ESCAPE.drag) * (1 - Math.exp(-ESCAPE.drag * air)) : 0;
-  const hopY = airborne ? -ESCAPE.hopUp * air + 0.5 * ESCAPE.g * air * air : 0;
-  const vy = airborne ? -ESCAPE.hopUp + ESCAPE.g * air : 0; // px/s, + = falling
+  const fall = Math.min(air, CHUTE.deployAt); // freefall part
+  const chuteT = Math.max(0, air - CHUTE.deployAt); // time under canopy
+  const ballX = (t: number) => (ESCAPE.hopX / ESCAPE.drag) * (1 - Math.exp(-ESCAPE.drag * t));
+  const ballY = (t: number) => -ESCAPE.hopUp * t + 0.5 * ESCAPE.g * t * t;
+  const vDeploy = -ESCAPE.hopUp + ESCAPE.g * CHUTE.deployAt;
+  // Under canopy: speed decays exponentially from the freefall speed to the terminal speed.
+  const decay = (1 - Math.exp(-CHUTE.brake * chuteT)) / CHUTE.brake;
+  const chuteY = CHUTE.terminal * chuteT + (vDeploy - CHUTE.terminal) * decay;
+  const vxDeploy = ESCAPE.hopX * Math.exp(-ESCAPE.drag * CHUTE.deployAt);
+  const chuteX = CHUTE.driftX * chuteT + (vxDeploy - CHUTE.driftX) * decay;
+  const hopX = airborne ? ballX(fall) + chuteX : 0;
+  const hopY = airborne ? ballY(fall) + chuteY : 0;
+  const vy = !airborne ? 0 : chuteT > 0 ? CHUTE.terminal + (vDeploy - CHUTE.terminal) * Math.exp(-CHUTE.brake * chuteT) : -ESCAPE.hopUp + ESCAPE.g * air; // px/s, + = falling
   // Tumble: the push-off gives a constant spin about the centre of mass (eased in over the
   // first 0.08 s of the push so it doesn't snap), the same direction it is travelling.
-  const spin = airborne ? ESCAPE.spin * Math.max(0, air - 0.04 * (1 - Math.exp(-air / 0.04))) : 0;
+  // Once the canopy bites, it swings back upright and settles into a gentle pendulum sway.
+  const tumble = (t: number) => ESCAPE.spin * Math.max(0, t - 0.04 * (1 - Math.exp(-t / 0.04)));
+  const spin0 = tumble(fall);
+  const spin = !airborne
+    ? 0
+    : chuteT > 0
+      ? spin0 * Math.exp(-4.5 * chuteT) * Math.cos(5 * chuteT) + CHUTE.sway * Math.sin(2.6 * chuteT) * (1 - Math.exp(-3 * chuteT))
+      : spin0;
+  const canopy = chuteT > 0 ? spring({ frame: Math.round(chuteT * fps), fps, config: { damping: 8, stiffness: 220, mass: 0.5 } }) : 0;
   // Motion blur + stretch along the fall direction once it is really moving.
   const speedBlur = Math.max(0, vy - 900) / 2600;
   const pose = airborne ? Easing.out(Easing.cubic)(ramp(air, [0, 0.18], [0, 1])) : 0;
@@ -370,6 +402,7 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
         }}
       >
         {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="legs" color={theme.piece} />}
+        {canopy > 0.001 && <Parachute open={canopy} t={chuteT} id={`chute-${seed}`} />}
         <Pawn color={theme.piece} size={PAWN} style={{ position: "relative" }} />
         {grow > 0 && <Limbs walk={phase} pose={pose} grow={grow} crouch={crouch} part="arms" color={theme.piece} />}
       </div>
@@ -377,6 +410,117 @@ const LifePawn: React.FC<{ theme: Theme; since: number; fps: number; restore?: n
         <SpeechBubble text={word} x={walkDist + PAWN * 0.55} y={lift - 26} pop={bubbleIn} opacity={bubbleO} wobble={Math.sin(s * 22) * 2 * (1 - ramp(s, [crouchAt, crouchAt + 0.4], [0, 1]))} />
       )}
     </div>
+  );
+};
+
+/** Rainbow canopy panels, left → right: [face, right-edge shade, underside band]. */
+const PANELS = [
+  ["#9cc63f", "#86b236", "#5f9a3e"],
+  ["#f7c933", "#ecb928", "#e9a52a"],
+  ["#f0542e", "#e6402a", "#d8322a"],
+  ["#bf62a8", "#ad4f9f", "#973f98"],
+  ["#5e5fa8", "#4f4f9c", "#3e3c8c"],
+] as const;
+/** Canopy geometry on the pawn's 100 × 160 grid. */
+const RIM_L = -95;
+const RIM_R = 195;
+const RIM_Y = -50; // outer corners; inner seam points sit higher, following the dome
+const RIM_LIFT = 32;
+const APEX_Y = -195;
+const SCALLOP = 30; // how far each panel's bottom edge arches up
+const BAND = 22; // underside band thickness along each panel's bottom
+/** Spreader bar held in the raised hands (arms fully up, `pose` = 1). */
+const BAR = { l: 18, r: 82, y: 44 } as const;
+
+/**
+ * Rainbow parachute above the pawn (same 100 × 160 grid, so it rotates with it):
+ * five rounded panels with a darker right edge and a deeper underside band along each
+ * arched bottom, lines fanning down to a spreader bar the pawn holds overhead.
+ * `open` 0 → 1 (overshooting spring) inflates it from a narrow bundle; `t` (seconds
+ * under canopy) drives a gentle breathing ripple.
+ */
+const Parachute: React.FC<{ open: number; t: number; id: string }> = ({ open, t, id }) => {
+  const breathe = 1 + 0.035 * Math.sin(t * 7.5);
+  const sx = (0.18 + 0.82 * open) * breathe;
+  const sy = Math.max(0.05, open) * (2 - breathe);
+  const cx = (RIM_L + RIM_R) / 2;
+  const n = PANELS.length;
+  // Canopy points in grid units after the inflate scale (about the rim centre).
+  const px = (x: number) => cx + (x - cx) * sx;
+  const py = (y: number) => RIM_Y + (y - RIM_Y) * sy;
+  // Seam points along the bottom: corners lowest, inner seams lifted with the dome.
+  const seams = Array.from({ length: n + 1 }, (_, i) => [px(RIM_L + ((RIM_R - RIM_L) * i) / n), py(RIM_Y - RIM_LIFT * Math.sin((i / n) * Math.PI))] as const);
+  const [x0, y0] = seams[0];
+  const [xn, yn] = seams[n];
+  const arc = (i: number) => {
+    const [ax, ay] = seams[i];
+    const [bx, by] = seams[i + 1];
+    return `Q ${(ax + bx) / 2} ${(ay + by) / 2 - SCALLOP * sy} ${bx} ${by}`;
+  };
+  // Silhouette: a round dome over the top (near-vertical sides), arched panel bottoms back along the base.
+  const dome =
+    `M ${x0} ${y0} C ${px(RIM_L - 10)} ${py(APEX_Y + 40)}, ${px(cx - 120)} ${py(APEX_Y)}, ${px(cx)} ${py(APEX_Y)} ` +
+    `C ${px(cx + 120)} ${py(APEX_Y)}, ${px(RIM_R + 10)} ${py(APEX_Y + 40)}, ${xn} ${yn} ` +
+    Array.from({ length: n }, (_, k) => {
+      const i = n - 1 - k;
+      const [ax, ay] = seams[i];
+      const [bx, by] = seams[i + 1];
+      return `Q ${(ax + bx) / 2} ${(ay + by) / 2 - SCALLOP * sy} ${ax} ${ay}`;
+    }).join(" ") +
+    " Z";
+  // Panel seams are rays fanning up from the bar: x of seam `f` (fractional index) at height y.
+  const fanY = BAR.y + 300;
+  const seamX = (f: number, y: number) => {
+    const i = Math.min(n - 1, Math.floor(f));
+    const k = f - i;
+    const sxA = seams[i][0] + (seams[i + 1][0] - seams[i][0]) * k;
+    const syA = seams[i][1] + (seams[i + 1][1] - seams[i][1]) * k;
+    return cx + (sxA - cx) * ((fanY - y) / (fanY - syA));
+  };
+  const top = py(APEX_Y) - 60;
+  const bottom = BAR.y;
+  const strip = (f0: number, f1: number, edgeL: boolean, edgeR: boolean) =>
+    [
+      `${edgeL ? -2000 : seamX(f0, top)},${top}`,
+      `${edgeR ? 2000 : seamX(f1, top)},${top}`,
+      `${seamX(f1, bottom)},${bottom}`,
+      `${seamX(f0, bottom)},${bottom}`,
+    ].join(" ");
+  const lineOpacity = 0.9 * Math.min(1, open * 2);
+
+  return (
+    <svg viewBox="0 0 100 160" width={PAWN} height={PAWN * 1.6} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+      <defs>
+        <clipPath id={`${id}-clip`}>
+          <path d={dome} />
+        </clipPath>
+      </defs>
+      {/* suspension lines: each seam point fans down to the nearer end of the spreader bar */}
+      <g stroke="#ece6da" strokeWidth={2.2} opacity={lineOpacity}>
+        {seams.map(([x, y], i) => {
+          const toLeft = i < n / 2;
+          return <line key={i} x1={x} y1={y} x2={toLeft ? BAR.l + 3 : BAR.r - 3} y2={BAR.y} />;
+        })}
+      </g>
+      {/* canopy */}
+      <g clipPath={`url(#${id}-clip)`}>
+        {PANELS.map(([face, edge], i) => (
+          <React.Fragment key={i}>
+            <polygon points={strip(i, i + 1, i === 0, i === n - 1)} fill={face} />
+            {/* darker sliver down the right side of each panel */}
+            <polygon points={strip(i + 0.84, i + 1, false, i === n - 1)} fill={edge} />
+          </React.Fragment>
+        ))}
+        {/* underside band hugging each arched bottom edge */}
+        {PANELS.map(([, , under], i) => (
+          <path key={`u${i}`} d={`M ${seams[i][0]} ${seams[i][1]} ${arc(i)}`} fill="none" stroke={under} strokeWidth={BAND * 2 * sy} />
+        ))}
+        {/* soft top-left sheen */}
+        <ellipse cx={px(cx - 60)} cy={py(APEX_Y + 40)} rx={110 * sx} ry={50 * sy} fill="#ffffff" opacity={0.12} />
+      </g>
+      {/* spreader bar */}
+      <rect x={BAR.l} y={BAR.y - 4} width={BAR.r - BAR.l} height={8} rx={4} fill="#2b2b2f" stroke="#ece6da" strokeWidth={1.4} opacity={Math.min(1, open * 2)} />
+    </svg>
   );
 };
 
