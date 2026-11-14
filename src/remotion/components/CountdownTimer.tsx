@@ -12,7 +12,7 @@ import { DESIGN_WIDTH, TOP_ROW } from "../constants";
 export const CLOCK = { width: 400, height: 222, padding: "18px 0 22px", radius: 30, label: 30 } as const;
 
 /**
- * Red seven-segment LED clock "00:29" → "00:00" (1 Hz). Visible from frame 0. Below 00:08 it
+ * Seven-segment LED clock "00:29" → "00:00" (1 Hz): the theme's neon accent for the first 20 s, red after. Visible from frame 0. Below 00:08 it
  * enters stress mode: every tick it punches (scale + glow) on the exact frames
  * the vignette throbs, because both read the same `Stress` value.
  */
@@ -40,30 +40,36 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
   const led = Math.min(1, (0.88 + 0.12 * flash + 0.12 * pulse * level) * doneBlink);
 
   const light = theme.mode === "light";
-  const ledOn = light ? LED_ON_LIGHT : LED_ON;
-  const ledOff = light ? LED_OFF_LIGHT : LED_OFF;
+  // The theme's neon accent for the first GREEN_SECONDS of the reel (00:29 → 00:10), red from then on. The loop
+  // reset counts back up past 00:10, so the replay opens green again.
+  const green = remaining > COUNTDOWN_FROM - GREEN_SECONDS;
+  const c = green ? rgbOf(theme.accent) : RED; // "r,g,b" of the LED colour
+  const ledOn = green ? theme.accent : light ? LED_ON_LIGHT : LED_ON;
+  const ledOff = light ? `rgba(${c},0.08)` : `rgba(${c},0.07)`;
   // Light themes: cream glass panel (same as the header card) with a soft warm shadow; red ring/glow only under stress.
   const panelStyle: React.CSSProperties = light
     ? {
-        background: `radial-gradient(120% 90% at 50% 40%, rgba(255,60,40,${(0.1 * pulse * level).toFixed(3)}), transparent 70%), linear-gradient(180deg, ${theme.panel[0]}, ${theme.panel[1]})`,
+        background: `radial-gradient(120% 90% at 50% 40%, rgba(${c},${(0.1 * pulse * level).toFixed(3)}), transparent 70%), linear-gradient(180deg, ${theme.panel[0]}, ${theme.panel[1]})`,
         border: `${borderW}px solid ${theme.panelBorder}`,
         boxShadow: [
-          `0 0 0 3px rgba(220,40,30,${(0.12 + 0.4 * level).toFixed(3)})`,
-          `0 0 ${glow * level}px rgba(255,40,30,${(0.35 * level).toFixed(3)})`,
-          `inset 0 0 ${30 + 40 * pulse}px rgba(255,40,30,${(0.12 * pulse * level).toFixed(3)})`,
+          `0 0 0 3px rgba(${c},${(0.12 + 0.4 * level).toFixed(3)})`,
+          `0 0 ${glow * level}px rgba(${c},${(0.35 * level).toFixed(3)})`,
+          `inset 0 0 ${30 + 40 * pulse}px rgba(${c},${(0.12 * pulse * level).toFixed(3)})`,
           "inset 0 3px 0 rgba(255,255,255,0.8)",
           `0 24px 48px rgba(${theme.shade},0.22)`,
         ].join(", "),
       }
     : {
         // Smoked-glass LED panel in a dark bezel.
-        background: `radial-gradient(120% 90% at 50% 40%, rgba(60,0,0,${0.55 + 0.25 * pulse * level}), rgba(8,0,0,0.95) 70%), #050000`,
-        border: `${borderW}px solid #1a0505`,
+        background: green
+          ? `radial-gradient(120% 90% at 50% 40%, rgba(${c},${0.12 + 0.06 * pulse * level}), rgba(4,5,0,0.95) 70%), #030400`
+          : `radial-gradient(120% 90% at 50% 40%, rgba(60,0,0,${0.55 + 0.25 * pulse * level}), rgba(8,0,0,0.95) 70%), #050000`,
+        border: `${borderW}px solid ${green ? "#121405" : "#1a0505"}`,
         boxShadow: [
-          `0 0 0 3px rgba(255,40,30,${0.25 + 0.35 * level})`,
-          `0 0 ${glow}px rgba(255,30,20,${0.35 + 0.35 * level})`,
-          `0 0 ${glow * 2.2 * level}px rgba(255,30,20,0.35)`,
-          `inset 0 0 ${40 + 60 * pulse}px rgba(255,30,20,${(0.12 + 0.3 * pulse * level).toFixed(3)})`,
+          `0 0 0 3px rgba(${c},${0.25 + 0.35 * level})`,
+          `0 0 ${glow}px rgba(${c},${0.35 + 0.35 * level})`,
+          `0 0 ${glow * 2.2 * level}px rgba(${c},0.35)`,
+          `inset 0 0 ${40 + 60 * pulse}px rgba(${c},${(0.12 + 0.3 * pulse * level).toFixed(3)})`,
           "inset 0 3px 0 rgba(255,255,255,0.06)",
           "0 30px 60px rgba(0,0,0,0.6)",
         ].join(", "),
@@ -92,7 +98,7 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
           fontSize: S.label,
           letterSpacing: "0.32em",
           color: ledOn,
-          textShadow: light ? "none" : `0 0 12px ${LED_ON}`,
+          textShadow: light ? "none" : `0 0 12px ${ledOn}`,
           opacity: (0.75 + 0.25 * level) * (done ? doneBlink : 1),
           marginBottom: 10,
           paddingLeft: "0.32em",
@@ -116,10 +122,17 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
 
 // ------------------------------------------------------------ seven-segment
 const LED_ON = "#ff2a1f";
-const LED_OFF = "rgba(255,40,30,0.07)";
-/** Light themes: a deeper red reads better on cream; unlit segments are a faint warm ghost. */
+/** Light themes: a deeper red reads better on cream. */
 const LED_ON_LIGHT = "#e01b12";
-const LED_OFF_LIGHT = "rgba(150,40,25,0.07)";
+/** Seconds the clock shows the theme's neon accent before turning red. */
+const GREEN_SECONDS = 20;
+/** "r,g,b" for the red phase's panel rings / glows. */
+const RED = "255,40,30";
+/** "#rrggbb" → "r,g,b". */
+const rgbOf = (hex: string) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
 const DIGIT_H = 124;
 
 /** Segment polygons on a 60×100 grid (classic hexagonal LED segments, slight italic via skew). */
