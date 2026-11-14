@@ -9,7 +9,7 @@ import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
 import { HOOK_INTRO_TEXT } from "../hook";
 import { HintOwl, OWL_ABOVE, THROW_HIT_SECONDS } from "./HintOwl";
 import { ramp } from "../motion";
-import { loopReset, loopResetStart } from "../loop";
+import { loopResetStart } from "../loop";
 
 /** Same 60px margin inside the safe band on both sides, so the header centres on the safe area. */
 const HEADER_INSET = { left: SAFE_ZONE.left + 60, right: SAFE_ZONE.right + 60 };
@@ -98,15 +98,13 @@ export const Header: React.FC<{
   hint2?: string;
   hint2At: number;
   bannerFlip: readonly [number, number];
-  /** Hint text is blurred before this window and un-blurs word by word across it. */
-  hintReveal: readonly [number, number];
   /** Every wrong guess re-blurs the hint, which then reveals word by word again. */
   wrongFrames: readonly number[];
   /** y of the word board's top edge. */
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerFlip, hintReveal, wrongFrames, boardTop, tickFrames, stress }) => {
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerFlip, wrongFrames, boardTop, tickFrames, stress }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -122,10 +120,7 @@ export const Header: React.FC<{
   const wet = Number.isFinite(lastSplash) ? ramp((frame - lastSplash) / fps, [0, 0.05, 1.4], [0, 1, 0]) : 0;
   // Word-by-word reveal; each word takes WORD_FRAMES to sharpen, starts spread across the window.
   const words = current.trim().split(/\s+/).filter(Boolean);
-  const [revealFrom, revealTo] = hintReveal;
   const WORD_FRAMES = Math.max(3, Math.round(fps * 0.2));
-  const stagger = words.length > 1 ? Math.max(1, (revealTo - revealFrom - WORD_FRAMES) / (words.length - 1)) : 0;
-  // Loop reset: words blur back out (last word first) so the replay opens blurred, like frame 0.
   // Wrong guess: all words blur in ~0.1 s on the strike, then re-reveal word by word from +0.2 s to +1.0 s.
   const lastWrong = blurEvents.reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
   const wrongFrom = Math.round(fps * 0.2);
@@ -142,10 +137,6 @@ export const Header: React.FC<{
   const flipFrom = [...blurEvents, loopStart].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
   const flip = Number.isFinite(flipFrom) ? interpolate(frame - flipFrom, [0, FLIP], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) }) : 1;
   const flipping = flip > 0 && flip < 1;
-  const reblur = (i: number) => {
-    const k = (words.length - 1 - i) / Math.max(1, words.length - 1); // 0 for the last word
-    return loopReset(frame, durationInFrames, fps, 0.35 + 0.3 * k, 0.65 + 0.3 * k);
-  };
   const t = frame / fps;
   // Travelling sheen across the tab, one pass every 3.75 s (8 passes per 30 s, so it wraps on the loop).
   const shimmer = interpolate((t % 3.75) / 3.75, [0, 1], [-30, 130]);
@@ -241,8 +232,8 @@ export const Header: React.FC<{
               }}
             >
               {words.map((w, i) => {
-                const start = revealFrom + i * stagger;
-                const p = Math.max(ramp(frame, [start, start + WORD_FRAMES], [0, 1]) * (1 - wrongHidden(i)) * (1 - reblur(i)), 0);
+                // Locked: fully sharp from frame 0 (and through the loop seam); only wrong-guess splashes / the hint-2 switch blur it.
+                const p = Math.max(1 - wrongHidden(i), 0);
                 return (
                   <React.Fragment key={i}>
                     {i > 0 && " "}

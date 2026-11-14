@@ -32,6 +32,8 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
 
   // 1. Frame-0 impact: heavy hardwood gavel + sub drop. The hook lands with a hit, not silence.
   cues.push({ id: "gavel", src: AUDIO.gavel, from: 0, durationInFrames: seconds(AUDIO_SECONDS.gavel, fps), volume: clamp01(sfx) });
+  // 1a. Scroll-stopper slap: crisp digital pop on frame 0, synced to the 1.05× zoom punch (HangmanReel).
+  cues.push({ id: "slap-pop", src: AUDIO.slapPop, from: 0, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx) });
 
   // 1b. Machine-gun hook (frames 0–30): a sharp click on every decoy pop, click + thud on its ✖,
   //     then a metallic lock on the frame the last hint slot snaps in (36).

@@ -11,14 +11,13 @@
  *                glyphs (scale 0 → 1.2 → 1), click each
  *     pop + 2    it locks on a noise letter and a crimson ✖ slams over it: board kick,
  *                red edge flash, click + thud
+ *     ≤ 16       hint-letter slots snap in among the decoys, one frame apart, the LAST
+ *                one always on 16: metallic lock + hint key lights (they stay after the wipe)
  *     0 → 30     scan beam ping-pongs across the board
- *     29 → 30    everything wiped; rewind hard-stops on 30 (also the first clock tick)
+ *     29 → 30    decoys wiped; rewind hard-stops on 30 (also the first clock tick)
  *   Phase 2 · Target snap (30–42)
  *     30 → 35    banner flips to the hook text ("CAN YOU SOLVE IT?")
- *     30 → 54    hint text (blurred until now) un-blurs word by word
- *     ≤ 36       hint-letter slots snap in one frame apart, the LAST one always on 36
- *     36         metallic lock + hint key lights; the same music now plays FORWARD,
- *                fading in 36 → 42, its downbeats on the clock ticks
+ *     36         the same music now plays FORWARD, fading in 36 → 42, its downbeats on the clock ticks
  *     42         regular reel; no guess may land before this frame
  *
  * Pure module (no React, no remotion import) so the Next.js control panel and
@@ -40,12 +39,11 @@ export const HOOK_FRAMES_30 = {
   maxSlots: 8,
   strikeDelay: 2,
   clear: 30,
-  snapStart: 31,
-  snapEnd: 36,
+  /** Hint (first correct) letter snaps in mid-decode, among the scrambling decoys. */
+  snapStart: 11,
+  snapEnd: 16,
   banner: [30, 35],
   musicIn: [36, 42],
-  /** Hint text: blurred through the decode, then un-blurs word by word in this window. */
-  hintReveal: [30, 54],
   end: 42,
 } as const;
 
@@ -77,8 +75,6 @@ export type HookPlan = {
   clearFrame: number;
   bannerFrames: readonly [number, number];
   musicInFrames: readonly [number, number];
-  /** Hint text word-by-word reveal window (blurred before it). */
-  hintRevealFrames: readonly [number, number];
   /** First frame of the regular reel; guesses never land before it. */
   endFrame: number;
 };
@@ -140,7 +136,7 @@ export function resolveHook(word: string, hintLetter: string, fps: number): Hook
     if (next) d.endFrame = next.popFrame;
   });
 
-  // --- Phase 2: hint slots snap 1 frame apart, ending exactly on snapEnd ----
+  // --- Hint slots snap 1 frame apart mid-decode, ending exactly on snapEnd ----
   const hintSlots = chars.flatMap((c, i) => (hintLetter && c === hintLetter ? [i] : []));
   const span = HOOK_FRAMES_30.snapEnd - HOOK_FRAMES_30.snapStart;
   const first = HOOK_FRAMES_30.snapEnd - Math.min(span, Math.max(0, hintSlots.length - 1));
@@ -155,7 +151,6 @@ export function resolveHook(word: string, hintLetter: string, fps: number): Hook
     clearFrame,
     bannerFrames: [F(HOOK_FRAMES_30.banner[0]), F(HOOK_FRAMES_30.banner[1])],
     musicInFrames: [F(HOOK_FRAMES_30.musicIn[0]), F(HOOK_FRAMES_30.musicIn[1])],
-    hintRevealFrames: [F(HOOK_FRAMES_30.hintReveal[0]), F(HOOK_FRAMES_30.hintReveal[1])],
     endFrame: F(HOOK_FRAMES_30.end),
   };
 }

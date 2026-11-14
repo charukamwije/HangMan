@@ -356,6 +356,30 @@ function lock() {
   return out;
 }
 
+/**
+ * Frame-0 "scroll-stopper" slap: a crisp digital pop — a 1-sample-sharp transient,
+ * a fast downward pitch blip (2.4 kHz → 600 Hz in ~25 ms) and a tight sub kick.
+ */
+function slapPop() {
+  const out = buf(0.25), rnd = mulberry32(71);
+  const [l, r] = out;
+  let phase = 0, subPhase = 0;
+  for (let i = 0; i < l.length; i++) {
+    const t = i / SR;
+    const f = 600 + 1800 * Math.exp(-t / 0.008);
+    phase += (TAU * f) / SR;
+    const blip = Math.sin(phase) * env(t, 0.0002, 0.03);
+    const tick = (rnd() * 2 - 1) * env(t, 0.00002, 0.0015) * 1.2;
+    subPhase += (TAU * (60 + 140 * Math.exp(-t / 0.012))) / SR;
+    const sub = Math.sin(subPhase) * env(t, 0.0008, 0.06) * 0.8;
+    l[i] = blip + tick + sub;
+    r[i] = blip * 0.98 + tick * 0.9 + sub;
+  }
+  fade(out, 0, 0.05);
+  normalize(out, 0.95);
+  return out;
+}
+
 // Keep in sync with HOOK_FRAMES_30 in src/remotion/hook.ts.
 /** The decode (and so the rewind) lasts the whole first second: frames 0 → clear (30). */
 const REWIND_SECONDS = 30 / 30;
@@ -564,6 +588,7 @@ writeWav("correct.wav", correct());
 writeWav("wrong.wav", wrong());
 writeWav("whoosh.wav", whoosh());
 writeWav("lock.wav", lock());
+writeWav("slap-pop.wav", slapPop());
 writeWav("hook-decode.wav", hookDecode());
 const musicBed = music();
 writeWav("music.wav", musicBed);

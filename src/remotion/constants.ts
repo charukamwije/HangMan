@@ -108,6 +108,8 @@ export const AUDIO = {
   click: "audio/click.wav",
   /** Opening hook: metallic lock as the hint letter lands (frame 25). */
   lock: "audio/lock.wav",
+  /** Frame-0 scroll-stopper: crisp digital pop paired with the 1.05× zoom punch. */
+  slapPop: "audio/slap-pop.wav",
   /** Loop point: fast rewind of the end of the song over the last LOOP_RESET_SECONDS. */
   loopRewind: "audio/loop-rewind.wav",
   /** Opening hook: the music bed rewinding (reversed, accelerating) under the 1 s decode. */
@@ -133,6 +135,7 @@ export const AUDIO_SECONDS = {
   wrong: 0.55,
   whoosh: 0.3,
   lock: 0.5,
+  slapPop: 0.25,
   heartbeat: 0.45,
 } as const;
 

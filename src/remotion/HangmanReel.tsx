@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { DESIGN_HEIGHT, DESIGN_WIDTH, HINT2_AT_SECONDS, KEYBOX_SHAKE_PX_AT_1080, RIGHT_RAIL, SAFE_ZONE, TOP_CORNERS } from "./constants";
 import { framesSinceLast, NEVER, ramp, strikeShake, stressAt } from "./motion";
 import { loopReset } from "./loop";
@@ -119,8 +119,10 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   // Overscan just enough while shaking that the frame edge never shows.
   // (origin is x centre / WORD_CENTER_Y, so the nearest edges are DESIGN_WIDTH/2 and WORD_CENTER_Y away)
   const overscan = 1.1 * Math.max(Math.abs(camX) / (DESIGN_WIDTH / 2), Math.abs(camY) / WORD_CENTER_Y);
-  const camScale = 1 + 0.035 * punch + overscan;
-  const camera = camX || camY || punch ? `translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
+  // Scroll-stopper slap: frame 0 opens zoomed in at 1.05× and snaps back to 1× over ~5 frames (with the slap pop SFX).
+  const slap = interpolate(frame / fps, [0, 0.17], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
+  const camScale = 1 + 0.035 * punch + 0.05 * slap + overscan;
+  const camera = camX || camY || punch || slap ?`translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
   const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]) * (1 - loopReset(frame, durationInFrames, fps, 0, 0.6));
 
   return (
@@ -131,7 +133,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
-      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerFlip={timeline.hook.bannerFrames} hintReveal={timeline.hook.hintRevealFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerFlip={timeline.hook.bannerFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} promptFrame={promptFrame} top={livesTop} />
       <Keyboard

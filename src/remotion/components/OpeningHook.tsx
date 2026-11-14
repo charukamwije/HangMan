@@ -1,6 +1,6 @@
 import React from "react";
 import { random, Sequence, useCurrentFrame } from "remotion";
-import { HOOK_FONT } from "../fonts";
+import { DISPLAY_FONT } from "../fonts";
 import type { HookDecoy } from "../hook";
 import { ramp } from "../motion";
 
@@ -49,11 +49,11 @@ export const DecoyTile: React.FC<TileProps> = ({ letter, tile, strikeAt, clearAt
           position: "absolute",
           left: 0,
           right: 0,
-          bottom: tile * 0.3,
+          // Same font, size and baseline as the correct letters (WordBoard), so decoys read as real fills.
+          bottom: tile * 0.26,
           textAlign: "center",
-          fontFamily: HOOK_FONT,
-          fontWeight: 900,
-          fontSize: tile * 0.92,
+          fontFamily: DISPLAY_FONT,
+          fontSize: tile * 1.08,
           lineHeight: 1,
           color: struck ? HOOK_RED : PARCHMENT,
           opacity: struck ? 1 : 0.7,
