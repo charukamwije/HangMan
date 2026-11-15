@@ -3,7 +3,7 @@
  *
  * The math (all at `fps`, 30 by default, so D = 900 frames):
  *
- *   frames 0–42              opening hook (hook.ts): 1 s of decoding, prefilled letter locks on 36
+ *   frames 0–60              opening hook (hook.ts): prefilled letter locks on 4, pattern interrupt on 30, first guess on 60
  *   frame F₁ = 2.0 s · fps   first guess
  *   Fₙ = F₁ + (n − 1) · S    S = step snapped to 0.1 s, 2.0 s ≤ S ≤ 2.5 s
  *                            (60–75 frames), chosen as the widest step that

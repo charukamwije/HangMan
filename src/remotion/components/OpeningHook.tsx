@@ -1,5 +1,5 @@
 import React from "react";
-import { random, Sequence, useCurrentFrame } from "remotion";
+import { random, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { DISPLAY_FONT } from "../fonts";
 import type { HookDecoy } from "../hook";
 import { ramp } from "../motion";
@@ -85,6 +85,48 @@ export const HookDecoys: React.FC<{ decoys: HookDecoy[]; tile: number }> = ({ de
       ))}
   </>
 );
+
+/**
+ * Phase-2 rattle (pattern interrupt → first guess) in one still-empty slot:
+ * faint ghost glyphs (no lock, no red) whose swap cadence accelerates from every
+ * 3 frames to every frame, with a growing jitter, so the board never sits still
+ * before the first guess. Fades in over 3 frames and is cut 2 frames before `to`.
+ */
+export const HookRattle: React.FC<{ slot: number; tile: number; from: number; to: number }> = ({ slot, tile, from, to }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  if (frame < from || frame >= to) return null;
+  const p = (frame - from) / Math.max(1, to - from);
+  const hold = Math.max(1, Math.round(((3 - 2 * p) * fps) / 30));
+  // Staggered per slot so the board shimmers instead of flipping all at once.
+  const step = Math.floor((frame - from + slot) / hold);
+  const glyph = CIPHER[Math.floor(random(`rattle-${slot}-${hold}-${step}`) * CIPHER.length)];
+  const amp = tile * (0.04 + 0.08 * p);
+  const dx = (random(`rx-${slot}-${frame}`) - 0.5) * amp;
+  const dy = (random(`ry-${slot}-${frame}`) - 0.5) * amp;
+  const opacity = (0.16 + 0.2 * p) * ramp(frame, [from, from + Math.round((3 * fps) / 30)], [0, 1]) * ramp(frame, [to - Math.round((2 * fps) / 30), to], [1, 0]);
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: tile * 0.26,
+        textAlign: "center",
+        fontFamily: DISPLAY_FONT,
+        fontSize: tile * 1.08,
+        lineHeight: 1,
+        color: PARCHMENT,
+        opacity,
+        textShadow: `${tile * 0.04}px 0 0 ${HOOK_RED}cc, ${-tile * 0.04}px 0 0 #3fd6ffaa, 0 0 18px rgba(0,0,0,0.6)`,
+        transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`,
+        pointerEvents: "none",
+      }}
+    >
+      {glyph}
+    </div>
+  );
+};
 
 /**
  * Decoder scan over the whole word board during phase 1: CRT scanlines plus a

@@ -121,7 +121,7 @@ export function autoSchedule({
 
 export type Timeline = {
   word: string;
-  /** Snapped into place during the opening hook (see hook.ts), settled by frame 30. */
+  /** Snapped into place during the opening hook (see hook.ts), locked on frame 4. */
   hintLetter: string;
   /** Opening "machine gun" hook: decoys, hint snap frames, lock + music handover. */
   hook: HookPlan;
@@ -168,7 +168,7 @@ export function resolveTimeline(
     })
     .map((g, index) => ({
       ...g,
-      // Nothing may land inside the opening hook (frames 0–30).
+      // Nothing may land inside the opening hook (frames 0–59): the first guess is on 60 at the earliest.
       frame: Math.max(hook.endFrame, toFrame(g.time)),
       kind: letters.has(g.letter) ? ("correct" as const) : ("wrong" as const),
       index,

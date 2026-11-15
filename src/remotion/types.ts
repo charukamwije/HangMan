@@ -12,7 +12,7 @@ export type ReelAudioSettings = {
 
 /** Serializable input props for the composition (Player, CLI --props, API route). */
 export type ReelProps = {
-  /** Top banner text after the "DECODING BOARD..." intro flips (frame ~16), e.g. "CAN YOU SOLVE IT?". Empty → "GUESS THE WORD". */
+  /** Top banner challenge text, legible from frame 0, e.g. "99% FAIL THIS". Empty → "GUESS THE WORD". */
   hookText: string;
   /** Hint 1, shown from the start. */
   subtitle: string;

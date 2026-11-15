@@ -44,7 +44,7 @@ export type HangmanPuzzleData = {
    * the word, and prefilled/final entries are always computed.
    */
   revealSequence: RevealEvent[];
-  /** Banner text after the "DECODING BOARD..." intro flips, e.g. "CAN YOU SOLVE IT?". */
+  /** Banner challenge text, shown from frame 0, e.g. "99% FAIL THIS". */
   viralHookText: string;
   /** Letter pre-filled on frame 0. Default: the word's first letter. */
   prefilledLetter?: string;

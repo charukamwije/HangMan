@@ -44,7 +44,7 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
     <div className="flex flex-col gap-1 p-3">
       <Section icon={<Type />} title="Content">
         <Field label="Hook banner (frame 0)">
-          <Input value={s.hookText} maxLength={40} placeholder="CAN YOU SOLVE IT?" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
+          <Input value={s.hookText} maxLength={40} placeholder="99% FAIL THIS" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
         </Field>
         <Field label="Hint 1 (0–15 s)">
           <Input

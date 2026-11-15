@@ -35,9 +35,10 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  * Retention structure:
  *  - Frame 0 is a complete frame: hook banner, hint, every word slot, the
  *    first decoy mid-pop, clock and keys. No black frame, no fade-in.
- *  - Frames 0–42 are the "machine gun" hook (hook.ts): a full second of
- *    accelerating decoding over a tape-rewind of the music, then the hint
- *    letter snaps in and locks on frame 36.
+ *  - Frames 0–60 are the "machine gun" hook (hook.ts), scripted end to end:
+ *    zero-frame camera punch-in + challenge banner on 0, hint locks on 4 among
+ *    accelerating decoys, pattern interrupt on the first tick (30), then a
+ *    ghost-glyph rattle under a tension push-in until the first guess on 60.
  *  - Background pushes in 1.00 → 1.08 (Ken Burns) for the whole reel.
  *  - A reveal or strike lands every 2.0–2.5 s (see autoSchedule).
  *  - Strikes kick the key box sideways with a spring.
@@ -100,15 +101,17 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const redHit = ramp(sinceWrong, [0, 0.067], [0.28, 0]);
   const correctFrames = useMemo(
     () => [
-      timeline.hook.lockFrame, // accent bloom as the hint locks in at the end of the hook
+      timeline.hook.lockFrame, // accent bloom as the hint locks in (frame 4)
       ...timeline.guesses.filter((g) => g.kind === "correct" && g.frame < timeline.finalRevealFrame).map((g) => g.frame),
     ],
     [timeline],
   );
   const sinceCorrect = framesSinceLast(correctFrames, frame);
   const bloom = ramp(sinceCorrect / fps, [0, 0.05, 0.6], [0, 0.45, 0]);
-  // White exposure pop on the correct impact frame.
-  const whiteHit = ramp(sinceCorrect, [0, 2], [0.18, 0]);
+  // White exposure pop on the correct impact frame, and a harder one on the hook's pattern interrupt.
+  const { pulseFrame, rattleFrames, endFrame: hookEnd } = timeline.hook;
+  const sincePulse = frame >= pulseFrame ? frame - pulseFrame : NEVER;
+  const whiteHit = Math.max(ramp(sinceCorrect, [0, 2], [0.18, 0]), ramp(sincePulse, [0, 3], [0.24, 0]));
 
   // Camera: wrong guesses shake the whole stage (x + y, out of phase); correct ones punch in.
   const wrongSince = framesSinceLast(timeline.wrongFrames, frame);
@@ -118,10 +121,16 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   // Overscan just enough while shaking that the frame edge never shows.
   // (origin is x centre / WORD_CENTER_Y, so the nearest edges are DESIGN_WIDTH/2 and WORD_CENTER_Y away)
   const overscan = 1.1 * Math.max(Math.abs(camX) / (DESIGN_WIDTH / 2), Math.abs(camY) / WORD_CENTER_Y);
-  // Scroll-stopper slap: frame 0 opens zoomed in at 1.05× and snaps back to 1× over ~5 frames (with the slap pop SFX).
-  const slap = interpolate(frame / fps, [0, 0.17], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
-  const camScale = 1 + 0.035 * punch + 0.05 * slap + overscan;
-  const camera = camX || camY || punch || slap ?`translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
+  // Zero-frame punch-in: frame 0 is already cut in tight (1.08×, no ramp), held 3 frames, then released by frame 9.
+  const F = (f: number) => Math.round((f * fps) / 30);
+  const slap = interpolate(frame, [F(3), F(9)], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) });
+  // Pattern interrupt (first tick): a hard camera kick that peaks on the pulse frame itself.
+  const kick = ramp(sincePulse, [0, F(7)], [1, 0]);
+  // Tension push-in across the rattle, released over the last frames before the first guess.
+  const [rattleFrom, rattleTo] = rattleFrames;
+  const tension = frame < rattleTo ? Easing.in(Easing.quad)(ramp(frame, [rattleFrom, rattleTo], [0, 1])) : ramp(frame, [rattleTo, hookEnd], [1, 0]);
+  const camScale = 1 + 0.035 * punch + 0.08 * slap + 0.04 * kick + 0.025 * tension + overscan;
+  const camera = camX || camY || punch || slap || kick || tension ?`translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
   const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]) * (1 - loopReset(frame, durationInFrames, fps, 0, 0.6));
 
   return (
@@ -132,7 +141,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
-      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerFlip={timeline.hook.bannerFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} clueReveal={timeline.hook.clueRevealFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} promptFrame={promptFrame} top={livesTop} />
       <Keyboard

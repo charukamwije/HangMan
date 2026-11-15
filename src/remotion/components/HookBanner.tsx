@@ -2,7 +2,7 @@ import React from "react";
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
-import { ramp } from "../motion";
+import { framesSinceLast, ramp } from "../motion";
 import { loopReset } from "../loop";
 import { TOP_ROW } from "../constants";
 
@@ -18,8 +18,12 @@ const PAD_Y = 22;
 const LOWER = 160;
 const fontSizeFor = (text: string) => Math.min(MAX_FONT, Math.floor((MAX_WIDTH - 150) / (Math.max(1, text.length) * 0.56)));
 
-/** Hook-text word that gets a focus punch the moment the banner flip lands. */
-const EMPHASIS = "SOLVE";
+/** Power words (and "99%"-style stats) that take the accent and punch on every banner slam. */
+const EMPHASIS = /^(SOLVE|FAIL|FAILS|IMPOSSIBLE|GENIUS|GENIUSES|HARDEST|NOBODY|ONLY|\d+%)$/;
+/** Frame-0 slam: the pill opens this much oversized (capped so it never reaches the clock). */
+const SLAM_MAX = 0.22;
+/** Re-slam on the pattern-interrupt frame. */
+const RESLAM = 0.1;
 
 /** Plate corner radius and rim width (colours come from the theme, like the hint card). */
 const RADIUS = 34;
@@ -32,11 +36,12 @@ const shade = (hex: string, amt: number) => {
 };
 
 /**
- * Micro-zoom (1.16× → 1×) that decays over ~8 frames from the frame the hook text
- * has fully landed (`frame` = 0). Inline-block transform only, so the pill never re-lays out.
+ * Micro-zoom (1.16× → 1×) that decays over ~8 frames from the latest banner slam
+ * (`frame` = frames since it). `hold` (loop reset) pins it zoomed, matching frame 0.
+ * Inline-block transform only, so the pill never re-lays out.
  */
-const EmphasisWord: React.FC<{ word: string; frame: number; size: number; shadow: string; color: string }> = ({ word, frame, size, shadow, color }) => {
-  const k = frame >= 0 ? ramp(frame, [0, 8], [1, 0]) : 0;
+const EmphasisWord: React.FC<{ word: string; frame: number; hold: number; size: number; shadow: string; color: string }> = ({ word, frame, hold, size, shadow, color }) => {
+  const k = Math.max(hold, frame >= 0 ? ramp(frame, [0, 8], [1, 0]) : 0);
   const ease = k * k * (3 - 2 * k);
   return (
     <span
@@ -57,47 +62,37 @@ const EmphasisWord: React.FC<{ word: string; frame: number; size: number; shadow
 };
 
 /**
- * Top-left banner. Opens on `introText` ("DECODING BOARD...") with a frame-0
- * punch (scale 1.1 → 1), then over `flip` the intro slides down and out while
- * `text` slides down into place. Both labels share one grid cell, so the pill
- * is sized by the longer label and never jumps. The rim glow throbs
+ * Top-left banner. The challenge text is up and legible on frame 0 (no preamble):
+ * the pill slams in oversized (spring back to 1×) with its power words punching,
+ * then re-slams on `pulseFrame` (the 1 s pattern interrupt). The rim glow throbs
  * about once a second throughout.
  */
 export const HookBanner: React.FC<{
   theme: Theme;
   text: string;
-  introText: string;
-  flip: readonly [number, number];
-}> = ({ theme, text, introText, flip }) => {
+  pulseFrame: number;
+}> = ({ theme, text, pulseFrame }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const t = frame / fps;
   const label = (text.trim() || "GUESS THE WORD").toUpperCase();
-  const intro = introText.toUpperCase();
-  const fontSize = fontSizeFor(intro.length > label.length ? intro : label);
+  const fontSize = fontSizeFor(label);
 
-  const punch = spring({ frame, fps, config: { damping: 9, stiffness: 180, mass: 0.6 } });
-  // Loop reset (last ~45 %): hook text slides back out, "DECODING BOARD." slides back in, and the
-  // pill grows to 1.1× — exactly the frame-0 punch state, so the replay continues seamlessly.
+  // Fixed pill width, so the balloon strings know exactly where the corners are.
+  const bannerW = Math.min(MAX_WIDTH, Math.ceil(2 * RIM + 28 + 28 + 8 + label.length * fontSize * 0.52));
+  // Slam size: as big as SLAM_MAX, but never grown (from its left edge) past the 60 px gap to the clock.
+  const slamAmp = Math.max(0.08, Math.min(SLAM_MAX, (MAX_WIDTH - bannerW + 60) / bannerW));
+  const SPRING = { damping: 9, stiffness: 260, mass: 0.5 };
+  const slam = 1 - spring({ frame, fps, config: SPRING });
+  const reslam = frame >= pulseFrame ? 1 - spring({ frame: frame - pulseFrame, fps, config: SPRING }) : 0;
+  // Loop reset (last ~45 %): the pill grows back to the frame-0 slam size, so the replay continues seamlessly.
   const back = loopReset(frame, durationInFrames, fps, 0.55, 1);
-  const scale = interpolate(punch, [0, 1], [1.1, 1]) * (1 + 0.1 * back);
+  const scale = (1 + slamAmp * slam) * (1 + RESLAM * reslam) * (1 + slamAmp * back);
   const beat = 0.5 + 0.5 * Math.cos(t * Math.PI * 2 * 1.1); // ~1.1 Hz, peaks on frame 0
+  // Rim flares white-hot on each slam.
+  const flare = Math.max(ramp(frame, [0, 6], [1, 0]), frame >= pulseFrame ? ramp(frame - pulseFrame, [0, 6], [1, 0]) : 0, back);
+  const sinceSlam = framesSinceLast([0, pulseFrame], frame);
 
-  // Crisp sequential slide-down flip (never two labels legible at once):
-  // intro drops out over the first 40 % of the window, hook text drops in over the rest.
-  const [a, b] = flip;
-  const mid = a + Math.round((b - a) * 0.4);
-  const introOut = Math.min(ramp(frame, [a, mid], [0, 1]), 1 - ramp(back, [0.4, 1], [0, 1]));
-  const labelIn = Math.min(ramp(frame, [mid, b], [0, 1]), 1 - ramp(back, [0, 0.45], [0, 1]));
-  const slide = fontSize * 1.1;
-
-  // "DECODING BOARD..." stays crisp (no glitch jitter / RGB split); only the dots tick 1 → 3.
-  const base = intro.replace(/\.+$/, "");
-  const dots = intro.length - base.length;
-  const dotsShown = dots ? (back > 0 ? 1 : 1 + (Math.floor(frame / 3) % dots)) : 0;
-
-  // Fixed pill width (sized for the longer label), so the balloon strings know exactly where the corners are.
-  const bannerW = Math.min(MAX_WIDTH, Math.ceil(2 * RIM + 28 + 28 + 8 + Math.max(intro.length, label.length) * fontSize * 0.52));
   const float = bannerFloat(t, bannerW);
   // Sheen pass every 3.75 s (8 per 30 s, so it wraps cleanly on the loop).
   const sheen = interpolate((t % 3.75) / 3.75, [0, 0.35, 1], [-30, 120, 120]);
@@ -106,7 +101,6 @@ export const HookBanner: React.FC<{
   const textExtrude = `0 4px 0 ${ex}, 0 0 18px ${theme.accent}40, 0 6px 10px rgba(0,0,0,0.35)`;
 
   const labelStyle: React.CSSProperties = {
-    gridArea: "1 / 1",
     fontFamily: DISPLAY_FONT,
     fontSize,
     lineHeight: 1.1,
@@ -151,7 +145,7 @@ export const HookBanner: React.FC<{
           // extruded depth under the plate, then the red glow and a soft drop shadow
           `0 10px 0 ${shade(theme.accent, -0.75)}`,
           `0 10px 0 2px rgba(0,0,0,0.35)`,
-          `0 0 ${30 + 30 * beat}px ${theme.accent}66`,
+          `0 0 ${30 + 30 * beat + 50 * flare}px ${theme.accent}${flare > 0.3 ? "cc" : "66"}`,
           "0 30px 50px rgba(0,0,0,0.6)",
           `inset 0 0 40px ${theme.accent}14`,
         ].join(", "),
@@ -181,31 +175,17 @@ export const HookBanner: React.FC<{
           }}
         />
       </span>
-      <span style={{ display: "grid", overflow: "hidden" }}>
-        {introOut < 1 && (
-          <span
-            style={{
-              ...labelStyle,
-              opacity: 1 - introOut,
-              transform: `translateY(${introOut * slide}px)`,
-            }}
-          >
-            {base}
-            {Array.from({ length: dots }, (_, i) => (
-              <span key={i} style={{ opacity: i < dotsShown ? 1 : 0 }}>
-                .
-              </span>
-            ))}
-          </span>
-        )}
-        <span style={{ ...labelStyle, opacity: labelIn, transform: `translateY(${(labelIn - 1) * slide}px)` }}>
-          {label.split(" ").map((word, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && " "}
-              {word.replace(/[^A-Z]/g, "") === EMPHASIS ? <EmphasisWord word={word} frame={frame - b} size={fontSize} shadow={textExtrude} color={theme.accent} /> : word}
-            </React.Fragment>
-          ))}
-        </span>
+      <span style={labelStyle}>
+        {label.split(" ").map((word, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && " "}
+            {EMPHASIS.test(word.replace(/[^A-Z0-9%]/g, "")) ? (
+              <EmphasisWord word={word} frame={sinceSlam} hold={back} size={fontSize} shadow={textExtrude} color={theme.accent} />
+            ) : (
+              word
+            )}
+          </React.Fragment>
+        ))}
       </span>
     </div>
       </div>

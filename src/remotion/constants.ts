@@ -47,11 +47,11 @@ export const MAX_LIVES = 6;
 export const DECOY_LETTERS = "ETAOINSHRDLCUMWFGYPBVKJXQZ";
 
 // ------------------------------------------------------------- retention ----
-/** Where the banner lands after "DECODING BOARD..." (hook.ts). A plain question, not an unverifiable claim. */
 /** Hint 2 replaces hint 1 at this second (blur out → chip flip → word-by-word reveal). */
 export const HINT2_AT_SECONDS = 15;
 
-export const DEFAULT_HOOK_TEXT = "CAN YOU SOLVE IT?";
+/** Banner challenge, up and legible from frame 0 (hook.ts). Short = big type; power words take the accent (HookBanner). */
+export const DEFAULT_HOOK_TEXT = "99% FAIL THIS";
 /** Stress mode (vignette tightens, clock pulses) starts once the clock reads below this. */
 export const STRESS_BELOW_SECONDS = 8;
 /** Key-box shake amplitude, in output px at 1080 wide (scales with resolution: 10 px at 4K). */
@@ -108,7 +108,7 @@ export const AUDIO = {
   click: "audio/click.wav",
   /** Opening hook: metallic lock as the hint letter lands (frame 25). */
   lock: "audio/lock.wav",
-  /** Frame-0 scroll-stopper: crisp digital pop paired with the 1.05× zoom punch. */
+  /** Frame-0 scroll-stopper: crisp digital pop paired with the 1.08× zero-frame punch-in (reused on the 1 s pattern interrupt). */
   slapPop: "audio/slap-pop.wav",
   /** Loop point: fast rewind of the end of the song over the last LOOP_RESET_SECONDS. */
   loopRewind: "audio/loop-rewind.wav",

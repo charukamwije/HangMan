@@ -32,7 +32,7 @@ src/remotion/                 Self-contained composition (relative imports only,
     StressVignette.tsx        Base vignette + stress layer that closes in and throbs on each tick below 00:08
     CountdownTimer.tsx        00:29 → 00:00 1 Hz neon clock; below 00:08 it pulses in sync with the vignette
     OpeningHook.tsx           Frames 0–30: accelerating decoys + crimson ✖ strikes (one <Sequence> each), scan beam
-    HookBanner.tsx            "DECODING BOARD..." → hook-text banner flip (frames 0–35)
+    HookBanner.tsx            challenge banner: slam on frame 0, re-slam on the 1 s pulse
     Header.tsx                Hook banner + countdown row, fixed "HINT" label (neon) and hint text (white)
     WordBoard.tsx             Outlined letter slots + spring/glow letter reveals, wraps long answers onto more lines
     LivesRow.tsx              Mistake counter: one pawn per mistake, knocked over in red
@@ -96,7 +96,7 @@ One `HangmanPuzzleData` object makes one 30 s, 900-frame reel. The schema and ti
   "secretWord": "LANDMARKS",
   "wrongGuesses": ["B", "W", "X", "Q"],
   "revealSequence": [],
-  "viralHookText": "CAN YOU SOLVE IT?"
+  "viralHookText": "99% FAIL THIS"
 }
 ```
 

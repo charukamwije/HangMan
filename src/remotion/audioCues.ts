@@ -32,11 +32,13 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
 
   // 1. Frame-0 impact: heavy hardwood gavel + sub drop. The hook lands with a hit, not silence.
   cues.push({ id: "gavel", src: AUDIO.gavel, from: 0, durationInFrames: seconds(AUDIO_SECONDS.gavel, fps), volume: clamp01(sfx) });
-  // 1a. Scroll-stopper slap: crisp digital pop on frame 0, synced to the 1.05× zoom punch (HangmanReel).
+  // 1a. Scroll-stopper slap: crisp digital pop on frame 0, synced to the zero-frame 1.08× punch-in (HangmanReel).
   cues.push({ id: "slap-pop", src: AUDIO.slapPop, from: 0, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx) });
+  // 1a'. Pattern interrupt on the first clock tick (1 s): the same pop under the camera kick + flash + banner re-slam.
+  cues.push({ id: "hook-pulse", src: AUDIO.slapPop, from: timeline.hook.pulseFrame, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.7) });
 
-  // 1b. Machine-gun hook (frames 0–30): a sharp click on every decoy pop, click + thud on its ✖,
-  //     then a metallic lock on the frame the last hint slot snaps in (36).
+  // 1b. Machine-gun hook (decode 0–30): a sharp click on every decoy pop, click + thud on its ✖,
+  //     then a metallic lock on the frame the last hint slot snaps in (4).
   const { hook } = timeline;
   // All decoy clicks / strikes / thuds are pre-mixed into ONE file on the fixed pop schedule
   // (decoyPopFrames30): ~40 separate <Audio> tags mounting in the first second overflowed

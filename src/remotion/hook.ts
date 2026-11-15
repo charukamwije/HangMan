@@ -1,31 +1,31 @@
 /**
- * "Machine Gun" opening hook. Decoding fills the whole first second; the
- * target snap lands right after it (frames @ 30 fps).
+ * "Machine Gun" opening hook. Every frame of the first 2 s carries scripted
+ * motion; nothing waits on a preamble (frames @ 30 fps).
  *
- *   Phase 1 · Decoding (0–30) — accelerating, synced to the tape-rewind audio
- *     0          banner "DECODING BOARD…" punches in, gavel + bass drop,
- *                the music bed starts REWINDING (reversed, speeding up 3× → 14×)
- *     0 → 26     decoys fire into the empty slots, gaps shrinking 4 → 1 frame, so the
- *                visual cadence accelerates with the rewind. Slots are revisited:
- *                a new decoy replaces the struck one. Each scrambles through cipher
- *                glyphs (scale 0 → 1.2 → 1), click each
- *     pop + 2    it locks on a noise letter and a crimson ✖ slams over it: board kick,
- *                red edge flash, click + thud
- *     ≤ 16       hint-letter slots snap in among the decoys, one frame apart, the LAST
- *                one always on 16: metallic lock + hint key lights (they stay after the wipe)
- *     0 → 30     scan beam ping-pongs across the board
- *     29 → 30    decoys wiped; rewind hard-stops on 30 (also the first clock tick)
- *   Phase 2 · Target snap (30–42)
- *     30 → 35    banner flips to the hook text ("CAN YOU SOLVE IT?")
- *     36         the same music now plays FORWARD, fading in 36 → 42, its downbeats on the clock ticks
- *     42         regular reel; no guess may land before this frame
+ *   0          zero-frame camera punch-in (stage opens at 1.08×, held 3 frames, then
+ *              released), the challenge banner ("99% FAIL THIS") is already up and
+ *              slams in at full scale, gavel + slap pop, music bed starts REWINDING
+ *   0 → 26     decoys fire into the empty slots, gaps shrinking 4 → 1 frame (machine-gun
+ *              cadence synced to the rewind). Each scrambles, then locks crimson 2 frames later
+ *   ≤ 4        hint-letter slots snap in (one frame apart, the LAST always on 4): metallic
+ *              lock, hint key lights, white pop + bloom. The hint glows through the hook
+ *   0 → 30     scan beam ping-pongs across the board
+ *   30         PATTERN INTERRUPT on the first clock tick: decoys wiped, rewind hard-stops,
+ *              camera kick + white flash, banner re-slam, hint re-flash, slap pop
+ *   30 → 57    rattle: the empty slots flicker ghost glyphs at an accelerating cadence
+ *              (3 → 1 frame) under a slow tension push-in; cut 3 frames before the guess
+ *   36 → 42    the same music now plays FORWARD, its downbeats on the clock ticks
+ *   60         regular reel: the first guess slams down; no guess may land before this frame
+ *   0 → 64     the clue text stays FROSTED (card + HINT chip on screen, words blurred), so the
+ *              eye has one job per beat: banner → board. No sentence to read during the rattle
+ *   64 → 94    clue unlocks: the HINT chip flips and the words sharpen one by one
  *
  * Pure module (no React, no remotion import) so the Next.js control panel and
  * the render API can share it with the composition. Frame numbers are authored
  * at 30 fps and scaled with hookFrame() so pacing survives an fps change.
  *
- * Keep `clear` / `musicIn[0]` in sync with REWIND_SECONDS / MUSIC_START_FRAME_30
- * in scripts/generate-sfx.mjs.
+ * Keep `clear` / `musicIn[0]` / the pop schedule in sync with REWIND_SECONDS /
+ * MUSIC_START_FRAME_30 / hookDecode() in scripts/generate-sfx.mjs.
  */
 import { DECOY_LETTERS } from "./constants";
 
@@ -39,15 +39,18 @@ export const HOOK_FRAMES_30 = {
   maxSlots: 8,
   strikeDelay: 2,
   clear: 30,
-  /** Hint (first correct) letter snaps in mid-decode, among the scrambling decoys. */
-  snapStart: 11,
-  snapEnd: 16,
-  banner: [30, 35],
+  /** Hint (first correct) letter snaps in right away, among the scrambling decoys; snapEnd is the lock. */
+  snapStart: 0,
+  snapEnd: 4,
+  /** Pattern interrupt on the first clock tick (camera kick, flash, banner re-slam). */
+  pulse: 30,
+  /** Ghost-glyph rattle in the empty slots, cut just before the first guess. */
+  rattle: [30, 57],
   musicIn: [36, 42],
-  end: 42,
+  end: 60,
+  /** Clue text unlocks word by word, after the first guess's impact has landed. */
+  clueReveal: [64, 94],
 } as const;
-
-export const HOOK_INTRO_TEXT = "DECODING BOARD...";
 
 /** A 30 fps hook frame expressed at `fps`. */
 export const hookFrame = (f: number, fps: number) => Math.round((f * fps) / 30);
@@ -73,10 +76,15 @@ export type HookPlan = {
   /** Final snap: metallic lock SFX + hint key lights up. */
   lockFrame: number;
   clearFrame: number;
-  bannerFrames: readonly [number, number];
+  /** Pattern-interrupt frame (first clock tick). */
+  pulseFrame: number;
+  /** [from, to): ghost-glyph rattle in the still-empty slots. */
+  rattleFrames: readonly [number, number];
   musicInFrames: readonly [number, number];
   /** First frame of the regular reel; guesses never land before it. */
   endFrame: number;
+  /** [start, end]: the frosted clue sharpens word by word across this window. */
+  clueRevealFrames: readonly [number, number];
 };
 
 const hash = (s: string) =>
@@ -149,8 +157,10 @@ export function resolveHook(word: string, hintLetter: string, fps: number): Hook
     snapFrames,
     lockFrame: F(HOOK_FRAMES_30.snapEnd),
     clearFrame,
-    bannerFrames: [F(HOOK_FRAMES_30.banner[0]), F(HOOK_FRAMES_30.banner[1])],
+    pulseFrame: F(HOOK_FRAMES_30.pulse),
+    rattleFrames: [F(HOOK_FRAMES_30.rattle[0]), F(HOOK_FRAMES_30.rattle[1])],
     musicInFrames: [F(HOOK_FRAMES_30.musicIn[0]), F(HOOK_FRAMES_30.musicIn[1])],
     endFrame: F(HOOK_FRAMES_30.end),
+    clueRevealFrames: [F(HOOK_FRAMES_30.clueReveal[0]), F(HOOK_FRAMES_30.clueReveal[1])],
   };
 }
