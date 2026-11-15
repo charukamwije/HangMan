@@ -39,6 +39,75 @@ const BulbIcon: React.FC<{ size: number; color: string }> = ({ size, color }) =>
     <rect x={9.9} y={21} width={4.2} height={1.6} rx={0.8} fill={color} />
   </svg>
 );
+/**
+ * "NEXT HINT IN 12s" teaser chip on the card's top-left edge (the owl owns the top-right):
+ * counts down every second until hint 2 lands, nudging viewers to stay for it. Pops and
+ * fades out on the switch; fades back in over the loop reset so the replay matches frame 0.
+ */
+const NextHintChip: React.FC<{ theme: Theme; frame: number; fps: number; hint2At: number; back: number }> = ({ theme, frame, fps, hint2At, back }) => {
+  const left = Math.max(1, Math.ceil((hint2At - frame) / fps));
+  const secs = back > 0 ? Math.ceil(hint2At / fps) : left;
+  // Out: a quick pop (1 → 1.15) then shrink + fade over ~0.3 s from the switch frame.
+  const out = frame >= hint2At ? (frame - hint2At) / fps : -1;
+  const vis = out < 0 ? 1 : Math.max(back, 1 - ramp(out, [0.08, 0.3], [0, 1]));
+  if (vis <= 0.001) return null;
+  const pop = out < 0 ? 1 : interpolate(out, [0, 0.08, 0.3], [1, 1.15, 0.6], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+  // Tick nudge on every digit change; the last 3 s glow in the accent.
+  // Frames since the digit last changed (it changes when hint2At - frame is a whole number of seconds).
+  const sinceTick = out < 0 ? (fps - ((((hint2At - frame) % fps) + fps) % fps)) % fps : fps;
+  const nudge = out < 0 ? ramp(sinceTick, [0, 4], [1, 0]) : 0;
+  const hot = out < 0 && left <= 3;
+  const scale = out < 0 ? 1 + 0.08 * nudge * (hot ? 1.6 : 1) : Math.max(pop, back);
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 30,
+        top: -CHIP_H / 2 - CARD_BORDER / 2,
+        height: CHIP_H,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "0 28px 0 22px",
+        borderRadius: 999,
+        fontFamily: BODY_FONT,
+        fontWeight: 800,
+        fontSize: CHIP_SIZE,
+        lineHeight: 1,
+        letterSpacing: "0.08em",
+        whiteSpace: "nowrap",
+        color: hot ? theme.onAccent : theme.text,
+        background: hot ? theme.accent : `linear-gradient(180deg, ${theme.panel[0]}, ${theme.panel[1]})`,
+        border: `3px solid ${theme.accent}`,
+        boxShadow: `0 0 ${18 + 30 * nudge}px ${theme.accent}${hot ? "aa" : "55"}, 0 6px 14px ${shadeA(theme, 0.6)}`,
+        opacity: vis,
+        transform: `scale(${scale.toFixed(3)})`,
+        transformOrigin: "0% 50%",
+      }}
+    >
+      <HourglassIcon size={CHIP_SIZE} color={hot ? theme.onAccent : theme.accent} t={frame / fps} />
+      <span>
+        NEXT HINT IN <span style={{ display: "inline-block", minWidth: `${String(Math.ceil(hint2At / fps)).length}ch`, textAlign: "right", color: hot ? theme.onAccent : theme.accent }}>{secs}</span>s
+      </span>
+    </div>
+  );
+};
+const CHIP_SIZE = 40;
+const CHIP_H = CHIP_SIZE + 30;
+
+/** Small hourglass that flips once a second (with the countdown). */
+const HourglassIcon: React.FC<{ size: number; color: string; t: number }> = ({ size, color, t }) => {
+  const k = t % 1;
+  const turn = k < 0.15 ? 180 * (k / 0.15) : 0;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flex: "0 0 auto", transform: `rotate(${turn.toFixed(1)}deg)` }}>
+      <path d="M 6 2 H 18 M 6 22 H 18" stroke={color} strokeWidth={2.4} strokeLinecap="round" />
+      <path d="M 7 3 C 7 8 11 10 12 12 C 13 10 17 8 17 3 Z M 7 21 C 7 16 11 14 12 12 C 13 14 17 16 17 21 Z" fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+      <path d="M 9.5 19.8 C 10 17.5 11.4 16.4 12 15.6 C 12.6 16.4 14 17.5 14.5 19.8 Z" fill={color} />
+    </svg>
+  );
+};
+
 const LABEL_SIZE = 66;
 const TAB_HEIGHT = LABEL_SIZE + 34;
 const CARD_PAD = { x: 80, top: 78, bottom: 56 };
@@ -217,6 +286,7 @@ export const Header: React.FC<{
               <BulbIcon size={LABEL_SIZE * 0.95} color={theme.onAccent} />
               {HINT_LABEL}
             </div>
+            {hasHint2 && <NextHintChip theme={theme} frame={frame} fps={fps} hint2At={hint2At} back={loopReset(frame, durationInFrames, fps, 0.4, 1)} />}
             {wet > 0.01 && (
               <svg width={0} height={0} style={{ position: "absolute" }}>
                 <filter id="hintWater" x="-10%" y="-20%" width="120%" height="160%">
