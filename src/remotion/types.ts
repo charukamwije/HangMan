@@ -1,4 +1,5 @@
 import type { ThemeId } from "./themes";
+import type { HookTests } from "./hookTests";
 
 /** One guess on the timeline. Whether it is correct is derived from the word. */
 export type Guess = { letter: string; time: number };
@@ -28,4 +29,6 @@ export type ReelProps = {
   audio: ReelAudioSettings;
   /** Preview-only overlay of platform UI safe zones. Forced off for renders. */
   showSafeZones: boolean;
+  /** Hook A/B test flags (hookTests.ts). Missing or all off = the control reel. */
+  hookTests?: Partial<HookTests>;
 };

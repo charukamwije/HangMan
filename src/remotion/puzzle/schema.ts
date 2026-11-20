@@ -49,6 +49,18 @@ export const hangmanPuzzleSchema = z.object({
     })
     .partial()
     .optional(),
+  /** Hook A/B test flags (src/remotion/hookTests.ts). Missing = all off (the control reel). */
+  hookTests: z
+    .object({
+      readableClue: z.boolean(),
+      questionLine: z.boolean(),
+      prefilledLetters: z.boolean(),
+      staggeredUi: z.boolean(),
+      commentCta: z.boolean(),
+      hideNote: z.boolean(),
+    })
+    .partial()
+    .optional(),
 });
 
 /** Payload accepted by /api/render-reel: one puzzle, an array, or { puzzles: [...] }. */

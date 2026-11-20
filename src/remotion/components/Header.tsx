@@ -1,5 +1,5 @@
 import React from "react";
-import { Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { shadeA, type Theme } from "../themes";
 import type { Stress } from "../motion";
 import { BODY_FONT } from "../fonts";
@@ -9,6 +9,8 @@ import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
 import { HintOwl, OWL_ABOVE, THROW_HIT_SECONDS } from "./HintOwl";
 import { ramp } from "../motion";
 import { loopReset, loopResetStart } from "../loop";
+import { HOOK_TEST_TIMING, type HookTests } from "../hookTests";
+import { CommentCta, QuestionLine, stagedVisibility } from "./HookTestOverlays";
 
 /** Same 60px margin inside the safe band on both sides, so the header centres on the safe area. */
 const HEADER_INSET = { left: SAFE_ZONE.left + 60, right: SAFE_ZONE.right + 60 };
@@ -176,7 +178,9 @@ export const Header: React.FC<{
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, clueReveal, wrongFrames, boardTop, tickFrames, stress }) => {
+  /** Hook A/B tests: 1 readable clue, 2 question line, 4 clock held back, 6 comment prompt. */
+  tests: HookTests;
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, clueReveal, wrongFrames, boardTop, tickFrames, stress, tests }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -201,8 +205,11 @@ export const Header: React.FC<{
   // clear by clueReveal[1]. Over the loop reset it frosts back, matching frame 0 for the replay.
   const [clueFrom, clueTo] = clueReveal;
   const clueStagger = words.length > 1 ? Math.max(1, (clueTo - clueFrom - WORD_FRAMES) / (words.length - 1)) : 0;
-  const refrost = loopReset(frame, durationInFrames, fps, 0, 0.6);
-  const introHidden = (i: number) => Math.max(1 - ramp(frame, [clueFrom + i * clueStagger, clueFrom + i * clueStagger + WORD_FRAMES], [0, 1]), refrost);
+  // Hook test 1: the clue is sharp from frame 0 (and stays sharp through the loop, matching frame 0).
+  const frosted = !tests.readableClue;
+  const refrost = frosted ? loopReset(frame, durationInFrames, fps, 0, 0.6) : 0;
+  const introHidden = (i: number) =>
+    frosted ? Math.max(1 - ramp(frame, [clueFrom + i * clueStagger, clueFrom + i * clueStagger + WORD_FRAMES], [0, 1]), refrost) : 0;
   const wrongHidden = (i: number) => {
     if (!Number.isFinite(lastWrong)) return 0;
     const start = lastWrong + wrongFrom + i * wrongStagger;
@@ -212,7 +219,7 @@ export const Header: React.FC<{
   // loop reset starts (that flip ends before the last frame, so the replay starts on a still chip).
   const FLIP = Math.round(fps / 3);
   const loopStart = loopResetStart(durationInFrames, fps);
-  const flipFrom = [...blurEvents, loopStart, clueFrom].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
+  const flipFrom = [...blurEvents, loopStart, ...(frosted ? [clueFrom] : [])].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
   const flip = Number.isFinite(flipFrom) ? interpolate(frame - flipFrom, [0, FLIP], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) }) : 1;
   const flipping = flip > 0 && flip < 1;
   const t = frame / fps;
@@ -233,8 +240,22 @@ export const Header: React.FC<{
 
   return (
     <>
-      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
-      <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />
+      {/* Hook test 4: the banner stays from frame 0, its balloons fade in with the pawns at 2 s. */}
+      <HookBanner
+        theme={theme}
+        text={hookText}
+        pulseFrame={bannerPulse}
+        balloons={tests.staggeredUi ? stagedVisibility(frame, fps, durationInFrames, HOOK_TEST_TIMING.uiIn) : 1}
+      />
+      {tests.staggeredUi ? (
+        // Hook test 4: the clock fades + scales in at 1.5 s instead of sitting there on frame 0.
+        <StagedClock>
+          <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />
+        </StagedClock>
+      ) : (
+        <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />
+      )}
+      {tests.commentCta && <CommentCta theme={theme} />}
 
       <div
         style={{
@@ -338,6 +359,7 @@ export const Header: React.FC<{
             />
           </div>
         )}
+        {tests.questionLine && <QuestionLine theme={theme} minHeight={Math.max(380, TAB_HEIGHT / 2 + CARD_PAD.top + CARD_PAD.bottom + textMinHeight + 2 * CARD_BORDER)} />}
       </div>
     </>
   );
@@ -347,3 +369,18 @@ const hex2 = (a: number) =>
   Math.round(Math.max(0, Math.min(1, a)) * 255)
     .toString(16)
     .padStart(2, "0");
+
+/** Hook test 4: wraps the clock so it fades and scales in over HOOK_TEST_TIMING.timerIn. */
+const StagedClock: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const frame = useCurrentFrame();
+  const { fps, durationInFrames } = useVideoConfig();
+  const vis = stagedVisibility(frame, fps, durationInFrames, HOOK_TEST_TIMING.timerIn);
+  if (vis <= 0.001) return null;
+  const cx = TOP_ROW.right - CLOCK.width / 2;
+  const cy = TOP_ROW.top + CLOCK.height / 2;
+  return (
+    <AbsoluteFill style={{ opacity: vis, transform: vis < 1 ? `scale(${(0.85 + 0.15 * vis).toFixed(4)})` : undefined, transformOrigin: `${cx}px ${cy}px` }}>
+      {children}
+    </AbsoluteFill>
+  );
+};

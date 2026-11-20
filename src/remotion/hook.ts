@@ -73,7 +73,7 @@ export type HookPlan = {
   strikeFrames: number[];
   /** Character index → frame that hint-letter slot snaps in. */
   snapFrames: Map<number, number>;
-  /** Final snap: metallic lock SFX + hint key lights up. */
+  /** Final snap: metallic lock SFX + hint key lights up. Negative when pre-filled (already lit on frame 0). */
   lockFrame: number;
   clearFrame: number;
   /** Pattern-interrupt frame (first clock tick). */
@@ -85,6 +85,11 @@ export type HookPlan = {
   endFrame: number;
   /** [start, end]: the frosted clue sharpens word by word across this window. */
   clueRevealFrames: readonly [number, number];
+  /**
+   * Hook test 3: letters already seated in their slots on frame 0 (the hint + one more).
+   * The decoys still scramble the other slots. Empty = the normal hint snap.
+   */
+  prefilled: string[];
 };
 
 const hash = (s: string) =>
@@ -108,13 +113,14 @@ export function decoyPopFrames30(): number[] {
  * Deterministic hook plan for a word. `word` must already be normalized
  * (uppercase A–Z + single spaces) and `hintLetter` resolved (see timeline.ts).
  */
-export function resolveHook(word: string, hintLetter: string, fps: number): HookPlan {
+export function resolveHook(word: string, hintLetter: string, fps: number, { prefill = [] }: { prefill?: string[] } = {}): HookPlan {
   const F = (f: number) => hookFrame(f, fps);
   const chars = [...word];
   const clearFrame = F(HOOK_FRAMES_30.clear);
 
   // --- Phase 1: decoys cycling through evenly spread empty (non-hint) slots ---
-  const empty = chars.flatMap((c, i) => (c !== " " && c !== hintLetter ? [i] : []));
+  const prefilled = prefill.length ? [...new Set([hintLetter, ...prefill].filter((l) => l && chars.includes(l)))] : [];
+  const empty = chars.flatMap((c, i) => (c !== " " && c !== hintLetter && !prefilled.includes(c) ? [i] : []));
   const count = Math.min(HOOK_FRAMES_30.maxSlots, empty.length);
   const slots = Array.from({ length: count }, (_, k) => empty[Math.floor(((k + 0.5) * empty.length) / count)]);
   // Zig-zag across the board so the eye is pulled side to side: 0, n-1, 1, n-2, …
@@ -149,18 +155,22 @@ export function resolveHook(word: string, hintLetter: string, fps: number): Hook
   const span = HOOK_FRAMES_30.snapEnd - HOOK_FRAMES_30.snapStart;
   const first = HOOK_FRAMES_30.snapEnd - Math.min(span, Math.max(0, hintSlots.length - 1));
   const snapFrames = new Map<number, number>();
-  hintSlots.forEach((idx, k) => snapFrames.set(idx, F(Math.min(HOOK_FRAMES_30.snapEnd, first + k))));
+  // Pre-filled (test 3): the snap is set far enough in the past that frame 0 shows the letters seated, no flash.
+  const seated = -2 * fps;
+  if (prefilled.length) chars.forEach((c, idx) => prefilled.includes(c) && snapFrames.set(idx, seated));
+  else hintSlots.forEach((idx, k) => snapFrames.set(idx, F(Math.min(HOOK_FRAMES_30.snapEnd, first + k))));
 
   return {
     decoys,
     strikeFrames: decoys.filter((d) => d.strikeFrame < d.endFrame).map((d) => d.strikeFrame).sort((a, b) => a - b),
     snapFrames,
-    lockFrame: F(HOOK_FRAMES_30.snapEnd),
+    lockFrame: prefilled.length ? seated : F(HOOK_FRAMES_30.snapEnd),
     clearFrame,
     pulseFrame: F(HOOK_FRAMES_30.pulse),
     rattleFrames: [F(HOOK_FRAMES_30.rattle[0]), F(HOOK_FRAMES_30.rattle[1])],
     musicInFrames: [F(HOOK_FRAMES_30.musicIn[0]), F(HOOK_FRAMES_30.musicIn[1])],
     endFrame: F(HOOK_FRAMES_30.end),
     clueRevealFrames: [F(HOOK_FRAMES_30.clueReveal[0]), F(HOOK_FRAMES_30.clueReveal[1])],
+    prefilled,
   };
 }

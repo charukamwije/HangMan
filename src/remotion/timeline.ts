@@ -15,6 +15,7 @@ import {
   STRESS_BELOW_SECONDS,
 } from "./constants";
 import { resolveHook, type HookPlan } from "./hook";
+import { resolveHookTests, type HookTests } from "./hookTests";
 import type { Guess, ReelProps } from "./types";
 
 export type GuessKind = "correct" | "wrong";
@@ -137,6 +138,8 @@ export type Timeline = {
   hasFinalReveal: boolean;
   /** Frames at which the countdown display changes (for tick SFX + stress pulse). */
   tickFrames: number[];
+  /** Hook A/B test flags, every one resolved (missing = off). */
+  tests: HookTests;
 };
 
 /** Frames between letters popping in at the final reveal (~0.1 s at any fps). */
@@ -144,8 +147,22 @@ export const finalRevealStagger = (fps: number) => Math.max(1, Math.round(fps / 
 /** @deprecated use finalRevealStagger(fps). Value at 30 fps. */
 export const FINAL_REVEAL_STAGGER = 3;
 
+/**
+ * Hook test 3: the second letter pre-filled next to the hint. It takes a letter that
+ * would only appear at the final reveal (so no guess beat is lost) while at least one
+ * other stays hidden for the reveal; otherwise the last correct guess (its beat is dropped).
+ */
+export function secondPrefill(word: string, hintLetter: string, guesses: readonly Guess[], finalRevealAt: number): string | undefined {
+  const letters = [...new Set(word.replace(/ /g, ""))].filter((l) => l !== hintLetter);
+  const guessed = guesses.filter((g) => g.time < finalRevealAt).map((g) => g.letter.toUpperCase());
+  const held = letters.filter((l) => !guessed.includes(l));
+  if (held.length >= 2) return held[held.length - 1];
+  const correct = [...guesses].filter((g) => g.time < finalRevealAt && letters.includes(g.letter.toUpperCase())).sort((a, b) => b.time - a.time);
+  return correct[0]?.letter.toUpperCase() ?? held[0];
+}
+
 export function resolveTimeline(
-  props: Pick<ReelProps, "word" | "guesses" | "finalRevealAt"> & Partial<Pick<ReelProps, "hintLetter">>,
+  props: Pick<ReelProps, "word" | "guesses" | "finalRevealAt"> & Partial<Pick<ReelProps, "hintLetter" | "hookTests">>,
   fps: number,
 ): Timeline {
   const word = normalizeWord(props.word);
@@ -154,9 +171,12 @@ export function resolveTimeline(
   const durationFrames = Math.round(DURATION_SECONDS * fps);
   const toFrame = (s: number) => Math.max(0, Math.min(durationFrames - 1, Math.round(s * fps)));
   const finalRevealFrame = toFrame(props.finalRevealAt);
-  const hook = resolveHook(word, hintLetter, fps);
+  const tests = resolveHookTests(props.hookTests);
+  const prefill = tests.prefilledLetters ? [secondPrefill(word, hintLetter, props.guesses, props.finalRevealAt)].filter((l): l is string => !!l) : [];
+  const hook = resolveHook(word, hintLetter, fps, { prefill });
 
-  const seen = new Set<string>(hintLetter ? [hintLetter] : []);
+  // Pre-filled letters are on the board from frame 0, so their guesses are skipped like the hint's.
+  const seen = new Set<string>([...(hintLetter ? [hintLetter] : []), ...hook.prefilled]);
   const guesses: ResolvedGuess[] = props.guesses
     .map((g) => ({ letter: g.letter.toUpperCase().slice(0, 1), time: g.time }))
     .filter((g) => /^[A-Z]$/.test(g.letter) && Number.isFinite(g.time))
@@ -177,6 +197,7 @@ export function resolveTimeline(
   const correctKeyFrames = new Map<string, number>();
   const wrongKeyFrames = new Map<string, number>();
   if (hintLetter) correctKeyFrames.set(hintLetter, hook.lockFrame);
+  for (const l of hook.prefilled) correctKeyFrames.set(l, hook.lockFrame);
   for (const g of guesses) {
     if (g.kind === "correct" && g.frame < finalRevealFrame) correctKeyFrames.set(g.letter, g.frame);
     if (g.kind === "wrong") wrongKeyFrames.set(g.letter, g.frame);
@@ -213,6 +234,7 @@ export function resolveTimeline(
     finalRevealFrame,
     hasFinalReveal: finalOrder.size > 0,
     tickFrames,
+    tests,
   };
 }
 

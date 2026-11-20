@@ -26,6 +26,17 @@ export const reelPropsSchema = z.object({
     sfx: z.number().min(0).max(1),
   }),
   showSafeZones: z.boolean(),
+  hookTests: z
+    .object({
+      readableClue: z.boolean(),
+      questionLine: z.boolean(),
+      prefilledLetters: z.boolean(),
+      staggeredUi: z.boolean(),
+      commentCta: z.boolean(),
+      hideNote: z.boolean(),
+    })
+    .partial()
+    .optional(),
 });
 
 export type ReelPropsInput = z.infer<typeof reelPropsSchema>;

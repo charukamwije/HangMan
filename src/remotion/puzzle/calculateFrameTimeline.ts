@@ -90,12 +90,13 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
     themeId: puzzle.themeId ?? DEFAULT_REEL_PROPS.themeId,
     audio: { ...DEFAULT_REEL_PROPS.audio, ...puzzle.audio },
     showSafeZones: false,
+    ...(puzzle.hookTests ? { hookTests: puzzle.hookTests } : {}),
   };
 
   // ---- 3. Resolve with the same engine the composition renders with --------
   const tl = resolveTimeline(reelProps, fps);
   const revealSequence: RevealEvent[] = [];
-  if (prefilledLetter) revealSequence.push({ frame: tl.hook.lockFrame, letter: prefilledLetter, status: "prefilled" });
+  if (prefilledLetter) revealSequence.push({ frame: Math.max(0, tl.hook.lockFrame), letter: prefilledLetter, status: "prefilled" });
   for (const g of tl.guesses) {
     if (g.kind === "wrong") revealSequence.push({ frame: g.frame, letter: g.letter, status: "wrong" });
     else if (g.frame < tl.finalRevealFrame) revealSequence.push({ frame: g.frame, letter: g.letter, status: "correct" });

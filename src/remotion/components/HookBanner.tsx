@@ -71,7 +71,9 @@ export const HookBanner: React.FC<{
   theme: Theme;
   text: string;
   pulseFrame: number;
-}> = ({ theme, text, pulseFrame }) => {
+  /** 0–1 opacity of the balloon clusters (hook test 4 holds them back until 2 s). Default 1. */
+  balloons?: number;
+}> = ({ theme, text, pulseFrame, balloons = 1 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const t = frame / fps;
@@ -155,12 +157,16 @@ export const HookBanner: React.FC<{
       }}
     >
       {/* balloon clusters tied to the top corners: blue "Like" (left), red "Subscribe" (right) */}
-      <div style={{ position: "absolute", left: 22, top: -RIM }}>
-        <BalloonCluster side="left" t={t} lead={float.lead.left} />
-      </div>
-      <div style={{ position: "absolute", right: 22, top: -RIM }}>
-        <BalloonCluster side="right" t={t} lead={float.lead.right} />
-      </div>
+      {balloons > 0.001 && (
+        <>
+          <div style={{ position: "absolute", left: 22, top: -RIM, opacity: balloons }}>
+            <BalloonCluster side="left" t={t} lead={float.lead.left} />
+          </div>
+          <div style={{ position: "absolute", right: 22, top: -RIM, opacity: balloons }}>
+            <BalloonCluster side="right" t={t} lead={float.lead.right} />
+          </div>
+        </>
+      )}
       {/* light sheen sweeping across the plate */}
       <span style={{ position: "absolute", inset: 0, borderRadius: RADIUS - RIM, overflow: "hidden", pointerEvents: "none" }}>
         <span

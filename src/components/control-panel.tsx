@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,9 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ExportPanel } from "@/components/export-panel";
 import { FPS } from "@/remotion/constants";
+import { HOOK_TEST_INFO, hookVariantTag, resolveHookTests } from "@/remotion/hookTests";
 import { THEMES, type ThemeId } from "@/remotion/themes";
-import { normalizeWord, parseLetters, resolveHintLetter, uniqueLetters } from "@/remotion/timeline";
+import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
 import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,8 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
           ))}
         </AnimatePresence>
       </Section>
+
+      <HookTestsSection inputProps={inputProps} />
 
       <Section icon={<Palette />} title="Aesthetic Theme">
         <NativeSelect value={s.themeId} onChange={(e) => s.update({ themeId: e.target.value as ThemeId })}>
@@ -283,5 +286,68 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <Label>{label}</Label>
       {children}
     </div>
+  );
+}
+
+/**
+ * Hook A/B tests: one tick box per variant (hookTests.ts). Post 5–6 Shorts per variant
+ * and compare them with the last ~20 (the control, every box unticked).
+ */
+function HookTestsSection({ inputProps }: { inputProps: ReelProps }) {
+  const tests = resolveHookTests(useReelStore((s) => s.hookTests));
+  // Test 3: which letters actually end up seated on frame 0 (same resolver as the render).
+  const prefilled = useMemo(
+    () => (tests.prefilledLetters ? resolveTimeline(inputProps, FPS).hook.prefilled : []),
+    [tests.prefilledLetters, inputProps],
+  );
+  const setHookTest = useReelStore((s) => s.setHookTest);
+  const on = HOOK_TEST_INFO.filter((t) => tests[t.key]);
+  const tag = hookVariantTag(tests);
+  return (
+    <Section icon={<FlaskConical />} title="Hook A/B Tests">
+      <p className="text-xs text-muted-foreground">
+        Tick one test at a time. Post 5–6 Shorts per test and compare them with your last 20. Rendered files are named after the variant.
+      </p>
+      <div className="flex flex-col overflow-hidden rounded-md border border-border">
+        {HOOK_TEST_INFO.map((t, i) => (
+          <label
+            key={t.key}
+            className={cn(
+              "flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors hover:bg-muted/40",
+              i > 0 && "border-t border-border",
+              tests[t.key] && "bg-primary/10",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={tests[t.key]}
+              onChange={(e) => setHookTest(t.key, e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 cursor-pointer accent-[var(--primary)]"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">
+                <span className="mr-1.5 font-mono text-xs text-muted-foreground">{t.tag}</span>
+                {t.label}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t.detail}
+                {t.key === "prefilledLetters" && prefilled.length > 0 && (
+                  <span className="ml-1 font-mono text-primary">Pre-fills {prefilled.join(" + ")}.</span>
+                )}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Variant</span>
+        <Badge variant={on.length ? "default" : "outline"}>{tag}</Badge>
+      </div>
+      {on.length > 1 && (
+        <p className="flex items-start gap-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {on.length} tests are on. If retention changes, you won&apos;t know which one did it.
+        </p>
+      )}
+    </Section>
   );
 }

@@ -7,6 +7,7 @@ import type { ThemeId } from "@/remotion/themes";
 import { autoSchedule, clampTime, normalizeWord, parseLetters } from "@/remotion/timeline";
 import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
+import { HOOK_TESTS_OFF, resolveHookTests, type HookTests } from "@/remotion/hookTests";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
 
 export type ReelState = {
@@ -26,10 +27,13 @@ export type ReelState = {
   autoTiming: boolean;
   audio: ReelAudioSettings;
   showSafeZones: boolean;
+  /** Hook A/B test flags; all off = the control reel. */
+  hookTests: HookTests;
 };
 
 type Actions = {
-  update: (patch: Partial<Omit<ReelState, "guesses" | "audio">>) => void;
+  update: (patch: Partial<Omit<ReelState, "guesses" | "audio" | "hookTests">>) => void;
+  setHookTest: (key: keyof HookTests, on: boolean) => void;
   updateAudio: (patch: Partial<ReelAudioSettings>) => void;
   setGuess: (index: number, patch: Partial<Guess>) => void;
   addGuess: () => void;
@@ -54,6 +58,7 @@ const INITIAL: ReelState = {
   autoTiming: true,
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
+  hookTests: HOOK_TESTS_OFF,
 };
 
 const schedule = (s: Pick<ReelState, "word" | "hintLetter" | "wrongLetters" | "holdBack" | "finalRevealAt">) =>
@@ -77,6 +82,7 @@ export const useReelStore = create<ReelState & Actions>()(
         set({ ...patch, ...(next.autoTiming && pacingChanged ? { guesses: schedule(next) } : {}) });
       },
       updateAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
+      setHookTest: (key, on) => set({ hookTests: { ...resolveHookTests(get().hookTests), [key]: on } }),
       setGuess: (index, patch) =>
         set({
           autoTiming: false,
@@ -116,6 +122,7 @@ export const useReelStore = create<ReelState & Actions>()(
           audio: t.reelProps.audio,
           guesses: t.reelProps.guesses,
           autoTiming: t.mode === "auto",
+          hookTests: resolveHookTests(puzzle.hookTests),
         });
       },
       reset: () => set(INITIAL),
@@ -147,6 +154,7 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   themeId: s.themeId,
   audio: s.audio,
   showSafeZones: s.showSafeZones,
+  hookTests: resolveHookTests(s.hookTests),
 });
 
 /**
@@ -170,5 +178,6 @@ export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
     holdBack: s.holdBack,
     themeId: s.themeId,
     audio: s.audio,
+    hookTests: resolveHookTests(s.hookTests),
   };
 };

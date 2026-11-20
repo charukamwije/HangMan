@@ -49,7 +49,8 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   // Tape rewind of the music bed under the whole decode, speeding up with the decoy cadence.
   // Its Sequence hard-stops it on the clear frame (30); the same music then plays forward from the lock.
   cues.push({ id: "hook-rewind", src: AUDIO.rewind, from: 0, durationInFrames: hook.clearFrame, volume: clamp01(Math.max(audio.music, 0.2) * 2) });
-  if (timeline.hintLetter) {
+  // Pre-filled (hook test 3): the letters are already seated on frame 0, so there is no lock moment.
+  if (timeline.hintLetter && !hook.prefilled.length) {
     cues.push({ id: "hook-lock", src: AUDIO.lock, from: hook.lockFrame, durationInFrames: seconds(AUDIO_SECONDS.lock, fps), volume: clamp01(sfx * 0.9) });
   }
 

@@ -5,6 +5,7 @@
  */
 import type { ThemeId } from "../themes";
 import type { ReelAudioSettings, ReelProps } from "../types";
+import type { HookTests } from "../hookTests";
 
 /** What happens on a reveal frame. */
 export type RevealStatus =
@@ -52,6 +53,8 @@ export type HangmanPuzzleData = {
   holdBack?: number;
   themeId?: ThemeId;
   audio?: Partial<ReelAudioSettings>;
+  /** Hook A/B test flags (hookTests.ts). Missing = all off (the control reel). */
+  hookTests?: Partial<HookTests>;
 };
 
 export interface FrameTimeline {
