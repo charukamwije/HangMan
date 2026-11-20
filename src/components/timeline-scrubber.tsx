@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
-import { Pause, Play, SkipBack } from "lucide-react";
+import { Camera, Loader2, Pause, Play, SkipBack } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { DURATION_FRAMES, DURATION_SECONDS, FPS } from "@/remotion/constants";
@@ -10,6 +10,7 @@ import { countdownAt, formatClock, resolveTimeline } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
 import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
+import { hookVariantTag } from "@/remotion/hookTests";
 
 /**
  * Custom timeline under the player: scrub by click/drag, and drag the
@@ -22,6 +23,35 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
   const setGuess = useReelStore((s) => s.setGuess);
   const update = useReelStore((s) => s.update);
   const timeline = useMemo(() => resolveTimeline(inputProps, FPS), [inputProps]);
+  const [shooting, setShooting] = useState(false);
+  const [shotError, setShotError] = useState<string | null>(null);
+
+  /** Pause, then render the current frame on the server (same engine as the video) and download it as a PNG. */
+  const screenshot = async () => {
+    const p = playerRef.current;
+    p?.pause();
+    const f = p?.getCurrentFrame() ?? frame;
+    const { videoNumber, word } = useReelStore.getState();
+    const base = videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${word.trim().replace(/\s+/g, "-")}` : "hangman";
+    const fileName = `${base}-${hookVariantTag(inputProps.hookTests)}-f${String(f).padStart(3, "0")}`;
+    setShooting(true);
+    setShotError(null);
+    try {
+      const res = await fetch("/api/still", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ props: { ...inputProps, showSafeZones: false }, frame: f, fileName }),
+      });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+      const url = URL.createObjectURL(await res.blob());
+      Object.assign(document.createElement("a"), { href: url, download: `${fileName}.png` }).click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setShotError(err instanceof Error ? err.message : "Screenshot failed");
+    } finally {
+      setShooting(false);
+    }
+  };
 
   // Attach to the player once it has mounted (it is loaded dynamically).
   useEffect(() => {
@@ -125,11 +155,16 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
         <div className="ml-1 font-mono text-xs tabular-nums text-muted-foreground">
           {(frame / FPS).toFixed(2)}s / {DURATION_SECONDS}.00s · frame {frame}
         </div>
-        <div className="ml-auto rounded-md border border-primary/40 px-2 py-0.5 font-display text-sm tracking-wider text-primary">
+        <Button size="sm" variant="outline" className="ml-auto" disabled={shooting} onClick={screenshot} title="Download this frame as a 1080×1920 PNG">
+          {shooting ? <Loader2 className="animate-spin" /> : <Camera />}
+          {shooting ? "Rendering…" : "Screenshot"}
+        </Button>
+        <div className="rounded-md border border-primary/40 px-2 py-0.5 font-display text-sm tracking-wider text-primary">
           {formatClock(countdownAt(frame, FPS))}
         </div>
       </div>
 
+      {shotError && <p className="mb-2 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">Screenshot failed: {shotError}</p>}
       <div ref={trackRef} onPointerDown={startScrub} className="relative h-14 cursor-pointer touch-none select-none rounded-md bg-muted/60">
         {/* second gridlines */}
         {Array.from({ length: DURATION_SECONDS + 1 }, (_, s) => (

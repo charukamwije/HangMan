@@ -14,6 +14,12 @@ const PreviewPlayer = dynamic(() => import("@/components/preview-player").then((
   loading: () => <div className="aspect-[9/16] h-full animate-pulse rounded-xl bg-card" />,
 });
 
+// Client only as well (renders the thumbnail composition in the browser).
+const ThumbnailPanel = dynamic(() => import("@/components/thumbnail-panel").then((m) => m.ThumbnailPanel), {
+  ssr: false,
+  loading: () => <div className="aspect-[9/16] w-[240px] animate-pulse rounded-xl bg-card" />,
+});
+
 export function Studio() {
   const playerRef = useRef<PlayerRef>(null);
   const state = useReelStore();
@@ -25,7 +31,7 @@ export function Studio() {
   const inputProps = useMemo(
     () => toReelProps(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.hookText, state.hintLetter, state.subtitle, state.hint2, state.word, state.guesses, state.finalRevealAt, state.themeId, state.audio, state.showSafeZones],
+    [state.hookText, state.hintLetter, state.subtitle, state.hint2, state.word, state.guesses, state.finalRevealAt, state.themeId, state.audio, state.showSafeZones, state.hookTests],
   );
 
   return (
@@ -44,10 +50,11 @@ export function Studio() {
       </aside>
 
       <main className="relative flex min-h-[70vh] flex-1 flex-col items-center gap-4 overflow-hidden bg-[radial-gradient(ellipse_at_top,_oklch(0.22_0.02_70)_0%,_transparent_60%)] p-4 lg:p-6">
-        <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-4 xl:flex-row xl:items-start">
           <div className="h-full max-h-[calc(100dvh-180px)] aspect-[9/16] overflow-hidden rounded-xl shadow-2xl ring-1 ring-white/10">
             <PreviewPlayer ref={playerRef} inputProps={inputProps} />
           </div>
+          <ThumbnailPanel inputProps={inputProps} />
         </div>
         <TimelineScrubber playerRef={playerRef} inputProps={inputProps} />
       </main>

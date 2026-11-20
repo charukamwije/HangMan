@@ -36,7 +36,7 @@ export const hangmanPuzzleSchema = z.object({
     .regex(/^[A-Za-z ]+$/, "Only letters and spaces"),
   wrongGuesses: z.array(letter).max(12).default([]),
   revealSequence: z.array(revealEventSchema).max(40).default([]),
-  viralHookText: z.string().trim().max(40).default(DEFAULT_HOOK_TEXT),
+  viralHookText: z.string().trim().max(60).default(DEFAULT_HOOK_TEXT),
   prefilledLetter: letter.optional(),
   holdBack: z.number().int().min(0).max(10).optional(),
   themeId: z.enum(THEME_IDS as [ThemeId, ...ThemeId[]]).optional(),

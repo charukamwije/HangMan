@@ -5,7 +5,7 @@ import { THEME_IDS, type ThemeId } from "@/remotion/themes";
 /** Server-side validation of composition input props (API route + CLI props files). */
 export const reelPropsSchema = z.object({
   // Defaults keep older props files (pre-hook) valid.
-  hookText: z.string().max(40).default(DEFAULT_HOOK_TEXT),
+  hookText: z.string().max(60).default(DEFAULT_HOOK_TEXT),
   hintLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").default(""),
   subtitle: z.string().max(120),
   hint2: z.string().max(120).default(""),
@@ -26,6 +26,7 @@ export const reelPropsSchema = z.object({
     sfx: z.number().min(0).max(1),
   }),
   showSafeZones: z.boolean(),
+  backgroundImage: z.string().regex(/^[A-Za-z0-9_\-/.]*$/).refine((p) => !p.includes(".."), "Invalid path").optional(),
   hookTests: z
     .object({
       readableClue: z.boolean(),

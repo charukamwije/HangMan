@@ -29,6 +29,8 @@ export type ReelProps = {
   audio: ReelAudioSettings;
   /** Preview-only overlay of platform UI safe zones. Forced off for renders. */
   showSafeZones: boolean;
+  /** Picture under public/ used instead of the shelf scene (e.g. "backgrounds/characters.jpg"). Empty / missing = shelves. */
+  backgroundImage?: string;
   /** Hook A/B test flags (hookTests.ts). Missing or all off = the control reel. */
   hookTests?: Partial<HookTests>;
 };

@@ -3,6 +3,8 @@ export const COMPOSITION_ID_1080 = "HangmanReel1080"; // 1080×1920 delivery
 /** Same reel, but input props are raw HangmanPuzzleData (batch JSON files). */
 export const PUZZLE_COMPOSITION_ID = "HangmanPuzzle";
 export const PUZZLE_COMPOSITION_ID_1080 = "HangmanPuzzle1080";
+/** Custom 9:16 thumbnail still (1080×1920, one frame). */
+export const THUMBNAIL_COMPOSITION_ID = "HangmanThumbnail";
 
 /**
  * Design canvas. Every layout value in src/remotion is authored in this 4K

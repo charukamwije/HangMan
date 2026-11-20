@@ -8,6 +8,7 @@ import { autoSchedule, clampTime, normalizeWord, parseLetters } from "@/remotion
 import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
 import { HOOK_TESTS_OFF, resolveHookTests, type HookTests } from "@/remotion/hookTests";
+import { LIBRARY } from "@/data/library";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
 
 export type ReelState = {
@@ -29,11 +30,17 @@ export type ReelState = {
   showSafeZones: boolean;
   /** Hook A/B test flags; all off = the control reel. */
   hookTests: HookTests;
+  /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
+  backgroundImage: string;
+  /** Video number from the library (data/library.ts) last loaded; null = custom content. */
+  videoNumber: number | null;
 };
 
 type Actions = {
   update: (patch: Partial<Omit<ReelState, "guesses" | "audio" | "hookTests">>) => void;
   setHookTest: (key: keyof HookTests, on: boolean) => void;
+  /** Load video `n` (1-based) from the library: word, banner, hints, pre-filled letter and reveal order. */
+  loadVideo: (n: number) => void;
   updateAudio: (patch: Partial<ReelAudioSettings>) => void;
   setGuess: (index: number, patch: Partial<Guess>) => void;
   addGuess: () => void;
@@ -43,6 +50,9 @@ type Actions = {
   loadPuzzle: (raw: unknown) => void;
   reset: () => void;
 };
+
+/** The characters picture (public/backgrounds/characters.jpg), on by default. */
+export const DEFAULT_BACKGROUND_IMAGE = "backgrounds/characters.jpg";
 
 const INITIAL: ReelState = {
   hookText: DEFAULT_INPUT.hookText,
@@ -59,7 +69,14 @@ const INITIAL: ReelState = {
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
   hookTests: HOOK_TESTS_OFF,
+  videoNumber: null,
+  backgroundImage: DEFAULT_BACKGROUND_IMAGE,
 };
+
+/** Library reveal order: first guess at 2 s, then one every 3 s (9 guesses → 26 s), final reveal at 29 s. */
+const LIBRARY_FIRST_GUESS = 2;
+const LIBRARY_GUESS_GAP = 3;
+const LIBRARY_FINAL_REVEAL = 29;
 
 const schedule = (s: Pick<ReelState, "word" | "hintLetter" | "wrongLetters" | "holdBack" | "finalRevealAt">) =>
   autoSchedule({
@@ -82,6 +99,23 @@ export const useReelStore = create<ReelState & Actions>()(
         set({ ...patch, ...(next.autoTiming && pacingChanged ? { guesses: schedule(next) } : {}) });
       },
       updateAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
+      loadVideo: (n) => {
+        const v = LIBRARY.find((e) => e.n === n);
+        if (!v) return;
+        set({
+          videoNumber: v.n,
+          hookText: v.hookText,
+          subtitle: v.hint1,
+          hint2: v.hint2,
+          word: v.word,
+          hintLetter: v.prefill,
+          wrongLetters: v.guesses.filter((g) => !g.correct).map((g) => g.letter).join(", "),
+          finalRevealAt: LIBRARY_FINAL_REVEAL,
+          guesses: v.guesses.map((g, i) => ({ letter: g.letter, time: LIBRARY_FIRST_GUESS + LIBRARY_GUESS_GAP * i })),
+          // Keep the CSV's exact reveal order: editing the word / pacing must not re-time it.
+          autoTiming: false,
+        });
+      },
       setHookTest: (key, on) => set({ hookTests: { ...resolveHookTests(get().hookTests), [key]: on } }),
       setGuess: (index, patch) =>
         set({
@@ -155,6 +189,7 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   audio: s.audio,
   showSafeZones: s.showSafeZones,
   hookTests: resolveHookTests(s.hookTests),
+  // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });
 
 /**

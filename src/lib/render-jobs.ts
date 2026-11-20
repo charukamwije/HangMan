@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { bundle } from "@remotion/bundler";
-import { renderMedia, selectComposition } from "@remotion/renderer";
-import { COMPOSITION_ID } from "@/remotion/constants";
+import { renderMedia, renderStill, selectComposition } from "@remotion/renderer";
+import { COMPOSITION_ID, COMPOSITION_ID_1080, THUMBNAIL_COMPOSITION_ID } from "@/remotion/constants";
+import type { ThumbnailProps } from "@/remotion/HangmanThumbnail";
 import type { ReelProps } from "@/remotion/types";
 import { hookVariantTag } from "@/remotion/hookTests";
 
@@ -144,4 +145,37 @@ async function runJob(job: RenderJob) {
   } finally {
     job.finishedAt = Date.now();
   }
+}
+
+/**
+ * One frame as a 1080×1920 PNG, rendered by the same engine as the video (so blurs, glows and
+ * blend modes match exactly). Uses its own port so it can run while a video render is going.
+ */
+export async function renderFramePng(inputProps: ReelProps, frame: number): Promise<Buffer> {
+  const serveUrl = await getServeUrl();
+  const props = { ...inputProps, showSafeZones: false };
+  const port = RENDER_PORT + 1;
+  const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID_1080, inputProps: props, port });
+  const f = Math.max(0, Math.min(composition.durationInFrames - 1, Math.round(frame)));
+  const { buffer } = await renderStill({
+    serveUrl,
+    port,
+    composition,
+    inputProps: props,
+    frame: f,
+    imageFormat: "png",
+    chromiumOptions: { gl: "angle" },
+  });
+  if (!buffer) throw new Error("Still render returned no image");
+  return buffer;
+}
+
+/** The custom thumbnail (HangmanThumbnail) as a 1080×1920 PNG. */
+export async function renderThumbnailPng(props: ThumbnailProps): Promise<Buffer> {
+  const serveUrl = await getServeUrl();
+  const port = RENDER_PORT + 1;
+  const composition = await selectComposition({ serveUrl, id: THUMBNAIL_COMPOSITION_ID, inputProps: props, port });
+  const { buffer } = await renderStill({ serveUrl, port, composition, inputProps: props, frame: 0, imageFormat: "png", chromiumOptions: { gl: "angle" } });
+  if (!buffer) throw new Error("Thumbnail render returned no image");
+  return buffer;
 }

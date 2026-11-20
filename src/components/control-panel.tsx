@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,12 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ExportPanel } from "@/components/export-panel";
 import { FPS } from "@/remotion/constants";
+import { LIBRARY } from "@/data/library";
 import { HOOK_TEST_INFO, hookVariantTag, resolveHookTests } from "@/remotion/hookTests";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
-import { useReelStore } from "@/store/reel-store";
+import { DEFAULT_BACKGROUND_IMAGE, useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
 export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps; playerRef: RefObject<PlayerRef | null> }) {
@@ -43,9 +44,11 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
 
   return (
     <div className="flex flex-col gap-1 p-3">
+      <LibrarySection />
+
       <Section icon={<Type />} title="Content">
         <Field label="Hook banner (frame 0)">
-          <Input value={s.hookText} maxLength={40} placeholder="99% FAIL THIS" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
+          <Input value={s.hookText} maxLength={60} placeholder="99% FAIL THIS" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
         </Field>
         <Field label="Hint 1 (0–15 s)">
           <Input
@@ -122,6 +125,10 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
           {[THEMES[s.themeId].accent, THEMES[s.themeId].wrong, THEMES[s.themeId].lamp, ...THEMES[s.themeId].wood].map((c, i) => (
             <span key={i} className="h-5 flex-1 rounded ring-1 ring-white/10" style={{ background: c }} />
           ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <Label>Thumbnail background picture (characters)</Label>
+          <Switch checked={!!s.backgroundImage} onCheckedChange={(v) => s.update({ backgroundImage: v ? DEFAULT_BACKGROUND_IMAGE : "" })} />
         </div>
         <div className="flex items-center justify-between">
           <Label>Show platform safe zones (preview)</Label>
@@ -346,6 +353,64 @@ function HookTestsSection({ inputProps }: { inputProps: ReelProps }) {
       {on.length > 1 && (
         <p className="flex items-start gap-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {on.length} tests are on. If retention changes, you won&apos;t know which one did it.
+        </p>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * Video library (puzzles/films-tv-100.csv → src/data/library.ts): Back / Next steps
+ * through the videos, and the number box jumps straight to one (Enter or Go).
+ */
+function LibrarySection() {
+  const videoNumber = useReelStore((s) => s.videoNumber);
+  const loadVideo = useReelStore((s) => s.loadVideo);
+  const first = LIBRARY[0].n;
+  const last = LIBRARY[LIBRARY.length - 1].n;
+  const [draft, setDraft] = useState(videoNumber ? String(videoNumber) : "");
+  useEffect(() => setDraft(videoNumber ? String(videoNumber) : ""), [videoNumber]);
+  const current = LIBRARY.find((v) => v.n === videoNumber);
+  const target = Number(draft);
+  const valid = Number.isInteger(target) && LIBRARY.some((v) => v.n === target);
+  const go = () => valid && loadVideo(target);
+
+  return (
+    <Section icon={<Clapperboard />} title={`Video Library · ${LIBRARY.length} Films & TV`}>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" disabled={videoNumber !== null && videoNumber <= first} onClick={() => loadVideo(videoNumber === null ? first : videoNumber - 1)}>
+          <ChevronLeft /> Back
+        </Button>
+        <Input
+          aria-label="Video number"
+          type="number"
+          min={first}
+          max={last}
+          value={draft}
+          placeholder={`${first}–${last}`}
+          className={cn("h-8 w-20 text-center font-mono", draft && !valid && "border-destructive text-destructive")}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && go()}
+        />
+        <Button size="sm" variant="secondary" disabled={!valid || target === videoNumber} onClick={go}>
+          Go
+        </Button>
+        <Button size="sm" variant="outline" className="ml-auto" disabled={videoNumber !== null && videoNumber >= last} onClick={() => loadVideo(videoNumber === null ? first : videoNumber + 1)}>
+          Next <ChevronRight />
+        </Button>
+      </div>
+      {current ? (
+        <div className="flex flex-col gap-0.5 rounded-md bg-muted/40 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">#{current.n}</span>
+            <span className="font-display tracking-widest text-primary">{current.word}</span>
+            <Badge variant="outline" className="ml-auto">{current.category}</Badge>
+          </div>
+          <span className="text-xs text-muted-foreground">{current.source}</span>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Custom content. Press Next, or type a number ({first}–{last}) and press Enter.
         </p>
       )}
     </Section>

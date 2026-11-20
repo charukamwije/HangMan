@@ -16,7 +16,24 @@ const MAX_FONT = 66;
 const PAD_Y = 22;
 /** Banner sits this far below the clock-centred position, giving the balloons more headroom. */
 const LOWER = 160;
-const fontSizeFor = (text: string) => Math.min(MAX_FONT, Math.floor((MAX_WIDTH - 150) / (Math.max(1, text.length) * 0.56)));
+const fontSizeFor = (longest: number, wrapped = false) =>
+  // Wrapped banners leave ~12 % of the row free, so the frame-0 slam (and its balloons) stays clear of the clock.
+  Math.min(MAX_FONT, Math.floor(((wrapped ? MAX_WIDTH * 0.88 : MAX_WIDTH) - 150) / (Math.max(1, longest) * 0.56)));
+/** Longer banners wrap onto two balanced lines instead of shrinking the type to fit one. */
+const WRAP_AT = 26;
+function bannerLines(label: string): string[] {
+  const words = label.split(" ");
+  if (label.length <= WRAP_AT || words.length < 2) return [label];
+  let best = [label];
+  let bestMax = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(" ");
+    const b = words.slice(i).join(" ");
+    const m = Math.max(a.length, b.length);
+    if (m < bestMax) [best, bestMax] = [[a, b], m];
+  }
+  return best;
+}
 
 /** Power words (and "99%"-style stats) that take the accent and punch on every banner slam. */
 const EMPHASIS = /^(SOLVE|FAIL|FAILS|IMPOSSIBLE|GENIUS|GENIUSES|HARDEST|NOBODY|ONLY|\d+%)$/;
@@ -78,10 +95,14 @@ export const HookBanner: React.FC<{
   const { fps, durationInFrames } = useVideoConfig();
   const t = frame / fps;
   const label = (text.trim() || "GUESS THE WORD").toUpperCase();
-  const fontSize = fontSizeFor(label);
+  const lines = bannerLines(label);
+  const longest = Math.max(...lines.map((l) => l.length));
+  const fontSize = fontSizeFor(longest, lines.length > 1);
+  // The second line grows the plate; lift it by most of that so it stays clear of the hint card below.
+  const lift = (lines.length - 1) * fontSize * 1.1 * 0.7;
 
   // Fixed pill width, so the balloon strings know exactly where the corners are.
-  const bannerW = Math.min(MAX_WIDTH, Math.ceil(2 * RIM + 28 + 28 + 8 + label.length * fontSize * 0.52));
+  const bannerW = Math.min(MAX_WIDTH, Math.ceil(2 * RIM + 28 + 28 + 8 + longest * fontSize * 0.52));
   // Slam size: as big as SLAM_MAX, but never grown (from its left edge) past the 60 px gap to the clock.
   const slamAmp = Math.max(0.08, Math.min(SLAM_MAX, (MAX_WIDTH - bannerW + 60) / bannerW));
   const SPRING = { damping: 9, stiffness: 260, mass: 0.5 };
@@ -118,7 +139,7 @@ export const HookBanner: React.FC<{
     <div
       style={{
         position: "absolute",
-        top: TOP_ROW.top + (CLOCK.height - (MAX_FONT * 1.1 + 4 + 2 * PAD_Y + 2 * RIM)) / 2 + LOWER, // clock-centred, then lowered
+        top: -lift + TOP_ROW.top + (CLOCK.height - (MAX_FONT * 1.1 + 4 + 2 * PAD_Y + 2 * RIM)) / 2 + LOWER, // clock-centred, then lowered
         left: TOP_ROW.left + BANNER_GUTTER,
         width: bannerW,
       }}
@@ -181,15 +202,20 @@ export const HookBanner: React.FC<{
           }}
         />
       </span>
-      <span style={labelStyle}>
-        {label.split(" ").map((word, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && " "}
-            {EMPHASIS.test(word.replace(/[^A-Z0-9%]/g, "")) ? (
-              <EmphasisWord word={word} frame={sinceSlam} hold={back} size={fontSize} shadow={textExtrude} color={theme.accent} />
-            ) : (
-              word
-            )}
+      <span style={{ ...labelStyle, textAlign: "center" }}>
+        {lines.map((line, li) => (
+          <React.Fragment key={li}>
+            {li > 0 && <br />}
+            {line.split(" ").map((word, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && " "}
+                {EMPHASIS.test(word.replace(/[^A-Z0-9%]/g, "")) ? (
+                  <EmphasisWord word={word} frame={sinceSlam} hold={back} size={fontSize} shadow={textExtrude} color={theme.accent} />
+                ) : (
+                  word
+                )}
+              </React.Fragment>
+            ))}
           </React.Fragment>
         ))}
       </span>

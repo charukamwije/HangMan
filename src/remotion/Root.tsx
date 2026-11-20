@@ -8,11 +8,21 @@ import {
   PUZZLE_COMPOSITION_ID,
   PUZZLE_COMPOSITION_ID_1080,
   RESOLUTIONS,
+  THUMBNAIL_COMPOSITION_ID,
 } from "./constants";
 import { DEFAULT_REEL_PROPS } from "./defaults";
 import { HangmanReel } from "./HangmanReel";
 import { HangmanPuzzleReel, validatePuzzleMetadata } from "./HangmanPuzzleReel";
 import { EXAMPLE_PUZZLE } from "./puzzle";
+import { HangmanThumbnail, type ThumbnailProps } from "./HangmanThumbnail";
+
+const DEFAULT_THUMBNAIL_PROPS: ThumbnailProps = {
+  hookText: DEFAULT_REEL_PROPS.hookText,
+  word: DEFAULT_REEL_PROPS.word,
+  hintLetter: DEFAULT_REEL_PROPS.hintLetter,
+  themeId: DEFAULT_REEL_PROPS.themeId,
+  category: "",
+};
 
 const common = { durationInFrames: DURATION_FRAMES, fps: FPS } as const;
 
@@ -40,6 +50,14 @@ export const RemotionRoot: React.FC = () => (
       {...RESOLUTIONS["1080p"]}
       defaultProps={EXAMPLE_PUZZLE}
       calculateMetadata={validatePuzzleMetadata}
+    />
+    <Composition
+      id={THUMBNAIL_COMPOSITION_ID}
+      component={HangmanThumbnail}
+      durationInFrames={1}
+      fps={FPS}
+      {...RESOLUTIONS["1080p"]}
+      defaultProps={DEFAULT_THUMBNAIL_PROPS}
     />
   </>
 );

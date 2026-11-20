@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { AbsoluteFill, interpolate, random, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Img, interpolate, random, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { useAudioData, visualizeAudio } from "@remotion/media-utils";
 import { AUDIO, DESIGN_HEIGHT, DESIGN_WIDTH } from "../constants";
 import { shadeA, type Theme } from "../themes";
@@ -44,7 +44,13 @@ function useBooks(theme: Theme) {
  * Fully opaque on frame 0 (no fade-in) and wrapped in a Ken Burns push-in.
  * The vignette lives in <StressVignette> so it can react to the countdown.
  */
-export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
+export const Background: React.FC<{
+  theme: Theme;
+  /** Path under public/ (e.g. "backgrounds/characters.jpg"). Set = this picture replaces the shelf scene. */
+  image?: string;
+  /** Black overlay on the picture (0–1) so text and the board stay readable over it. */
+  imageDim?: number;
+}> = ({ theme, image, imageDim = 0.42 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const t = frame / fps;
@@ -78,6 +84,20 @@ export const Background: React.FC<{ theme: Theme }> = ({ theme }) => {
   );
 
   const base = `linear-gradient(180deg, ${theme.wood[0]} 0%, ${theme.wood[1]} 55%, ${theme.wood[2]} 100%)`;
+
+  // Custom picture: cover-fit under the same Ken Burns push-in, a dark overlay for legibility, and the dust.
+  if (image) {
+    return (
+      <AbsoluteFill style={{ background: "#000" }}>
+        <KenBurns reset={back}>
+          <Img src={staticFile(image)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          <AbsoluteFill style={{ background: `rgba(0,0,0,${imageDim})` }} />
+        </KenBurns>
+        <Dust particles={particles} t={t} color={theme.lamp} opacity={(1 - back) * 0.7} />
+        {back > 0 && <Dust particles={particles} t={(frame - durationInFrames) / fps} color={theme.lamp} opacity={back * 0.7} />}
+      </AbsoluteFill>
+    );
+  }
 
   // Light themes: a plain backdrop, just the theme's soft vertical gradient (no scene, lamp or dust).
   if (theme.mode === "light") return <AbsoluteFill style={{ background: base }} />;

@@ -35,12 +35,18 @@ export function ExportPanel({ inputProps }: { inputProps: ReelProps }) {
     const res = await fetch("/api/render", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...inputProps, showSafeZones: false }),
+      body: JSON.stringify({ ...inputProps, showSafeZones: false, ...(videoFileName() ? { fileName: videoFileName() } : {}) }),
     });
     const body = await res.json();
     if (!res.ok) return setError(body.error ?? "Render failed to start");
     setJob(body);
     poll(body.id);
+  };
+
+  /** "video-007-TYRION" while a library video is loaded, so renders can be matched to posts. */
+  const videoFileName = () => {
+    const { videoNumber, word } = useReelStore.getState();
+    return videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${word.replace(/\s+/g, "-")}` : "";
   };
 
   const saveJson = (data: unknown, name: string) => {

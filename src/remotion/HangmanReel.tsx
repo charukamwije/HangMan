@@ -142,7 +142,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   return (
     <AbsoluteFill style={{ width: DESIGN_WIDTH, height: DESIGN_HEIGHT }}>
       <AbsoluteFill style={{ transform: camera, transformOrigin: `50% ${WORD_CENTER_Y}px` }}>
-      <Background theme={theme} />
+      <Background theme={theme} image={props.backgroundImage || undefined} />
       <StressVignette stress={stress} theme={theme} />
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
