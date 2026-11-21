@@ -7,6 +7,7 @@ export const reelPropsSchema = z.object({
   // Defaults keep older props files (pre-hook) valid.
   hookText: z.string().max(60).default(DEFAULT_HOOK_TEXT),
   hintLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").default(""),
+  secondLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").optional(),
   subtitle: z.string().max(120),
   hint2: z.string().max(120).default(""),
   word: z
@@ -27,17 +28,6 @@ export const reelPropsSchema = z.object({
   }),
   showSafeZones: z.boolean(),
   backgroundImage: z.string().regex(/^[A-Za-z0-9_\-/.]*$/).refine((p) => !p.includes(".."), "Invalid path").optional(),
-  hookTests: z
-    .object({
-      readableClue: z.boolean(),
-      questionLine: z.boolean(),
-      prefilledLetters: z.boolean(),
-      staggeredUi: z.boolean(),
-      commentCta: z.boolean(),
-      hideNote: z.boolean(),
-    })
-    .partial()
-    .optional(),
 });
 
 export type ReelPropsInput = z.infer<typeof reelPropsSchema>;

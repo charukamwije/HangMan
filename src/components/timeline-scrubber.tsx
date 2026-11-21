@@ -10,7 +10,6 @@ import { countdownAt, formatClock, resolveTimeline } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
 import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
-import { hookVariantTag } from "@/remotion/hookTests";
 
 /**
  * Custom timeline under the player: scrub by click/drag, and drag the
@@ -33,7 +32,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
     const f = p?.getCurrentFrame() ?? frame;
     const { videoNumber, word } = useReelStore.getState();
     const base = videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${word.trim().replace(/\s+/g, "-")}` : "hangman";
-    const fileName = `${base}-${hookVariantTag(inputProps.hookTests)}-f${String(f).padStart(3, "0")}`;
+    const fileName = `${base}-f${String(f).padStart(3, "0")}`;
     setShooting(true);
     setShotError(null);
     try {

@@ -4,10 +4,9 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "@/remotion/defaults";
 import type { ThemeId } from "@/remotion/themes";
-import { autoSchedule, clampTime, normalizeWord, parseLetters } from "@/remotion/timeline";
+import { clampTime, normalizeWord, parseLetters, scheduleWithSecondLetter } from "@/remotion/timeline";
 import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
-import { HOOK_TESTS_OFF, resolveHookTests, type HookTests } from "@/remotion/hookTests";
 import { LIBRARY } from "@/data/library";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
 
@@ -18,6 +17,13 @@ export type ReelState = {
   word: string;
   /** Pre-filled on frame 0; "" = first letter of the word. */
   hintLetter: string;
+  /** Second letter pre-filled on frame 0, as typed; "" = auto (the first correct guess). */
+  secondLetter: string;
+  /**
+   * The letter the scheduler / library loader took OUT of the guess list as the second
+   * pre-filled letter (auto mode). Used when `secondLetter` is empty.
+   */
+  autoSecondLetter: string;
   /** Raw text as typed, e.g. "B, M, W, X". */
   wrongLetters: string;
   holdBack: number;
@@ -28,8 +34,6 @@ export type ReelState = {
   autoTiming: boolean;
   audio: ReelAudioSettings;
   showSafeZones: boolean;
-  /** Hook A/B test flags; all off = the control reel. */
-  hookTests: HookTests;
   /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
   backgroundImage: string;
   /** Video number from the library (data/library.ts) last loaded; null = custom content. */
@@ -37,8 +41,7 @@ export type ReelState = {
 };
 
 type Actions = {
-  update: (patch: Partial<Omit<ReelState, "guesses" | "audio" | "hookTests">>) => void;
-  setHookTest: (key: keyof HookTests, on: boolean) => void;
+  update: (patch: Partial<Omit<ReelState, "guesses" | "audio" | "autoSecondLetter">>) => void;
   /** Load video `n` (1-based) from the library: word, banner, hints, pre-filled letter and reveal order. */
   loadVideo: (n: number) => void;
   updateAudio: (patch: Partial<ReelAudioSettings>) => void;
@@ -60,6 +63,8 @@ const INITIAL: ReelState = {
   hint2: DEFAULT_INPUT.hint2,
   word: DEFAULT_INPUT.word,
   hintLetter: DEFAULT_INPUT.hintLetter,
+  secondLetter: "",
+  autoSecondLetter: DEFAULT_REEL_PROPS.secondLetter ?? "",
   wrongLetters: DEFAULT_INPUT.wrongLetters,
   holdBack: DEFAULT_INPUT.holdBack,
   finalRevealAt: DEFAULT_INPUT.finalRevealAt,
@@ -68,7 +73,6 @@ const INITIAL: ReelState = {
   autoTiming: true,
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
-  hookTests: HOOK_TESTS_OFF,
   videoNumber: null,
   backgroundImage: DEFAULT_BACKGROUND_IMAGE,
 };
@@ -78,16 +82,20 @@ const LIBRARY_FIRST_GUESS = 2;
 const LIBRARY_GUESS_GAP = 3;
 const LIBRARY_FINAL_REVEAL = 29;
 
-const schedule = (s: Pick<ReelState, "word" | "hintLetter" | "wrongLetters" | "holdBack" | "finalRevealAt">) =>
-  autoSchedule({
+/** Auto beat grid + the second pre-filled letter it took out of the guesses (a patch for set()). */
+const schedule = (s: Pick<ReelState, "word" | "hintLetter" | "secondLetter" | "wrongLetters" | "holdBack" | "finalRevealAt">) => {
+  const { guesses, secondLetter } = scheduleWithSecondLetter({
     word: s.word,
     hintLetter: s.hintLetter,
+    secondLetter: s.secondLetter,
     wrongLetters: parseLetters(s.wrongLetters),
     holdBack: s.holdBack,
     finalRevealAt: s.finalRevealAt,
   });
+  return { guesses, autoSecondLetter: secondLetter };
+};
 
-const PACING_KEYS = ["word", "hintLetter", "wrongLetters", "holdBack", "finalRevealAt"] as const;
+const PACING_KEYS = ["word", "hintLetter", "secondLetter", "wrongLetters", "holdBack", "finalRevealAt"] as const;
 
 export const useReelStore = create<ReelState & Actions>()(
   persist(
@@ -96,12 +104,14 @@ export const useReelStore = create<ReelState & Actions>()(
       update: (patch) => {
         const next = { ...get(), ...patch };
         const pacingChanged = PACING_KEYS.some((k) => k in patch);
-        set({ ...patch, ...(next.autoTiming && pacingChanged ? { guesses: schedule(next) } : {}) });
+        set({ ...patch, ...(next.autoTiming && pacingChanged ? schedule(next) : {}) });
       },
       updateAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
       loadVideo: (n) => {
         const v = LIBRARY.find((e) => e.n === n);
         if (!v) return;
+        // The first correct guess is pre-filled on frame 0; the rest keep one guess every 3 s from 2 s.
+        const second = v.guesses.find((g) => g.correct && g.letter !== v.prefill)?.letter ?? "";
         set({
           videoNumber: v.n,
           hookText: v.hookText,
@@ -109,14 +119,17 @@ export const useReelStore = create<ReelState & Actions>()(
           hint2: v.hint2,
           word: v.word,
           hintLetter: v.prefill,
+          secondLetter: "",
+          autoSecondLetter: second,
           wrongLetters: v.guesses.filter((g) => !g.correct).map((g) => g.letter).join(", "),
           finalRevealAt: LIBRARY_FINAL_REVEAL,
-          guesses: v.guesses.map((g, i) => ({ letter: g.letter, time: LIBRARY_FIRST_GUESS + LIBRARY_GUESS_GAP * i })),
+          guesses: v.guesses
+            .filter((g) => g.letter !== second)
+            .map((g, i) => ({ letter: g.letter, time: LIBRARY_FIRST_GUESS + LIBRARY_GUESS_GAP * i })),
           // Keep the CSV's exact reveal order: editing the word / pacing must not re-time it.
           autoTiming: false,
         });
       },
-      setHookTest: (key, on) => set({ hookTests: { ...resolveHookTests(get().hookTests), [key]: on } }),
       setGuess: (index, patch) =>
         set({
           autoTiming: false,
@@ -139,7 +152,7 @@ export const useReelStore = create<ReelState & Actions>()(
         set({ autoTiming: false, guesses: [...guesses, { letter, time: clampTime(Math.min(last + 1, finalRevealAt - 0.5)) }] });
       },
       removeGuess: (index) => set({ autoTiming: false, guesses: get().guesses.filter((_, i) => i !== index) }),
-      autoDistribute: () => set({ autoTiming: true, guesses: schedule(get()) }),
+      autoDistribute: () => set({ autoTiming: true, ...schedule(get()) }),
       loadPuzzle: (raw) => {
         const puzzle = parsePuzzle(raw);
         const t = calculateFrameTimeline(puzzle, FPS);
@@ -149,6 +162,8 @@ export const useReelStore = create<ReelState & Actions>()(
           hint2: puzzle.hint2 ?? "",
           word: t.word,
           hintLetter: puzzle.prefilledLetter ?? "",
+          secondLetter: puzzle.secondPrefilledLetter ?? "",
+          autoSecondLetter: t.reelProps.secondLetter ?? "",
           wrongLetters: puzzle.wrongGuesses.join(", "),
           holdBack: puzzle.holdBack ?? get().holdBack,
           finalRevealAt: t.reelProps.finalRevealAt,
@@ -156,18 +171,26 @@ export const useReelStore = create<ReelState & Actions>()(
           audio: t.reelProps.audio,
           guesses: t.reelProps.guesses,
           autoTiming: t.mode === "auto",
-          hookTests: resolveHookTests(puzzle.hookTests),
         });
       },
       reset: () => set(INITIAL),
     }),
     {
       name: "hangman-reel-studio",
-      version: 2,
-      // v1 → v2: 30 fps beat grid + hook fields. Keep the user's content, re-time if auto.
+      version: 4,
+      // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
+      // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
-        const p = { ...INITIAL, ...(persisted as Partial<ReelState>) };
-        if (version < 2 && p.autoTiming) p.guesses = schedule(p);
+        const { hookTests: _dropped, ...rest } = persisted as Partial<ReelState> & { hookTests?: unknown };
+        void _dropped;
+        const p: ReelState = { ...INITIAL, ...rest };
+        // v3 → v4: Midnight Noir is the default theme; move anyone still on the old default to it.
+        if (version < 4 && p.themeId === "dark-academia") p.themeId = DEFAULT_REEL_PROPS.themeId;
+        if (version < 3) {
+          p.secondLetter = "";
+          p.autoSecondLetter = "";
+          if (p.autoTiming) Object.assign(p, schedule(p));
+        }
         return p;
       },
       // Rehydrated manually after mount to avoid SSR hydration mismatches.
@@ -183,12 +206,12 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   hint2: s.hint2 ?? "",
   word: normalizeWord(s.word),
   hintLetter: s.hintLetter,
+  secondLetter: s.secondLetter || s.autoSecondLetter || "",
   guesses: s.guesses,
   finalRevealAt: s.finalRevealAt,
   themeId: s.themeId,
   audio: s.audio,
   showSafeZones: s.showSafeZones,
-  hookTests: resolveHookTests(s.hookTests),
   // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });
 
@@ -210,9 +233,9 @@ export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
       : s.guesses.map((g) => ({ frame: Math.round(g.time * FPS), letter: g.letter, status: letters.has(g.letter) ? ("correct" as const) : ("wrong" as const) })),
     viralHookText: s.hookText,
     ...(s.hintLetter ? { prefilledLetter: s.hintLetter } : {}),
+    ...(s.secondLetter || s.autoSecondLetter ? { secondPrefilledLetter: s.secondLetter || s.autoSecondLetter } : {}),
     holdBack: s.holdBack,
     themeId: s.themeId,
     audio: s.audio,
-    hookTests: resolveHookTests(s.hookTests),
   };
 };

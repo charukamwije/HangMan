@@ -9,15 +9,14 @@ import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
 import { GuessCallouts } from "./components/GuessCallout";
-import { CommentNote } from "./components/CommentNote";
 import { Pigeons } from "./components/Pigeons";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
 import { LivesRow } from "./components/LivesRow";
 import { StressVignette } from "./components/StressVignette";
 import { measureWordBoard, WordBoard } from "./components/WordBoard";
-import { stagedVisibility } from "./components/HookTestOverlays";
-import { HOOK_TEST_TIMING } from "./hookTests";
+import { stagedVisibility } from "./components/HookOverlays";
+import { HOOK_UI_TIMING } from "./hook";
 
 // Vertical layout on the 2160×3840 design canvas, stacked UP from the keyboard:
 // keys → pawns → word board → "HINT" label + hint text. Banner + clock are pinned below the platform icons.
@@ -45,7 +44,9 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  *  - A reveal or strike lands every 2.0–2.5 s (see autoSchedule).
  *  - Strikes kick the key box sideways with a spring.
  *  - Below 00:08 the vignette closes in and throbs with the neon clock.
- *  - Hook A/B tests (hookTests.ts) swap single beats of this opening; all off = as above.
+ *  - Two letters are pre-filled on frame 0 (the hint + the first correct guess); the clue is
+ *    sharp under a question line ("ONLY REAL FANS…", until 1.6 s); the clock + "COMMENT BEFORE
+ *    0:00" fade in at 1.5 s, the balloons + pawns at 2 s. The keyboard is up from frame 0.
  *  - Seamless loop: over the last 0.6 s keys, pawns, timer, answer, banner and
  *    background animate back to their frame-0 state (loop.ts), so the
  *    platform's auto-replay continues straight into the hook.
@@ -74,7 +75,7 @@ function useReelTimeline(props: ReelProps) {
   return useMemo(
     () => resolveTimeline(props, fps),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.word, props.guesses, props.finalRevealAt, props.hintLetter, JSON.stringify(props.hookTests ?? {}), fps],
+    [props.word, props.guesses, props.finalRevealAt, props.hintLetter, props.secondLetter, fps],
   );
 }
 
@@ -88,9 +89,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const lastGuess = Math.max(-1, ...timeline.guesses.filter((g) => g.frame < timeline.finalRevealFrame).map((g) => g.frame));
   const promptFrame = lastGuess >= 0 ? lastGuess + Math.round(PROMPT_AFTER_LAST_GUESS * fps) : timeline.finalRevealFrame;
   const stress =stressAt(frame, fps, timeline.tickFrames);
-  const { tests } = timeline;
-  // Hook test 4: the pawns fade and rise in from 2.0 s instead of sitting there on frame 0 (the keyboard stays).
-  const uiVis = tests.staggeredUi ? stagedVisibility(frame, fps, durationInFrames, HOOK_TEST_TIMING.uiIn) : 1;
+  // The pawns fade and rise in from 2.0 s (the keyboard is up from frame 0).
+  const uiVis = stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.uiIn);
 
   const board = measureWordBoard(timeline.word || " ");
   const keyboardTop = KEYBOARD_BOTTOM - KEYBOARD_HEIGHT;
@@ -147,14 +147,14 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
-      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} clueReveal={timeline.hook.clueRevealFrames} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} tests={tests} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       {uiVis > 0.001 && (
         <AbsoluteFill style={uiVis < 1 ? { opacity: uiVis, transform: `translateY(${(80 * (1 - uiVis)).toFixed(1)}px)` } : undefined}>
           <LivesRow theme={theme} wrongFrames={timeline.wrongFrames} promptFrame={promptFrame} top={livesTop} />
         </AbsoluteFill>
       )}
-      {/* The keyboard (and the note under it) stays on from frame 0, even in test 4. Test 6 drops the note. */}
+      {/* The keyboard is up from frame 0. */}
       <Keyboard
         theme={theme}
         top={keyboardTop}
@@ -163,7 +163,6 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         wrongFrames={timeline.wrongFrames}
         shakePx={KEYBOX_SHAKE}
       />
-      {!tests.hideNote && <CommentNote theme={theme} top={KEYBOARD_BOTTOM + 16} promptFrame={promptFrame} />}
       <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
       </AbsoluteFill>
 

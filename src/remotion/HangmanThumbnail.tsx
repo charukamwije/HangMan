@@ -12,6 +12,8 @@ export type ThumbnailProps = {
   word: string;
   /** Pre-filled letter; "" = the word's first letter (same rule as the reel). */
   hintLetter: string;
+  /** Second letter on the board at frame 0 (the panel passes the reel's resolved value). */
+  secondLetter?: string;
   themeId: ThemeId;
   /** Library category tag, e.g. "TV ANTI-HERO". Empty = no tag. */
   category?: string;
@@ -94,7 +96,7 @@ const PanelBackground: React.FC<{ image: string }> = ({ image }) => (
 
 /**
  * Custom thumbnail: category tag, the hook as a giant headline, then the board with
- * only the pre-filled letter showing (a faint "?" in every other slot).
+ * only the pre-filled letters showing (a faint "?" in every other slot).
  * Laid out on the 2160×3840 design canvas and scaled to the composition size.
  * Everything sits in the middle band, so a centre crop in the Shorts shelf keeps it.
  */
@@ -111,10 +113,12 @@ export const HangmanThumbnail: React.FC<ThumbnailProps> = (props) => {
   );
 };
 
-const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hintLetter, themeId, category, backgroundImage }) => {
+const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hintLetter, secondLetter = "", themeId, category, backgroundImage }) => {
   const theme = getTheme(themeId);
   const word = normalizeWord(rawWord) || "GUESS";
   const hint = resolveHintLetter(word, hintLetter);
+  // Lit on the board: the hint + the second pre-filled letter, exactly as on the reel's frame 0.
+  const shown = new Set([hint, secondLetter.toUpperCase()].filter(Boolean));
   const headline = (hookText.trim() || "CAN YOU GUESS IT?").toUpperCase();
   const size = headlineSize(headline);
   const letters = word.replace(/ /g, "").length;
@@ -196,14 +200,14 @@ const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hin
                   height: tile * 1.3,
                   borderRadius: tile * 0.14,
                   background: theme.slotBg,
-                  border: `${Math.max(5, Math.round(tile * 0.035))}px solid ${ch === hint ? theme.accent : `rgba(${theme.emptyRgb},0.6)`}`,
-                  boxShadow: ch === hint ? `0 0 ${tile * 0.5}px ${theme.accent}88, inset 0 0 ${tile * 0.3}px ${theme.accent}44` : `0 10px 24px ${shadeA(theme, 0.6)}`,
+                  border: `${Math.max(5, Math.round(tile * 0.035))}px solid ${shown.has(ch) ? theme.accent : `rgba(${theme.emptyRgb},0.6)`}`,
+                  boxShadow: shown.has(ch) ? `0 0 ${tile * 0.5}px ${theme.accent}88, inset 0 0 ${tile * 0.3}px ${theme.accent}44` : `0 10px 24px ${shadeA(theme, 0.6)}`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                {ch === hint ? (
+                {shown.has(ch) ? (
                   <span
                     style={{
                       fontFamily: DISPLAY_FONT,

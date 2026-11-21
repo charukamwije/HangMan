@@ -181,7 +181,7 @@ export const THEMES: Record<ThemeId, Theme> = {
 
 export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
 
-export const getTheme = (id: ThemeId | string): Theme => THEMES[id as ThemeId] ?? THEMES["dark-academia"];
+export const getTheme = (id: ThemeId | string): Theme => THEMES[id as ThemeId] ?? THEMES["midnight-noir"];
 
 /** `rgba()` from the theme's "r,g,b" shade, with alpha scaled by its vignette strength. */
 export const shadeA = (theme: Theme, alpha: number) => `rgba(${theme.shade},${(alpha * theme.vignette).toFixed(3)})`;

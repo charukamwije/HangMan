@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,17 +14,18 @@ import { Switch } from "@/components/ui/switch";
 import { ExportPanel } from "@/components/export-panel";
 import { FPS } from "@/remotion/constants";
 import { LIBRARY } from "@/data/library";
-import { HOOK_TEST_INFO, hookVariantTag, resolveHookTests } from "@/remotion/hookTests";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
-import { DEFAULT_BACKGROUND_IMAGE, useReelStore } from "@/store/reel-store";
+import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
 export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps; playerRef: RefObject<PlayerRef | null> }) {
   const s = useReelStore();
   const word = normalizeWord(s.word);
   const wordLetters = useMemo(() => new Set(uniqueLetters(s.word)), [s.word]);
+  // The second letter actually on the board at frame 0 (same resolver as the render).
+  const second = useMemo(() => resolveTimeline(inputProps, FPS).hook.prefilled[0] ?? "", [inputProps]);
 
   const warnings = useMemo(() => {
     const w: string[] = [];
@@ -36,9 +37,12 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
     const hint = resolveHintLetter(word, s.hintLetter);
     if (s.hintLetter && hint !== s.hintLetter) w.push(`${s.hintLetter} is not in "${word}" — using ${hint || "nothing"} as the hint letter.`);
     if (hint && s.guesses.some((g) => g.letter === hint)) w.push(`${hint} is pre-filled on frame 0, so its guess is skipped.`);
+    const typed2 = s.secondLetter.toUpperCase();
+    if (typed2 && (!wordLetters.has(typed2) || typed2 === hint)) w.push(`2nd letter ${typed2} is ${typed2 === hint ? "already the hint letter" : `not in "${word}"`}, so the first correct guess is used.`);
+    if (second && second !== s.autoSecondLetter && s.guesses.some((g) => g.letter === second)) w.push(`${second} is pre-filled on frame 0, so its guess is skipped (re-time to close the gap).`);
     if (late.length) w.push(`${late.join(", ")} fall after the final reveal and will show up at the reveal instead.`);
     return w;
-  }, [s.wrongLetters, s.guesses, s.finalRevealAt, s.hintLetter, word, wordLetters]);
+  }, [s.wrongLetters, s.guesses, s.finalRevealAt, s.hintLetter, s.secondLetter, s.autoSecondLetter, second, word, wordLetters]);
 
   const sorted = s.guesses.map((g, i) => ({ ...g, i })).sort((a, b) => a.time - b.time);
 
@@ -86,6 +90,15 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
               onChange={(e) => s.update({ hintLetter: e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(-1) })}
             />
           </Field>
+          <Field label={`2nd letter · ${second || "—"} on frame 0`}>
+            <Input
+              value={s.secondLetter}
+              maxLength={1}
+              placeholder="auto (1st correct guess)"
+              className="font-display tracking-widest uppercase"
+              onChange={(e) => s.update({ secondLetter: e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(-1) })}
+            />
+          </Field>
           <Field label="Wrong Guesses">
             <Input value={s.wrongLetters} placeholder="B, M, W, X" className="uppercase" onChange={(e) => s.update({ wrongLetters: e.target.value.toUpperCase() })} />
           </Field>
@@ -105,8 +118,6 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
         </AnimatePresence>
       </Section>
 
-      <HookTestsSection inputProps={inputProps} />
-
       <Section icon={<Palette />} title="Aesthetic Theme">
         <NativeSelect value={s.themeId} onChange={(e) => s.update({ themeId: e.target.value as ThemeId })}>
           {(["dark", "light"] as const).map((mode) => (
@@ -125,10 +136,6 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
           {[THEMES[s.themeId].accent, THEMES[s.themeId].wrong, THEMES[s.themeId].lamp, ...THEMES[s.themeId].wood].map((c, i) => (
             <span key={i} className="h-5 flex-1 rounded ring-1 ring-white/10" style={{ background: c }} />
           ))}
-        </div>
-        <div className="flex items-center justify-between">
-          <Label>Thumbnail background picture (characters)</Label>
-          <Switch checked={!!s.backgroundImage} onCheckedChange={(v) => s.update({ backgroundImage: v ? DEFAULT_BACKGROUND_IMAGE : "" })} />
         </div>
         <div className="flex items-center justify-between">
           <Label>Show platform safe zones (preview)</Label>
@@ -297,70 +304,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * Hook A/B tests: one tick box per variant (hookTests.ts). Post 5–6 Shorts per variant
- * and compare them with the last ~20 (the control, every box unticked).
- */
-function HookTestsSection({ inputProps }: { inputProps: ReelProps }) {
-  const tests = resolveHookTests(useReelStore((s) => s.hookTests));
-  // Test 3: which letters actually end up seated on frame 0 (same resolver as the render).
-  const prefilled = useMemo(
-    () => (tests.prefilledLetters ? resolveTimeline(inputProps, FPS).hook.prefilled : []),
-    [tests.prefilledLetters, inputProps],
-  );
-  const setHookTest = useReelStore((s) => s.setHookTest);
-  const on = HOOK_TEST_INFO.filter((t) => tests[t.key]);
-  const tag = hookVariantTag(tests);
-  return (
-    <Section icon={<FlaskConical />} title="Hook A/B Tests">
-      <p className="text-xs text-muted-foreground">
-        Tick one test at a time. Post 5–6 Shorts per test and compare them with your last 20. Rendered files are named after the variant.
-      </p>
-      <div className="flex flex-col overflow-hidden rounded-md border border-border">
-        {HOOK_TEST_INFO.map((t, i) => (
-          <label
-            key={t.key}
-            className={cn(
-              "flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors hover:bg-muted/40",
-              i > 0 && "border-t border-border",
-              tests[t.key] && "bg-primary/10",
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={tests[t.key]}
-              onChange={(e) => setHookTest(t.key, e.target.checked)}
-              className="mt-0.5 size-4 shrink-0 cursor-pointer accent-[var(--primary)]"
-            />
-            <span className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium">
-                <span className="mr-1.5 font-mono text-xs text-muted-foreground">{t.tag}</span>
-                {t.label}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t.detail}
-                {t.key === "prefilledLetters" && prefilled.length > 0 && (
-                  <span className="ml-1 font-mono text-primary">Pre-fills {prefilled.join(" + ")}.</span>
-                )}
-              </span>
-            </span>
-          </label>
-        ))}
-      </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">Variant</span>
-        <Badge variant={on.length ? "default" : "outline"}>{tag}</Badge>
-      </div>
-      {on.length > 1 && (
-        <p className="flex items-start gap-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-300">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {on.length} tests are on. If retention changes, you won&apos;t know which one did it.
-        </p>
-      )}
-    </Section>
-  );
-}
-
-/**
- * Video library (puzzles/films-tv-100.csv → src/data/library.ts): Back / Next steps
+ * Video library (puzzles/dark-board-100.csv → src/data/library.ts): Back / Next steps
  * through the videos, and the number box jumps straight to one (Enter or Go).
  */
 function LibrarySection() {
@@ -376,7 +320,7 @@ function LibrarySection() {
   const go = () => valid && loadVideo(target);
 
   return (
-    <Section icon={<Clapperboard />} title={`Video Library · ${LIBRARY.length} Films & TV`}>
+    <Section icon={<Clapperboard />} title={`Video Library · ${LIBRARY.length} words`}>
       <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" disabled={videoNumber !== null && videoNumber <= first} onClick={() => loadVideo(videoNumber === null ? first : videoNumber - 1)}>
           <ChevronLeft /> Back

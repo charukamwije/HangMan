@@ -4,7 +4,7 @@ import { shadeA, type Theme } from "../themes";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { ramp } from "../motion";
 import { loopReset } from "../loop";
-import { HOOK_TEST_TIMING, QUESTION_LINE } from "../hookTests";
+import { HOOK_UI_TIMING, QUESTION_LINE } from "../hook";
 import { TOP_ROW } from "../constants";
 import { CLOCK } from "./CountdownTimer";
 
@@ -15,7 +15,7 @@ const QUESTION_EMPHASIS = /^(REAL|FANS|5|SECONDS)$/;
 const fadeIn = (frame: number, fps: number, [a, b]: readonly [number, number]) => ramp(frame / fps, [a, b], [0, 1]);
 
 /**
- * 0 → 1 visibility of UI that test 4 holds back until `window` (seconds). It fades out
+ * 0 → 1 visibility of UI held back until `window` (seconds): the clock, balloons and pawns. It fades out
  * again over the second half of the loop reset, so the replay's frame 0 matches.
  */
 export function stagedVisibility(frame: number, fps: number, durationInFrames: number, window: readonly [number, number]) {
@@ -23,7 +23,7 @@ export function stagedVisibility(frame: number, fps: number, durationInFrames: n
 }
 
 /**
- * Hook test 2: a question line covering the (frosted) hint card from frame 0. It slams
+ * The question line covering the (frosted) hint card from frame 0. It slams
  * in, holds until 1.6 s, then lifts away before the first
  * guess so the clue takes over. It comes back over the loop reset, matching frame 0.
  * Rendered inside the hint card block: it covers the card and grows upward if needed.
@@ -31,7 +31,7 @@ export function stagedVisibility(frame: number, fps: number, durationInFrames: n
 export const QuestionLine: React.FC<{ theme: Theme; minHeight: number }> = ({ theme, minHeight }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const [outFrom, outTo] = HOOK_TEST_TIMING.questionOut;
+  const [outFrom, outTo] = HOOK_UI_TIMING.questionOut;
   const out = ramp(frame / fps, [outFrom, outTo], [0, 1]);
   const back = loopReset(frame, durationInFrames, fps, 0.5, 1);
   const vis = Math.max(1 - out, back);
@@ -89,14 +89,14 @@ export const QuestionLine: React.FC<{ theme: Theme; minHeight: number }> = ({ th
 };
 
 /**
- * Hook test 5: "COMMENT BEFORE 0:00" pill tucked under the clock (clock width, so it
+ * "COMMENT BEFORE 0:00" pill tucked under the clock (clock width, so it
  * stays clear of the banner and the right edge), 1.5 s → 6 s.
  */
 export const CommentCta: React.FC<{ theme: Theme }> = ({ theme }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const inFrame = Math.round(HOOK_TEST_TIMING.ctaIn[0] * fps);
-  const vis = fadeIn(frame, fps, HOOK_TEST_TIMING.ctaIn) * (1 - fadeIn(frame, fps, HOOK_TEST_TIMING.ctaOut));
+  const inFrame = Math.round(HOOK_UI_TIMING.ctaIn[0] * fps);
+  const vis = fadeIn(frame, fps, HOOK_UI_TIMING.ctaIn) * (1 - fadeIn(frame, fps, HOOK_UI_TIMING.ctaOut));
   if (vis <= 0.001) return null;
   const pop = frame >= inFrame ? spring({ frame: frame - inFrame, fps, config: { damping: 9, stiffness: 260, mass: 0.5 } }) : 0;
   // A small nudge on every clock tick while it is up.

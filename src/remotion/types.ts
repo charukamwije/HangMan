@@ -1,5 +1,4 @@
 import type { ThemeId } from "./themes";
-import type { HookTests } from "./hookTests";
 
 /** One guess on the timeline. Whether it is correct is derived from the word. */
 export type Guess = { letter: string; time: number };
@@ -22,6 +21,8 @@ export type ReelProps = {
   word: string;
   /** Letter pre-filled on frame 0 (every occurrence). Empty → first letter of the word. */
   hintLetter: string;
+  /** Second letter pre-filled on frame 0. Empty / missing → the first correct guess (see resolveSecondLetter). */
+  secondLetter?: string;
   guesses: Guess[];
   /** Second at which any letters still hidden are revealed (usually when the clock hits 00:00). */
   finalRevealAt: number;
@@ -31,6 +32,4 @@ export type ReelProps = {
   showSafeZones: boolean;
   /** Picture under public/ used instead of the shelf scene (e.g. "backgrounds/characters.jpg"). Empty / missing = shelves. */
   backgroundImage?: string;
-  /** Hook A/B test flags (hookTests.ts). Missing or all off = the control reel. */
-  hookTests?: Partial<HookTests>;
 };

@@ -20,7 +20,7 @@
 import { COUNTDOWN_ENDS_AT, DURATION_SECONDS } from "../constants";
 import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "../defaults";
 import { HOOK_FRAMES_30, hookFrame } from "../hook";
-import { autoSchedule, normalizeWord, resolveHintLetter, resolveTimeline } from "../timeline";
+import { normalizeWord, resolveHintLetter, resolveSecondLetter, resolveTimeline, scheduleWithSecondLetter } from "../timeline";
 import type { Guess, ReelProps } from "../types";
 import type { FrameTimeline, HangmanPuzzleData, RevealEvent } from "./types";
 
@@ -48,9 +48,13 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
   const manual = puzzle.revealSequence.filter((e) => e.status === "correct" || e.status === "wrong");
   const mode: FrameTimeline["mode"] = manual.length ? "manual" : "auto";
   let guesses: Guess[];
+  let secondLetter = (puzzle.secondPrefilledLetter ?? "").toUpperCase();
 
   if (mode === "manual") {
-    const seen = new Set<string>([prefilledLetter]);
+    // Hand-authored: the second letter (if not given) is the first correct guess; that guess is skipped.
+    const ordered = [...manual].sort((a, b) => a.frame - b.frame).map((e) => ({ letter: e.letter.toUpperCase(), time: e.frame / fps }));
+    secondLetter = resolveSecondLetter(word, prefilledLetter, ordered, COUNTDOWN_ENDS_AT, secondLetter);
+    const seen = new Set<string>([prefilledLetter, secondLetter]);
     guesses = [];
     for (const e of [...manual].sort((a, b) => a.frame - b.frame)) {
       const l = e.letter.toUpperCase();
@@ -67,13 +71,14 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
       guesses.push({ letter: l, time: frame / fps });
     }
   } else {
-    guesses = autoSchedule({
+    ({ guesses, secondLetter } = scheduleWithSecondLetter({
       word,
       hintLetter: prefilledLetter,
+      secondLetter,
       wrongLetters: wrongGuesses,
       holdBack: puzzle.holdBack ?? DEFAULT_INPUT.holdBack,
       finalRevealAt: COUNTDOWN_ENDS_AT,
-    });
+    }));
     const added = guesses.filter((g) => !letters.has(g.letter) && !wrongGuesses.includes(g.letter)).map((g) => g.letter);
     if (added.length) warnings.push(`Added decoy misses ${added.join(", ")} to keep a beat every 2–2.5 s.`);
   }
@@ -85,18 +90,20 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
     hint2: puzzle.hint2 ?? "",
     word,
     hintLetter: prefilledLetter,
+    secondLetter,
     guesses,
     finalRevealAt: finalRevealFrame / fps,
     themeId: puzzle.themeId ?? DEFAULT_REEL_PROPS.themeId,
     audio: { ...DEFAULT_REEL_PROPS.audio, ...puzzle.audio },
     showSafeZones: false,
-    ...(puzzle.hookTests ? { hookTests: puzzle.hookTests } : {}),
   };
 
   // ---- 3. Resolve with the same engine the composition renders with --------
   const tl = resolveTimeline(reelProps, fps);
   const revealSequence: RevealEvent[] = [];
-  if (prefilledLetter) revealSequence.push({ frame: Math.max(0, tl.hook.lockFrame), letter: prefilledLetter, status: "prefilled" });
+  for (const l of new Set([prefilledLetter, ...tl.hook.prefilled])) {
+    if (l) revealSequence.push({ frame: Math.max(0, tl.hook.lockFrame), letter: l, status: "prefilled" });
+  }
   for (const g of tl.guesses) {
     if (g.kind === "wrong") revealSequence.push({ frame: g.frame, letter: g.letter, status: "wrong" });
     else if (g.frame < tl.finalRevealFrame) revealSequence.push({ frame: g.frame, letter: g.letter, status: "correct" });

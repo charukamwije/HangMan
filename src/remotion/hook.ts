@@ -4,21 +4,22 @@
  *
  *   0          zero-frame camera punch-in (stage opens at 1.08×, held 3 frames, then
  *              released), the challenge banner ("99% FAIL THIS") is already up and
- *              slams in at full scale, gavel + slap pop, music bed starts REWINDING
+ *              slams in at full scale, gavel + slap pop, music bed starts REWINDING.
+ *              Two letters (the hint + a second one) are already seated; the clue is
+ *              sharp but covered by the question line ("ONLY REAL FANS…"); the keyboard
+ *              is up, while the clock, balloons and pawns are still hidden
  *   0 → 26     decoys fire into the empty slots, gaps shrinking 4 → 1 frame (machine-gun
  *              cadence synced to the rewind). Each scrambles, then locks crimson 2 frames later
- *   ≤ 4        hint-letter slots snap in (one frame apart, the LAST always on 4): metallic
- *              lock, hint key lights, white pop + bloom. The hint glows through the hook
  *   0 → 30     scan beam ping-pongs across the board
  *   30         PATTERN INTERRUPT on the first clock tick: decoys wiped, rewind hard-stops,
  *              camera kick + white flash, banner re-slam, hint re-flash, slap pop
  *   30 → 57    rattle: the empty slots flicker ghost glyphs at an accelerating cadence
  *              (3 → 1 frame) under a slow tension push-in; cut 3 frames before the guess
  *   36 → 42    the same music now plays FORWARD, its downbeats on the clock ticks
- *   60         regular reel: the first guess slams down; no guess may land before this frame
- *   0 → 64     the clue text stays FROSTED (card + HINT chip on screen, words blurred), so the
- *              eye has one job per beat: banner → board. No sentence to read during the rattle
- *   64 → 94    clue unlocks: the HINT chip flips and the words sharpen one by one
+ *   45 → 54    the clock fades in; "COMMENT BEFORE 0:00" pops under it (until 6 s)
+ *   48 → 56    the question line lifts away, uncovering the clue
+ *   60         regular reel: the first guess slams down (no guess may land before this
+ *              frame); balloons + pawns fade in 60 → 72
  *
  * Pure module (no React, no remotion import) so the Next.js control panel and
  * the render API can share it with the composition. Frame numbers are authored
@@ -48,8 +49,22 @@ export const HOOK_FRAMES_30 = {
   rattle: [30, 57],
   musicIn: [36, 42],
   end: 60,
-  /** Clue text unlocks word by word, after the first guess's impact has landed. */
-  clueReveal: [64, 94],
+} as const;
+
+/** The question line over the hint card on frame 0. */
+export const QUESTION_LINE = "ONLY REAL FANS GET THIS IN 5 SECONDS";
+
+/** Hook UI beats, in seconds. */
+export const HOOK_UI_TIMING = {
+  /** The question line holds until here, then clears before the first guess (2.0 s). */
+  questionOut: [1.6, 1.85],
+  /** Clock fade-in. */
+  timerIn: [1.5, 1.8],
+  /** Balloons + pawns fade-in (the first guess lands on 2.0 s). */
+  uiIn: [2.0, 2.4],
+  /** "COMMENT BEFORE 0:00" in / out. */
+  ctaIn: [1.5, 1.7],
+  ctaOut: [5.7, 6.0],
 } as const;
 
 /** A 30 fps hook frame expressed at `fps`. */
@@ -73,7 +88,7 @@ export type HookPlan = {
   strikeFrames: number[];
   /** Character index → frame that hint-letter slot snaps in. */
   snapFrames: Map<number, number>;
-  /** Final snap: metallic lock SFX + hint key lights up. Negative when pre-filled (already lit on frame 0). */
+  /** Frame the pre-filled keys count as lit: negative (already lit on frame 0). Without pre-filled letters, the lock snap. */
   lockFrame: number;
   clearFrame: number;
   /** Pattern-interrupt frame (first clock tick). */
@@ -83,11 +98,9 @@ export type HookPlan = {
   musicInFrames: readonly [number, number];
   /** First frame of the regular reel; guesses never land before it. */
   endFrame: number;
-  /** [start, end]: the frosted clue sharpens word by word across this window. */
-  clueRevealFrames: readonly [number, number];
   /**
-   * Hook test 3: letters already seated in their slots on frame 0 (the hint + one more).
-   * The decoys still scramble the other slots. Empty = the normal hint snap.
+   * Letters already seated in their slots on frame 0 (the hint + a second one).
+   * The decoys still scramble the other slots. Empty = the hint snaps in on frame 4.
    */
   prefilled: string[];
 };
@@ -155,7 +168,7 @@ export function resolveHook(word: string, hintLetter: string, fps: number, { pre
   const span = HOOK_FRAMES_30.snapEnd - HOOK_FRAMES_30.snapStart;
   const first = HOOK_FRAMES_30.snapEnd - Math.min(span, Math.max(0, hintSlots.length - 1));
   const snapFrames = new Map<number, number>();
-  // Pre-filled (test 3): the snap is set far enough in the past that frame 0 shows the letters seated, no flash.
+  // Pre-filled: the snap is set far enough in the past that frame 0 shows the letters seated, no flash.
   const seated = -2 * fps;
   if (prefilled.length) chars.forEach((c, idx) => prefilled.includes(c) && snapFrames.set(idx, seated));
   else hintSlots.forEach((idx, k) => snapFrames.set(idx, F(Math.min(HOOK_FRAMES_30.snapEnd, first + k))));
@@ -170,7 +183,6 @@ export function resolveHook(word: string, hintLetter: string, fps: number, { pre
     rattleFrames: [F(HOOK_FRAMES_30.rattle[0]), F(HOOK_FRAMES_30.rattle[1])],
     musicInFrames: [F(HOOK_FRAMES_30.musicIn[0]), F(HOOK_FRAMES_30.musicIn[1])],
     endFrame: F(HOOK_FRAMES_30.end),
-    clueRevealFrames: [F(HOOK_FRAMES_30.clueReveal[0]), F(HOOK_FRAMES_30.clueReveal[1])],
     prefilled,
   };
 }

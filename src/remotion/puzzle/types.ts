@@ -5,7 +5,6 @@
  */
 import type { ThemeId } from "../themes";
 import type { ReelAudioSettings, ReelProps } from "../types";
-import type { HookTests } from "../hookTests";
 
 /** What happens on a reveal frame. */
 export type RevealStatus =
@@ -49,12 +48,12 @@ export type HangmanPuzzleData = {
   viralHookText: string;
   /** Letter pre-filled on frame 0. Default: the word's first letter. */
   prefilledLetter?: string;
+  /** Second letter pre-filled on frame 0. Default: the first correct guess (its beat is re-timed away). */
+  secondPrefilledLetter?: string;
   /** Max correct letters saved for the final reveal (auto mode). Default 2. */
   holdBack?: number;
   themeId?: ThemeId;
   audio?: Partial<ReelAudioSettings>;
-  /** Hook A/B test flags (hookTests.ts). Missing = all off (the control reel). */
-  hookTests?: Partial<HookTests>;
 };
 
 export interface FrameTimeline {

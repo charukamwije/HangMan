@@ -7,7 +7,6 @@ import { renderMedia, renderStill, selectComposition } from "@remotion/renderer"
 import { COMPOSITION_ID, COMPOSITION_ID_1080, THUMBNAIL_COMPOSITION_ID } from "@/remotion/constants";
 import type { ThumbnailProps } from "@/remotion/HangmanThumbnail";
 import type { ReelProps } from "@/remotion/types";
-import { hookVariantTag } from "@/remotion/hookTests";
 
 /**
  * In-process render queue for a long-lived Node server (`next start`, Docker,
@@ -79,9 +78,7 @@ export function getJob(id: string) {
 
 export function createRenderJob(inputProps: ReelProps, options: RenderJobOptions = {}): RenderJob {
   const id = crypto.randomUUID();
-  // The hook-test variant ("control", "T1", …) goes in the name, so each Short can be logged against its variant.
-  const variant = hookVariantTag(inputProps.hookTests);
-  const base = options.fileName ? `${safeName(options.fileName)}-${variant}-${id.slice(0, 6)}` : `hangman-${variant}-${id.slice(0, 8)}`;
+  const base = options.fileName ? `${safeName(options.fileName)}-${id.slice(0, 6)}` : `hangman-${id.slice(0, 8)}`;
   let resolveFinished!: (job: RenderJob) => void;
   const finished = new Promise<RenderJob>((r) => (resolveFinished = r));
   const job: RenderJob = {

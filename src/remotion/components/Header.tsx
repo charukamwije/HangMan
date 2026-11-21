@@ -9,8 +9,8 @@ import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
 import { HintOwl, OWL_ABOVE, THROW_HIT_SECONDS } from "./HintOwl";
 import { ramp } from "../motion";
 import { loopReset, loopResetStart } from "../loop";
-import { HOOK_TEST_TIMING, type HookTests } from "../hookTests";
-import { CommentCta, QuestionLine, stagedVisibility } from "./HookTestOverlays";
+import { HOOK_UI_TIMING } from "../hook";
+import { CommentCta, QuestionLine, stagedVisibility } from "./HookOverlays";
 
 /** Same 60px margin inside the safe band on both sides, so the header centres on the safe area. */
 const HEADER_INSET = { left: SAFE_ZONE.left + 60, right: SAFE_ZONE.right + 60 };
@@ -156,9 +156,9 @@ export function estimateHeaderTextHeight(subtitle: string, hint2 = "") {
  * If a very long hint would reach
  * the banner row, the board gap closes to MIN_HINT_GAP, then the block scales down.
  *
- * No entrance animation: everything is on screen on frame 0. The banner shows `hookText`
- * from frame 0 (slam) and re-slams on `bannerPulse`. The clue text sits frosted through the
- * hook (one thing to read at a time) and sharpens word by word over `clueReveal`.
+ * Opening: the banner shows `hookText` from frame 0 (slam) and re-slams on `bannerPulse`. The clue
+ * is sharp from frame 0 but sits under the question line until ~1.6 s; the clock fades in at
+ * 1.5 s with "COMMENT BEFORE 0:00" under it, and the banner's balloons fade in at 2 s.
  */
 export const Header: React.FC<{
   theme: Theme;
@@ -170,17 +170,13 @@ export const Header: React.FC<{
   hint2At: number;
   /** Pattern-interrupt frame: the banner re-slams. */
   bannerPulse: number;
-  /** [start, end]: the frosted clue unlocks word by word (HINT chip flips on start). */
-  clueReveal: readonly [number, number];
   /** Every wrong guess re-blurs the hint, which then reveals word by word again. */
   wrongFrames: readonly number[];
   /** y of the word board's top edge. */
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-  /** Hook A/B tests: 1 readable clue, 2 question line, 4 clock held back, 6 comment prompt. */
-  tests: HookTests;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, clueReveal, wrongFrames, boardTop, tickFrames, stress, tests }) => {
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -201,15 +197,6 @@ export const Header: React.FC<{
   const lastWrong = blurEvents.reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
   const wrongFrom = Math.round(fps * 0.2);
   const wrongStagger = words.length > 1 ? Math.max(1, (Math.round(fps * 1.0) - wrongFrom - WORD_FRAMES) / (words.length - 1)) : 0;
-  // Opening: frosted until clueReveal[0], then each word sharpens in turn so the last one is
-  // clear by clueReveal[1]. Over the loop reset it frosts back, matching frame 0 for the replay.
-  const [clueFrom, clueTo] = clueReveal;
-  const clueStagger = words.length > 1 ? Math.max(1, (clueTo - clueFrom - WORD_FRAMES) / (words.length - 1)) : 0;
-  // Hook test 1: the clue is sharp from frame 0 (and stays sharp through the loop, matching frame 0).
-  const frosted = !tests.readableClue;
-  const refrost = frosted ? loopReset(frame, durationInFrames, fps, 0, 0.6) : 0;
-  const introHidden = (i: number) =>
-    frosted ? Math.max(1 - ramp(frame, [clueFrom + i * clueStagger, clueFrom + i * clueStagger + WORD_FRAMES], [0, 1]), refrost) : 0;
   const wrongHidden = (i: number) => {
     if (!Number.isFinite(lastWrong)) return 0;
     const start = lastWrong + wrongFrom + i * wrongStagger;
@@ -219,7 +206,7 @@ export const Header: React.FC<{
   // loop reset starts (that flip ends before the last frame, so the replay starts on a still chip).
   const FLIP = Math.round(fps / 3);
   const loopStart = loopResetStart(durationInFrames, fps);
-  const flipFrom = [...blurEvents, loopStart, ...(frosted ? [clueFrom] : [])].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
+  const flipFrom = [...blurEvents, loopStart].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
   const flip = Number.isFinite(flipFrom) ? interpolate(frame - flipFrom, [0, FLIP], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) }) : 1;
   const flipping = flip > 0 && flip < 1;
   const t = frame / fps;
@@ -240,22 +227,13 @@ export const Header: React.FC<{
 
   return (
     <>
-      {/* Hook test 4: the banner stays from frame 0, its balloons fade in with the pawns at 2 s. */}
-      <HookBanner
-        theme={theme}
-        text={hookText}
-        pulseFrame={bannerPulse}
-        balloons={tests.staggeredUi ? stagedVisibility(frame, fps, durationInFrames, HOOK_TEST_TIMING.uiIn) : 1}
-      />
-      {tests.staggeredUi ? (
-        // Hook test 4: the clock fades + scales in at 1.5 s instead of sitting there on frame 0.
-        <StagedClock>
-          <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />
-        </StagedClock>
-      ) : (
+      {/* The banner is up from frame 0; its balloons fade in with the pawns at 2 s. */}
+      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} balloons={stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.uiIn)} />
+      {/* The clock fades + scales in at 1.5 s, with "COMMENT BEFORE 0:00" under it. */}
+      <StagedClock>
         <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />
-      )}
-      {tests.commentCta && <CommentCta theme={theme} />}
+      </StagedClock>
+      <CommentCta theme={theme} />
 
       <div
         style={{
@@ -332,8 +310,8 @@ export const Header: React.FC<{
               }}
             >
               {words.map((w, i) => {
-                // Frosted through the hook, unlocked word by word; wrong-guess splashes / the hint-2 switch re-blur it.
-                const p = Math.max(Math.min(1 - wrongHidden(i), 1 - introHidden(i)), 0);
+                // Sharp from frame 0; wrong-guess splashes / the hint-2 switch re-blur it, then it reveals word by word.
+                const p = Math.max(1 - wrongHidden(i), 0);
                 return (
                   <React.Fragment key={i}>
                     {i > 0 && " "}
@@ -359,7 +337,7 @@ export const Header: React.FC<{
             />
           </div>
         )}
-        {tests.questionLine && <QuestionLine theme={theme} minHeight={Math.max(380, TAB_HEIGHT / 2 + CARD_PAD.top + CARD_PAD.bottom + textMinHeight + 2 * CARD_BORDER)} />}
+        <QuestionLine theme={theme} minHeight={Math.max(380, TAB_HEIGHT / 2 + CARD_PAD.top + CARD_PAD.bottom + textMinHeight + 2 * CARD_BORDER)} />
       </div>
     </>
   );
@@ -370,11 +348,11 @@ const hex2 = (a: number) =>
     .toString(16)
     .padStart(2, "0");
 
-/** Hook test 4: wraps the clock so it fades and scales in over HOOK_TEST_TIMING.timerIn. */
+/** Wraps the clock so it fades and scales in over HOOK_UI_TIMING.timerIn. */
 const StagedClock: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const vis = stagedVisibility(frame, fps, durationInFrames, HOOK_TEST_TIMING.timerIn);
+  const vis = stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.timerIn);
   if (vis <= 0.001) return null;
   const cx = TOP_ROW.right - CLOCK.width / 2;
   const cy = TOP_ROW.top + CLOCK.height / 2;

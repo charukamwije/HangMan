@@ -15,7 +15,6 @@ import {
   STRESS_BELOW_SECONDS,
 } from "./constants";
 import { resolveHook, type HookPlan } from "./hook";
-import { resolveHookTests, type HookTests } from "./hookTests";
 import type { Guess, ReelProps } from "./types";
 
 export type GuessKind = "correct" | "wrong";
@@ -54,6 +53,8 @@ export type AutoScheduleInput = {
   finalRevealAt: number;
   /** Pre-filled letter (see resolveHintLetter); never scheduled as a guess. */
   hintLetter?: string;
+  /** More letters already on the board at frame 0 (the second pre-filled letter); never scheduled. */
+  prefilled?: string[];
   start?: number;
   /**
    * Keep every beat 2.0–2.5 s apart. When there are too few guesses to do that,
@@ -75,19 +76,21 @@ export function autoSchedule({
   holdBack,
   finalRevealAt,
   hintLetter = "",
+  prefilled = [],
   start = AUTO_START,
   fillBeats = true,
 }: AutoScheduleInput): Guess[] {
   const w = normalizeWord(word).replace(/ /g, "");
   const hint = resolveHintLetter(w, hintLetter);
+  const preset = new Set([hint, ...prefilled.map((l) => l.toUpperCase())]);
   const counts = new Map<string, number>();
-  for (const c of w) if (c !== hint) counts.set(c, (counts.get(c) ?? 0) + 1);
+  for (const c of w) if (!preset.has(c)) counts.set(c, (counts.get(c) ?? 0) + 1);
   const seed = String(hash(w));
   const ordered = [...counts.keys()].sort(
     (a, b) => counts.get(b)! - counts.get(a)! || hash(a + seed) - hash(b + seed),
   );
 
-  const notInWord = (l: string) => !counts.has(l) && l !== hint;
+  const notInWord = (l: string) => !w.includes(l);
   let held = clamp(holdBack, 0, Math.max(0, ordered.length - 1));
   const wrong = wrongLetters.filter(notInWord);
 
@@ -138,8 +141,6 @@ export type Timeline = {
   hasFinalReveal: boolean;
   /** Frames at which the countdown display changes (for tick SFX + stress pulse). */
   tickFrames: number[];
-  /** Hook A/B test flags, every one resolved (missing = off). */
-  tests: HookTests;
 };
 
 /** Frames between letters popping in at the final reveal (~0.1 s at any fps). */
@@ -148,21 +149,36 @@ export const finalRevealStagger = (fps: number) => Math.max(1, Math.round(fps / 
 export const FINAL_REVEAL_STAGGER = 3;
 
 /**
- * Hook test 3: the second letter pre-filled next to the hint. It takes a letter that
- * would only appear at the final reveal (so no guess beat is lost) while at least one
- * other stays hidden for the reveal; otherwise the last correct guess (its beat is dropped).
+ * The second letter pre-filled on frame 0, next to the hint. `requested` wins when it is in
+ * the word (and not the hint); otherwise the first correct guess before the reveal, otherwise
+ * any other letter of the word. "" for a one-letter word.
+ *
+ * The store / batch path pick the first correct guess and then re-schedule WITHOUT it (see
+ * scheduleWithSecondLetter), so its beat is not lost; with manual timing its guess is skipped.
  */
-export function secondPrefill(word: string, hintLetter: string, guesses: readonly Guess[], finalRevealAt: number): string | undefined {
-  const letters = [...new Set(word.replace(/ /g, ""))].filter((l) => l !== hintLetter);
-  const guessed = guesses.filter((g) => g.time < finalRevealAt).map((g) => g.letter.toUpperCase());
-  const held = letters.filter((l) => !guessed.includes(l));
-  if (held.length >= 2) return held[held.length - 1];
-  const correct = [...guesses].filter((g) => g.time < finalRevealAt && letters.includes(g.letter.toUpperCase())).sort((a, b) => b.time - a.time);
-  return correct[0]?.letter.toUpperCase() ?? held[0];
+export function resolveSecondLetter(word: string, hintLetter: string, guesses: readonly Guess[], finalRevealAt: number, requested = ""): string {
+  const w = normalizeWord(word).replace(/ /g, "");
+  const r = requested.toUpperCase().slice(0, 1);
+  if (r && r !== hintLetter && w.includes(r)) return r;
+  const first = [...guesses]
+    .filter((g) => g.time < finalRevealAt && g.letter.toUpperCase() !== hintLetter && w.includes(g.letter.toUpperCase()))
+    .sort((a, b) => a.time - b.time)[0];
+  return first?.letter.toUpperCase() ?? [...w].find((c) => c !== hintLetter) ?? "";
+}
+
+/**
+ * Auto schedule with a second pre-filled letter: schedule once, take its first correct
+ * guess as the second letter (unless `secondLetter` is given), then schedule again without
+ * it so the beats stay evenly spaced.
+ */
+export function scheduleWithSecondLetter(input: AutoScheduleInput & { secondLetter?: string }): { guesses: Guess[]; secondLetter: string } {
+  const hint = resolveHintLetter(input.word, input.hintLetter ?? "");
+  const secondLetter = resolveSecondLetter(input.word, hint, autoSchedule(input), input.finalRevealAt, input.secondLetter ?? "");
+  return { guesses: autoSchedule({ ...input, prefilled: secondLetter ? [secondLetter] : [] }), secondLetter };
 }
 
 export function resolveTimeline(
-  props: Pick<ReelProps, "word" | "guesses" | "finalRevealAt"> & Partial<Pick<ReelProps, "hintLetter" | "hookTests">>,
+  props: Pick<ReelProps, "word" | "guesses" | "finalRevealAt"> & Partial<Pick<ReelProps, "hintLetter" | "secondLetter">>,
   fps: number,
 ): Timeline {
   const word = normalizeWord(props.word);
@@ -171,9 +187,8 @@ export function resolveTimeline(
   const durationFrames = Math.round(DURATION_SECONDS * fps);
   const toFrame = (s: number) => Math.max(0, Math.min(durationFrames - 1, Math.round(s * fps)));
   const finalRevealFrame = toFrame(props.finalRevealAt);
-  const tests = resolveHookTests(props.hookTests);
-  const prefill = tests.prefilledLetters ? [secondPrefill(word, hintLetter, props.guesses, props.finalRevealAt)].filter((l): l is string => !!l) : [];
-  const hook = resolveHook(word, hintLetter, fps, { prefill });
+  const second = resolveSecondLetter(word, hintLetter, props.guesses, props.finalRevealAt, props.secondLetter ?? "");
+  const hook = resolveHook(word, hintLetter, fps, { prefill: second ? [second] : [] });
 
   // Pre-filled letters are on the board from frame 0, so their guesses are skipped like the hint's.
   const seen = new Set<string>([...(hintLetter ? [hintLetter] : []), ...hook.prefilled]);
@@ -234,7 +249,6 @@ export function resolveTimeline(
     finalRevealFrame,
     hasFinalReveal: finalOrder.size > 0,
     tickFrames,
-    tests,
   };
 }
 
