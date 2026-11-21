@@ -1,6 +1,7 @@
 export type ThemeId =
   | "dark-academia"
   | "midnight-noir"
+  | "seoul-blossom"
   | "emerald-library"
   | "ivory-hall"
   | "morning-study"
@@ -125,6 +126,36 @@ export const THEMES: Record<ThemeId, Theme> = {
     lamp: "#9cc4ff",
     books: ["#1b2233", "#2b2f3d", "#13283a", "#30243a", "#1e1e24", "#2d3a4f"],
     piece: "#dfe6f2",
+  },
+  // Seoul at night under cherry blossoms: indigo sky, warm gold highlights, pink blossom glow
+  // (the lamp / dust colour, so the floating motes read as petals) and a rose-red for misses.
+  "seoul-blossom": {
+    ...DARK,
+    id: "seoul-blossom",
+    name: "Seoul Cherry Blossom Night",
+    accent: "#FFC94A",
+    onAccent: "#1c1206",
+    text: "#FFF6EA",
+    wrong: "#FF3D6E",
+    shade: "6,4,22",
+    wood: ["#1b1745", "#100d2e", "#06051a"],
+    lamp: "#ff9cc8",
+    books: ["#2a2358", "#3b2a5e", "#5a2e5c", "#1e2a55", "#6b3a6e", "#2e1f45", "#4a2f6b"],
+    shelfFrame: "linear-gradient(180deg, #3a2552 0%, #221638 60%, #0e0a1d 100%)",
+    backdropShade:
+      "linear-gradient(180deg, rgba(8,6,28,0.45) 0%, rgba(8,6,28,0.22) 22%, rgba(8,6,28,0.42) 38%, rgba(8,6,28,0.56) 55%, rgba(8,6,28,0.74) 75%, rgba(8,6,28,0.86) 100%)",
+    panel: ["rgba(24,18,58,0.80)", "rgba(10,8,30,0.88)"],
+    panelBorder: "rgba(255,156,200,0.18)",
+    key: {
+      bg: "linear-gradient(180deg, rgba(255,214,235,0.12), rgba(255,214,235,0.04))",
+      border: "rgba(255,190,220,0.24)",
+      text: "#FFF6EA",
+      shadow: "0 4px 12px rgba(6,4,22,0.65)",
+    },
+    usedKey: { bg: "rgba(6,4,22,0.4)", text: "rgba(255,246,234,0.12)" },
+    slotBg: "linear-gradient(180deg, rgba(12,8,34,0.35), rgba(6,4,22,0.62))",
+    emptyRgb: "255,214,235",
+    piece: "#fde7f0",
   },
   "emerald-library": {
     ...DARK,

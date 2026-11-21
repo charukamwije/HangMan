@@ -48,7 +48,7 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  *    sharp under a question line ("ONLY REAL FANS…", until 1.6 s); the clock + "COMMENT BEFORE
  *    0:00" fade in at 1.5 s, the balloons + pawns at 2 s. The keyboard is up from frame 0.
  *  - A/B test (props.ctaStyle): A = Like / Subscribe balloons on the banner; B = no balloons,
- *    LIKE / SHARE / SUBSCRIBE are highlighted beats of their own in the letter rhythm (timeline.ctaPops).
+ *    LIKE then SUBSCRIBE are the last two highlighted beats before the reveal (timeline.ctaPops).
  *  - Seamless loop: over the last 0.6 s keys, pawns, timer, answer, banner and
  *    background animate back to their frame-0 state (loop.ts), so the
  *    platform's auto-replay continues straight into the hook.
@@ -89,7 +89,9 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   // "COMMENT THE WORD YOU GUESSED!" comes in just after the last letter guessed (once its callout
   // has landed), not at the final reveal, so it stays up long enough to read before the loop.
   const lastGuess = Math.max(-1, ...timeline.guesses.filter((g) => g.frame < timeline.finalRevealFrame).map((g) => g.frame));
-  const promptFrame = lastGuess >= 0 ? lastGuess + Math.round(PROMPT_AFTER_LAST_GUESS * fps) : timeline.finalRevealFrame;
+  // Test B: LIKE / SUBSCRIBE close the sequence, so the prompt waits until the last one has gone.
+  const lastCtaEnd = Math.max(-1, ...timeline.ctaPops.map((p) => p.frame + p.durationInFrames));
+  const promptFrame = lastCtaEnd >= 0 ? Math.min(lastCtaEnd, timeline.finalRevealFrame) : lastGuess >= 0 ? lastGuess + Math.round(PROMPT_AFTER_LAST_GUESS * fps) : timeline.finalRevealFrame;
   const stress =stressAt(frame, fps, timeline.tickFrames);
   // The pawns fade and rise in from 2.0 s (the keyboard is up from frame 0).
   const uiVis = stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.uiIn);
@@ -166,7 +168,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         shakePx={KEYBOX_SHAKE}
       />
       <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
-      {/* A/B test B: LIKE / SHARE / SUBSCRIBE hero beats between the guesses (empty for A). */}
+      {/* A/B test B: LIKE / SUBSCRIBE hero beats closing the sequence (empty for A). */}
       <CtaPops theme={theme} pops={timeline.ctaPops} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
       </AbsoluteFill>
 

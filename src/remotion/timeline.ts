@@ -141,17 +141,13 @@ export type Timeline = {
   hasFinalReveal: boolean;
   /** Frames at which the countdown display changes (for tick SFX + stress pulse). */
   tickFrames: number[];
-  /** A/B test B ("pops"): LIKE / SHARE / SUBSCRIBE beats in the letter rhythm (guesses re-timed around them). Empty for A. */
+  /** A/B test B ("pops"): LIKE / SUBSCRIBE beats in the letter rhythm (guesses re-timed around them). Empty for A. */
   ctaPops: CtaPop[];
 };
 
 export type { CtaStyle };
-export type CtaPopKind = "like" | "share" | "subscribe";
+export type CtaPopKind = "like" | "subscribe";
 export type CtaPop = { kind: CtaPopKind; frame: number; durationInFrames: number };
-
-/** Deterministic shuffle (hash-sorted with a per-word salt). */
-const shuffled = <T,>(items: readonly T[], salt: string) =>
-  [...items].map((item, i) => ({ item, k: hash(`${salt}-${i}`) })).sort((a, b) => a.k - b.k).map((x) => x.item);
 
 /** Longest a CTA beat stays on screen (s): longer than a letter (1.15 s), it is the hero beat. */
 const CTA_MAX_SECONDS = 1.6;
@@ -161,32 +157,20 @@ const CTA_CLEAR = 0.2;
 const CTA_LAST_BEAT_BEFORE_REVEAL = 3;
 
 /**
- * A/B test B: LIKE / SHARE / SUBSCRIBE are beats of their own in the letter rhythm. Each is
- * inserted after a guess (random per word, from the middle of the sequence when it is long
- * enough; order shuffled per word), then every beat (guesses + CTAs) is spread evenly from the
- * first guess to 3 s before the final reveal, so every guess still lands. Returns the re-timed
- * guesses and the CTA beats. Guesses after the reveal are left alone.
+ * A/B test B: LIKE and SUBSCRIBE are beats of their own in the letter rhythm, the last two
+ * before the final reveal (after the last guess). Every beat (guesses + CTAs) is spread evenly
+ * from the first guess to 3 s before the reveal, so every guess still lands. Returns the
+ * re-timed guesses and the CTA beats. Guesses after the reveal are left alone.
  */
-export function planCtaBeats(word: string, guesses: readonly ResolvedGuess[], finalRevealFrame: number, fps: number): { guesses: ResolvedGuess[]; pops: CtaPop[] } {
+export function planCtaBeats(guesses: readonly ResolvedGuess[], finalRevealFrame: number, fps: number): { guesses: ResolvedGuess[]; pops: CtaPop[] } {
   const live = guesses.filter((g) => g.frame < finalRevealFrame).sort((a, b) => a.frame - b.frame);
   const late = guesses.filter((g) => g.frame >= finalRevealFrame);
   const n = live.length;
   if (!n) return { guesses: [...guesses], pops: [] };
 
-  // Slot s = "after the s-th guess" (1..n). Prefer slots between guesses, away from both ends.
-  const between = Array.from({ length: n - 1 }, (_, i) => i + 1);
-  const preferred = between.length >= 5 ? between.slice(1, -1) : between;
-  const pool = preferred.length >= 3 ? preferred : [...between, n];
-  const slots = new Set(shuffled(pool, `cta-slots-${word}`).slice(0, 3));
-  const kinds = shuffled(["like", "share", "subscribe"] as const, `cta-order-${word}`);
-
+  // LIKE then SUBSCRIBE close the sequence: the last two beats, after the last guess.
   type Beat = { guess: ResolvedGuess } | { kind: CtaPopKind };
-  const beats: Beat[] = [];
-  let k = 0;
-  live.forEach((g, i) => {
-    beats.push({ guess: g });
-    if (slots.has(i + 1)) beats.push({ kind: kinds[k++] });
-  });
+  const beats: Beat[] = [...live.map((guess) => ({ guess })), { kind: "like" as const }, { kind: "subscribe" as const }];
 
   const first = live[0].frame;
   const last = Math.max(live[n - 1].frame, finalRevealFrame - Math.round(CTA_LAST_BEAT_BEFORE_REVEAL * fps));
@@ -269,8 +253,8 @@ export function resolveTimeline(
       index,
     }));
 
-  // A/B test B: LIKE / SHARE / SUBSCRIBE take beats of their own; the guesses are re-spaced around them.
-  const cta = (props.ctaStyle ?? "balloons") === "pops" ? planCtaBeats(word, resolvedGuesses, finalRevealFrame, fps) : { guesses: resolvedGuesses, pops: [] };
+  // A/B test B: LIKE / SUBSCRIBE take beats of their own; the guesses are re-spaced around them.
+  const cta = (props.ctaStyle ?? "balloons") === "pops" ? planCtaBeats(resolvedGuesses, finalRevealFrame, fps) : { guesses: resolvedGuesses, pops: [] };
   const guesses = cta.guesses;
 
   const correctKeyFrames = new Map<string, number>();

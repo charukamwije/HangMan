@@ -26,10 +26,10 @@ export type ReelProps = {
   /** Second letter pre-filled on frame 0. Empty / missing → the first correct guess (see resolveSecondLetter). */
   secondLetter?: string;
   /**
-   * A/B test: how viewers are asked to like / share / subscribe.
+   * A/B test: how viewers are asked to like / subscribe.
    *   "balloons" (A, default): Like + Subscribe balloon clusters on the hook banner.
-   *   "pops" (B): no balloons; LIKE, SHARE and SUBSCRIBE each pop once on a paint splat as a
-   *               highlighted beat of their own in the letter rhythm (guesses re-spaced to fit).
+   *   "pops" (B): no balloons; LIKE then SUBSCRIBE pop once each on a paint splat as the last two
+   *               highlighted beats before the reveal (guesses re-spaced to fit).
    */
   ctaStyle?: CtaStyle;
   guesses: Guess[];

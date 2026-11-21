@@ -40,7 +40,7 @@ export const hangmanPuzzleSchema = z.object({
   prefilledLetter: letter.optional(),
   /** Second letter on the board at 0 s. Missing → the first correct guess (its beat is re-timed away). */
   secondPrefilledLetter: letter.optional(),
-  /** A/B test: "balloons" (default) or "pops" (LIKE / SHARE / SUBSCRIBE splats, no balloons). */
+  /** A/B test: "balloons" (default) or "pops" (LIKE / SUBSCRIBE splats, no balloons). */
   ctaStyle: z.enum(["balloons", "pops"]).optional(),
   holdBack: z.number().int().min(0).max(10).optional(),
   themeId: z.enum(THEME_IDS as [ThemeId, ...ThemeId[]]).optional(),

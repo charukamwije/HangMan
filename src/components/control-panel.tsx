@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ExportPanel } from "@/components/export-panel";
 import { FPS } from "@/remotion/constants";
-import { LIBRARY } from "@/data/library";
+import { LIBRARIES, getLibrary, type LibraryId } from "@/data/library";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
 import type { CtaStyle, ReelProps } from "@/remotion/types";
@@ -54,12 +54,12 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
         <Field label="Like / Subscribe CTA">
           <NativeSelect value={s.ctaStyle} onChange={(e) => s.update({ ctaStyle: e.target.value as CtaStyle })}>
             <option value="balloons">A · Balloons on the banner</option>
-            <option value="pops">B · Like, Share, Subscribe pops</option>
+            <option value="pops">B · Like + Subscribe pops at the end</option>
           </NativeSelect>
         </Field>
         <p className="text-xs text-muted-foreground">
           {s.ctaStyle === "pops"
-            ? "No balloons. LIKE, SHARE and SUBSCRIBE pop as highlighted beats of their own in the letter rhythm (guesses re-spaced to fit). Renders are named …-B."
+            ? "No balloons. LIKE then SUBSCRIBE pop as the last two highlighted beats before the reveal (guesses re-spaced to fit). Renders are named …-B."
             : "Like and Subscribe balloons hang from the banner for the whole video."}{" "}
           Post 5–6 Shorts per variant and compare.
         </p>
@@ -319,12 +319,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * Video library (puzzles/dark-board-100.csv → src/data/library.ts): Back / Next steps
- * through the videos, and the number box jumps straight to one (Enter or Go).
+ * Video library (puzzles/*.csv → src/data/library*.ts): the dropdown picks the list (K-Drama /
+ * Other, which also selects that list's theme), Back / Next steps through its videos, and the
+ * number box jumps straight to one (Enter or Go).
  */
 function LibrarySection() {
   const videoNumber = useReelStore((s) => s.videoNumber);
   const loadVideo = useReelStore((s) => s.loadVideo);
+  const libraryId = useReelStore((s) => s.libraryId);
+  const setLibrary = useReelStore((s) => s.setLibrary);
+  const LIBRARY = getLibrary(libraryId).entries;
   const first = LIBRARY[0].n;
   const last = LIBRARY[LIBRARY.length - 1].n;
   const [draft, setDraft] = useState(videoNumber ? String(videoNumber) : "");
@@ -336,6 +340,15 @@ function LibrarySection() {
 
   return (
     <Section icon={<Clapperboard />} title={`Video Library · ${LIBRARY.length} words`}>
+      <Field label="List">
+        <NativeSelect value={libraryId} onChange={(e) => setLibrary(e.target.value as LibraryId)}>
+          {LIBRARIES.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.label} · {l.entries.length} words
+            </option>
+          ))}
+        </NativeSelect>
+      </Field>
       <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" disabled={videoNumber !== null && videoNumber <= first} onClick={() => loadVideo(videoNumber === null ? first : videoNumber - 1)}>
           <ChevronLeft /> Back

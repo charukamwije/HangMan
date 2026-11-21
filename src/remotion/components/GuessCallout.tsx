@@ -55,13 +55,13 @@ export const GuessCallouts: React.FC<{
 
 /** YouTube's red, for the SUBSCRIBE splat. */
 const YT_RED = "#FF0000";
-const CTA_WORD: Record<CtaPopKind, string> = { like: "LIKE", share: "SHARE", subscribe: "SUBSCRIBE" };
+const CTA_WORD: Record<CtaPopKind, string> = { like: "LIKE", subscribe: "SUBSCRIBE" };
 
 /**
- * A/B test B: LIKE / SHARE / SUBSCRIBE pop like a letter (same splat), with an icon in place of
+ * A/B test B: LIKE and SUBSCRIBE pop like a letter (same splat), with an icon in place of
  * the letter, as beats of their own in the letter rhythm (planCtaBeats, timeline.ts). They are the
  * hero beats: bigger, a colour flash + pulsing halo, a bigger pill, and they hold on screen
- * longer than a letter. Like + Share take the theme accent, Subscribe YouTube red.
+ * longer than a letter. Like takes the theme accent, Subscribe YouTube red. They close the sequence.
  */
 export const CtaPops: React.FC<{ theme: Theme; pops: CtaPop[]; centerY: number }> = ({ theme, pops, centerY }) => {
   const { fps } = useVideoConfig();
@@ -98,7 +98,7 @@ const HERO_HOLD_AT = 0.4;
 /** Hero callouts: overall scale vs a letter splat. */
 const HERO_SCALE = 1.22;
 
-/** Thumbs-up / share arrow / bell, drawn in the splat's ink colour (`cut` = details in the paint colour). */
+/** Thumbs-up / bell, drawn in the splat's ink colour (`cut` = details in the paint colour). */
 const CtaIcon: React.FC<{ kind: CtaPopKind; ink: string; cut: string }> = ({ kind, ink, cut }) => (
   <svg viewBox="0 0 24 24" width={LETTER * 0.78} height={LETTER * 0.78} style={{ overflow: "visible" }}>
     {kind === "like" && (
@@ -107,10 +107,6 @@ const CtaIcon: React.FC<{ kind: CtaPopKind; ink: string; cut: string }> = ({ kin
         fill={ink}
         strokeLinejoin="round"
       />
-    )}
-    {kind === "share" && (
-      // YouTube-style share: a curved arrow pointing right
-      <path d="M13.6 3.6v4.9C7.3 9.2 3.3 13.4 2.3 20.4c2.6-3.8 6.3-5.6 11.3-5.6v4.9l8.1-8z" fill={ink} strokeLinejoin="round" />
     )}
     {kind === "subscribe" && (
       <path

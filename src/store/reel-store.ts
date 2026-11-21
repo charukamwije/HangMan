@@ -7,7 +7,7 @@ import type { ThemeId } from "@/remotion/themes";
 import { clampTime, normalizeWord, parseLetters, scheduleWithSecondLetter } from "@/remotion/timeline";
 import type { CtaStyle, Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
-import { LIBRARY } from "@/data/library";
+import { DEFAULT_LIBRARY_ID, getLibrary, libraryFileBase, type LibraryId } from "@/data/library";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
 
 export type ReelState = {
@@ -34,11 +34,13 @@ export type ReelState = {
   autoTiming: boolean;
   audio: ReelAudioSettings;
   showSafeZones: boolean;
-  /** A/B test: "balloons" (A) or "pops" (B: LIKE / SHARE / SUBSCRIBE splats, no balloons). */
+  /** A/B test: "balloons" (A) or "pops" (B: LIKE / SUBSCRIBE splats, no balloons). */
   ctaStyle: CtaStyle;
   /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
   backgroundImage: string;
-  /** Video number from the library (data/library.ts) last loaded; null = custom content. */
+  /** Which video library the Video Library section steps through (K-Drama / Other). */
+  libraryId: LibraryId;
+  /** Video number from the current library (data/library.ts) last loaded; null = custom content. */
   videoNumber: number | null;
 };
 
@@ -46,6 +48,8 @@ type Actions = {
   update: (patch: Partial<Omit<ReelState, "guesses" | "audio" | "autoSecondLetter">>) => void;
   /** Load video `n` (1-based) from the library: word, banner, hints, pre-filled letter and reveal order. */
   loadVideo: (n: number) => void;
+  /** Switch library (K-Drama / Other): selects that library's theme; the loaded content stays until you pick a video. */
+  setLibrary: (id: LibraryId) => void;
   updateAudio: (patch: Partial<ReelAudioSettings>) => void;
   setGuess: (index: number, patch: Partial<Guess>) => void;
   addGuess: () => void;
@@ -76,6 +80,7 @@ const INITIAL: ReelState = {
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
   ctaStyle: "balloons",
+  libraryId: DEFAULT_LIBRARY_ID,
   videoNumber: null,
   backgroundImage: DEFAULT_BACKGROUND_IMAGE,
 };
@@ -111,10 +116,12 @@ export const useReelStore = create<ReelState & Actions>()(
       },
       updateAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
       loadVideo: (n) => {
-        const v = LIBRARY.find((e) => e.n === n);
+        const lib = getLibrary(get().libraryId);
+        const v = lib.entries.find((e) => e.n === n);
         if (!v) return;
-        // The first correct guess is pre-filled on frame 0; the rest keep one guess every 3 s from 2 s.
-        const second = v.guesses.find((g) => g.correct && g.letter !== v.prefill)?.letter ?? "";
+        // Second letter on frame 0: the CSV's own second pre-filled letter when it has one, else the
+        // first correct guess (taken out of the guesses). The rest keep one guess every 3 s from 2 s.
+        const second = v.prefill2 || (v.guesses.find((g) => g.correct && g.letter !== v.prefill)?.letter ?? "");
         set({
           videoNumber: v.n,
           hookText: v.hookText,
@@ -131,7 +138,12 @@ export const useReelStore = create<ReelState & Actions>()(
             .map((g, i) => ({ letter: g.letter, time: LIBRARY_FIRST_GUESS + LIBRARY_GUESS_GAP * i })),
           // Keep the CSV's exact reveal order: editing the word / pacing must not re-time it.
           autoTiming: false,
+          themeId: lib.themeId,
         });
+      },
+      setLibrary: (id) => {
+        if (id === get().libraryId) return;
+        set({ libraryId: id, videoNumber: null, themeId: getLibrary(id).themeId });
       },
       setGuess: (index, patch) =>
         set({
@@ -181,7 +193,7 @@ export const useReelStore = create<ReelState & Actions>()(
     }),
     {
       name: "hangman-reel-studio",
-      version: 5,
+      version: 6,
       // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
       // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
@@ -202,6 +214,13 @@ export const useReelStore = create<ReelState & Actions>()(
     },
   ),
 );
+
+/**
+ * File-name base while a library video is loaded, e.g. "kdrama-007-HONEYCOMB" / "video-012-DEMOGORGON"
+ * (so renders, screenshots and thumbnails can be matched to posts); "" for custom content.
+ */
+export const videoFileBase = (s: Pick<ReelState, "libraryId" | "videoNumber" | "word">) =>
+  s.videoNumber ? libraryFileBase(s.libraryId, s.videoNumber, s.word.trim().replace(/\s+/g, "-")) : "";
 
 /** Maps editor state to the serializable composition input props. */
 export const toReelProps = (s: ReelState): ReelProps => ({

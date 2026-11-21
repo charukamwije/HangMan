@@ -5,11 +5,11 @@ import { Thumbnail } from "@remotion/player";
 import { Download, ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FPS, RESOLUTIONS } from "@/remotion/constants";
-import { HangmanThumbnail, type ThumbnailProps } from "@/remotion/HangmanThumbnail";
+import { HangmanThumbnail, thumbnailPictureFor, type ThumbnailProps } from "@/remotion/HangmanThumbnail";
 import type { ReelProps } from "@/remotion/types";
-import { LIBRARY } from "@/data/library";
+import { getLibrary } from "@/data/library";
 import { resolveTimeline } from "@/remotion/timeline";
-import { DEFAULT_BACKGROUND_IMAGE, useReelStore } from "@/store/reel-store";
+import { DEFAULT_BACKGROUND_IMAGE, useReelStore, videoFileBase } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,9 +19,12 @@ import { cn } from "@/lib/utils";
  */
 export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
   const videoNumber = useReelStore((s) => s.videoNumber);
+  const libraryId = useReelStore((s) => s.libraryId);
   const backgroundImage = useReelStore((s) => s.backgroundImage);
   const update = useReelStore((s) => s.update);
   const withPicture = !!backgroundImage;
+  // Which picture "With picture" uses depends on the theme (K-Drama scene for Seoul Cherry Blossom Night).
+  const picture = thumbnailPictureFor(inputProps.themeId);
   const [busy, setBusy] = useState<"one" | "both" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,17 +38,17 @@ export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
       hintLetter: inputProps.hintLetter,
       secondLetter,
       themeId: inputProps.themeId,
-      category: LIBRARY.find((v) => v.n === videoNumber)?.category ?? "",
-      backgroundImage: backgroundImage ?? "",
+      category: getLibrary(libraryId).entries.find((v) => v.n === videoNumber)?.category ?? "",
+      backgroundImage: withPicture ? picture : "",
     }),
-    [inputProps.hookText, inputProps.word, inputProps.hintLetter, secondLetter, inputProps.themeId, backgroundImage, videoNumber],
+    [inputProps.hookText, inputProps.word, inputProps.hintLetter, secondLetter, inputProps.themeId, withPicture, picture, videoNumber, libraryId],
   );
 
   /** Renders one version on the server and downloads it: "…-thumbnail.png" / "…-thumbnail-plain.png". */
   const fetchAndSave = async (picture: boolean) => {
-    const base = videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${props.word.trim().replace(/\s+/g, "-")}` : "hangman";
+    const base = videoFileBase(useReelStore.getState()) || "hangman";
     const fileName = `${base}-thumbnail${picture ? "" : "-plain"}`;
-    const body = { props: { ...props, backgroundImage: picture ? DEFAULT_BACKGROUND_IMAGE : "" }, fileName };
+    const body = { props: { ...props, backgroundImage: picture ? thumbnailPictureFor(props.themeId) : "" }, fileName };
     const res = await fetch("/api/thumbnail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
     const url = URL.createObjectURL(await res.blob());

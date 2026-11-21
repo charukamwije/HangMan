@@ -6,7 +6,7 @@ import { Check, Copy, Download, FileJson, Film, Loader2, Upload, XCircle } from 
 import { Button } from "@/components/ui/button";
 import type { ReelProps } from "@/remotion/types";
 import type { RenderJobPublic } from "@/lib/render-jobs";
-import { toPuzzleData, useReelStore } from "@/store/reel-store";
+import { toPuzzleData, useReelStore, videoFileBase } from "@/store/reel-store";
 
 const CLI = `npx remotion render src/remotion/index.ts HangmanReel renders/hangman-reel-4k.mp4 --props=./reel-props.json`;
 
@@ -45,8 +45,7 @@ export function ExportPanel({ inputProps }: { inputProps: ReelProps }) {
 
   /** "video-007-TYRION" while a library video is loaded, so renders can be matched to posts. */
   const videoFileName = () => {
-    const { videoNumber, word } = useReelStore.getState();
-    return videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${word.replace(/\s+/g, "-")}` : "";
+    return videoFileBase(useReelStore.getState());
   };
 
   const saveJson = (data: unknown, name: string) => {

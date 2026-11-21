@@ -50,7 +50,7 @@ export type HangmanPuzzleData = {
   prefilledLetter?: string;
   /** Second letter pre-filled on frame 0. Default: the first correct guess (its beat is re-timed away). */
   secondPrefilledLetter?: string;
-  /** A/B test: "balloons" (default) or "pops" (LIKE / SHARE / SUBSCRIBE splats, no balloons). */
+  /** A/B test: "balloons" (default) or "pops" (LIKE / SUBSCRIBE splats, no balloons). */
   ctaStyle?: CtaStyle;
   /** Max correct letters saved for the final reveal (auto mode). Default 2. */
   holdBack?: number;

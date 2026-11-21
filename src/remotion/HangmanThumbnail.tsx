@@ -51,6 +51,32 @@ const PANEL_ROWS = [
 const PANEL_GAP = 22;
 
 /** The picture as two rows of portrait panels over near-black, with a soft glow behind the headline. */
+/** The thumbnail picture per theme (With picture): the K-Drama scene for Seoul Cherry Blossom Night, else the characters. */
+export const KDRAMA_PICTURE = "backgrounds/kdrama.png";
+export const CHARACTERS_PICTURE = "backgrounds/characters.jpg";
+export const thumbnailPictureFor = (themeId: ThemeId) => (themeId === "seoul-blossom" ? KDRAMA_PICTURE : CHARACTERS_PICTURE);
+
+/**
+ * Full-bleed picture (the K-Drama scene). It has its own artwork text painted in the middle
+ * (category, headline, board, letter count) right where the thumbnail draws its own, so that band
+ * is covered by a soft indigo fade: the "K-Drama" lettering, moon and tower above it and the couple
+ * and blossoms below it stay visible.
+ */
+const FullBleedBackground: React.FC<{ image: string }> = ({ image }) => (
+  <AbsoluteFill style={{ background: "#07061a" }}>
+    <Img src={staticFile(image)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+    <AbsoluteFill
+      style={{
+        background:
+          "linear-gradient(180deg, transparent 0%, transparent 16.5%, rgba(10,8,32,0.995) 21%, rgba(12,9,36,1) 46%, rgba(10,8,32,0.995) 71.5%, transparent 77.5%, transparent 100%)",
+      }}
+    />
+    {/* soft blossom-pink glow behind the headline, and a faint night-sky blue at the band's edges */}
+    <AbsoluteFill style={{ background: "radial-gradient(ellipse 52% 20% at 50% 50%, rgba(255,156,200,0.18), transparent 75%)" }} />
+    <AbsoluteFill style={{ background: "radial-gradient(ellipse 90% 30% at 50% 46%, transparent 55%, rgba(40,46,110,0.25) 100%)" }} />
+  </AbsoluteFill>
+);
+
 const PanelBackground: React.FC<{ image: string }> = ({ image }) => (
   <AbsoluteFill style={{ background: "#050608" }}>
     {PANEL_ROWS.map((row, r) => {
@@ -133,7 +159,7 @@ const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hin
     <AbsoluteFill>
       {backgroundImage ? (
         <>
-          <PanelBackground image={backgroundImage} />
+          {backgroundImage === CHARACTERS_PICTURE ? <PanelBackground image={backgroundImage} /> : <FullBleedBackground image={backgroundImage} />}
         </>
       ) : (
         <>

@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
-import { Bell, Camera, Forward, Loader2, Pause, Play, SkipBack, ThumbsUp } from "lucide-react";
+import { Bell, Camera, Loader2, Pause, Play, SkipBack, ThumbsUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { DURATION_FRAMES, DURATION_SECONDS, FPS } from "@/remotion/constants";
 import { countdownAt, formatClock, resolveTimeline } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
-import { useReelStore } from "@/store/reel-store";
+import { useReelStore, videoFileBase } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -22,7 +22,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
   const setGuess = useReelStore((s) => s.setGuess);
   const update = useReelStore((s) => s.update);
   const timeline = useMemo(() => resolveTimeline(inputProps, FPS), [inputProps]);
-  /** A/B test B: LIKE / SHARE / SUBSCRIBE take beats of their own and the letters are auto-spaced around them. */
+  /** A/B test B: LIKE / SUBSCRIBE take beats of their own and the letters are auto-spaced around them. */
   const ctaBeats = timeline.ctaPops.length > 0;
   const [shooting, setShooting] = useState(false);
   const [shotError, setShotError] = useState<string | null>(null);
@@ -32,8 +32,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
     const p = playerRef.current;
     p?.pause();
     const f = p?.getCurrentFrame() ?? frame;
-    const { videoNumber, word } = useReelStore.getState();
-    const base = videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${word.trim().replace(/\s+/g, "-")}` : "hangman";
+    const base = videoFileBase(useReelStore.getState()) || "hangman";
     const fileName = `${base}${inputProps.ctaStyle === "pops" ? "-B" : ""}-f${String(f).padStart(3, "0")}`;
     setShooting(true);
     setShotError(null);
@@ -196,9 +195,9 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
           </motion.button>
         ))}
 
-        {/* A/B test B: LIKE / SHARE / SUBSCRIBE beats. Click to jump there (their timing is automatic). */}
+        {/* A/B test B: LIKE / SUBSCRIBE beats. Click to jump there (their timing is automatic). */}
         {timeline.ctaPops.map((p) => {
-          const Icon = p.kind === "like" ? ThumbsUp : p.kind === "share" ? Forward : Bell;
+          const Icon = p.kind === "like" ? ThumbsUp : Bell;
           return (
             <button
               key={p.kind}
@@ -241,7 +240,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
           <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-sm bg-primary" /> correct</span>
           <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-sm bg-destructive" /> wrong</span>
           {ctaBeats && (
-            <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-full bg-[#FF0000] ring-1 ring-white/80" /> like · share · subscribe</span>
+            <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-full bg-[#FF0000] ring-1 ring-white/80" /> like · subscribe</span>
           )}
         </span>
       </div>

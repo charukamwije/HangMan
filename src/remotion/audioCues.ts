@@ -102,7 +102,7 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
     }
   }
 
-  // 4b. A/B test B: each LIKE / SHARE / SUBSCRIBE pop gets the guess whoosh, a crisp pop and a light
+  // 4b. A/B test B: each LIKE / SUBSCRIBE pop gets the guess whoosh, a crisp pop and a light
   //     chime, but never the correct / wrong SFX, so it can't be mistaken for a guess.
   for (const p of timeline.ctaPops) {
     const len = seconds(AUDIO_SECONDS.whoosh, fps);
