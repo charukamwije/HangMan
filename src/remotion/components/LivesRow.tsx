@@ -26,6 +26,11 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; promptFra
   // Loop reset: "DID YOU GET IT?" hands back to the pawn row in the first 35 % of the reset.
   const outro =
     spring({ frame: frame - promptFrame, fps, config: { damping: 14 } }) * (1 - loopReset(frame, durationInFrames, fps, 0.05, 0.35));
+  // The comment prompt slams in oversized (bouncy spring), then pulses with the clock while it is up.
+  const slam = frame >= promptFrame ? spring({ frame: frame - promptFrame, fps, config: { damping: 8, stiffness: 220, mass: 0.6 } }) : 0;
+  const promptPulse = frame >= promptFrame ? 0.5 + 0.5 * Math.cos(((frame - promptFrame) / fps) * Math.PI * 2 * 1.2) : 0;
+  // A light sheen sweeps across the pill about once a second.
+  const sheen = frame >= promptFrame ? (((frame - promptFrame) / fps) % 1.4) / 1.4 : -1;
 
   // Lives are lost from the RIGHT end of the row toward the left; on the loop reset they
   // drop back in the order they were lost.
@@ -65,6 +70,8 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; promptFra
           <LifePawn key={i} theme={theme} since={sl.since} fps={fps} restore={sl.restore} walkDist={sl.walkDist} seed={sl.seed} />
         ))}
       </div>
+      {/* Comment-bait CTA: a specific question gets more replies than a yes/no. A solid neon pill so it is
+          the loudest thing on screen once the guessing is over. Drawn icon, no emoji glyph. */}
       <div
         style={{
           position: "absolute",
@@ -72,24 +79,58 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; promptFra
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 40,
-          fontFamily: BODY_FONT,
-          fontWeight: 900,
-          fontSize: 76,
-          lineHeight: 1.08,
-          letterSpacing: "0.08em",
-          color: theme.text,
-          textShadow: `0 0 30px ${theme.accent}66, 0 8px 30px ${shadeA(theme, 0.9)}`,
           opacity: outro,
-          transform: `scale(${interpolate(outro, [0, 1], [0.7, 1])})`,
+          // Two lines are taller than the pawn row: lift into the empty gap above it, clear of the keyboard.
+          transform: "translateY(-52px)",
         }}
       >
-        {/* Comment-bait CTA: a specific question gets more replies than a yes/no. Drawn icon, no emoji glyph. */}
-        <ChatIcon color={theme.accent} size={150} />
-        <div style={{ textAlign: "left" }}>
-          COMMENT THE WORD
-          <br />
-          YOU GUESSED!
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            alignItems: "center",
+            gap: 34,
+            // Two big lines; sized so the pill (even at its pulse peak) stays inside the keyboard's safe band.
+            padding: "26px 64px 26px 44px",
+            borderRadius: 80,
+            overflow: "hidden",
+            whiteSpace: "nowrap",
+            fontFamily: BODY_FONT,
+            fontWeight: 900,
+            fontSize: 96,
+            lineHeight: 1.04,
+            letterSpacing: "0.05em",
+            color: theme.onAccent,
+            background: theme.accent,
+            border: "6px solid #ffffff",
+            boxShadow: [
+              `0 0 ${50 + 50 * promptPulse}px ${theme.accent}`,
+              `0 0 0 ${8 + 6 * promptPulse}px ${theme.accent}55`,
+              `0 18px 36px ${shadeA(theme, 0.85)}`,
+            ].join(", "),
+            transform: `scale(${(interpolate(slam, [0, 1], [1.35, 1]) * (1 + 0.035 * promptPulse)).toFixed(4)})`,
+          }}
+        >
+          {sheen >= 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: -20,
+                bottom: -20,
+                left: `${-20 + 140 * sheen}%`,
+                width: 120,
+                transform: "skewX(-20deg)",
+                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
+                pointerEvents: "none",
+              }}
+            />
+          )}
+          <ChatIcon color={theme.onAccent} size={170} fill={`${theme.onAccent}22`} glow={false} />
+          <span style={{ position: "relative", textAlign: "left" }}>
+            COMMENT THE WORD
+            <br />
+            YOU GUESSED!
+          </span>
         </div>
       </div>
     </div>
@@ -97,11 +138,16 @@ export const LivesRow: React.FC<{ theme: Theme; wrongFrames: number[]; promptFra
 };
 
 /** Speech-bubble "comment" icon (rounded bubble, tail bottom-left, three dots). */
-const ChatIcon: React.FC<{ color: string; size: number }> = ({ color, size }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" style={{ flex: "0 0 auto", filter: `drop-shadow(0 0 18px ${color}aa) drop-shadow(0 8px 16px rgba(0,0,0,0.8))` }}>
+const ChatIcon: React.FC<{ color: string; size: number; fill?: string; glow?: boolean }> = ({ color, size, fill = "rgba(0,0,0,0.55)", glow = true }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 100 100"
+    style={{ position: "relative", flex: "0 0 auto", filter: glow ? `drop-shadow(0 0 18px ${color}aa) drop-shadow(0 8px 16px rgba(0,0,0,0.8))` : undefined }}
+  >
     <path
       d="M 20 14 H 80 Q 92 14 92 26 V 62 Q 92 74 80 74 H 42 L 22 90 L 26 74 H 20 Q 8 74 8 62 V 26 Q 8 14 20 14 Z"
-      fill="rgba(0,0,0,0.55)"
+      fill={fill}
       stroke={color}
       strokeWidth={7}
       strokeLinejoin="round"

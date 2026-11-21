@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { FPS } from "@/remotion/constants";
 import { LIBRARY } from "@/data/library";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
-import type { ReelProps } from "@/remotion/types";
+import type { CtaStyle, ReelProps } from "@/remotion/types";
 import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +49,21 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
   return (
     <div className="flex flex-col gap-1 p-3">
       <LibrarySection />
+
+      <Section icon={<FlaskConical />} title="A/B Test">
+        <Field label="Like / Subscribe CTA">
+          <NativeSelect value={s.ctaStyle} onChange={(e) => s.update({ ctaStyle: e.target.value as CtaStyle })}>
+            <option value="balloons">A · Balloons on the banner</option>
+            <option value="pops">B · Like, Share, Subscribe pops</option>
+          </NativeSelect>
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          {s.ctaStyle === "pops"
+            ? "No balloons. LIKE, SHARE and SUBSCRIBE pop as highlighted beats of their own in the letter rhythm (guesses re-spaced to fit). Renders are named …-B."
+            : "Like and Subscribe balloons hang from the banner for the whole video."}{" "}
+          Post 5–6 Shorts per variant and compare.
+        </p>
+      </Section>
 
       <Section icon={<Type />} title="Content">
         <Field label="Hook banner (frame 0)">

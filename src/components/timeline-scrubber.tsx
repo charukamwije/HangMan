@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
-import { Camera, Loader2, Pause, Play, SkipBack } from "lucide-react";
+import { Bell, Camera, Forward, Loader2, Pause, Play, SkipBack, ThumbsUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { DURATION_FRAMES, DURATION_SECONDS, FPS } from "@/remotion/constants";
@@ -22,6 +22,8 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
   const setGuess = useReelStore((s) => s.setGuess);
   const update = useReelStore((s) => s.update);
   const timeline = useMemo(() => resolveTimeline(inputProps, FPS), [inputProps]);
+  /** A/B test B: LIKE / SHARE / SUBSCRIBE take beats of their own and the letters are auto-spaced around them. */
+  const ctaBeats = timeline.ctaPops.length > 0;
   const [shooting, setShooting] = useState(false);
   const [shotError, setShotError] = useState<string | null>(null);
 
@@ -32,7 +34,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
     const f = p?.getCurrentFrame() ?? frame;
     const { videoNumber, word } = useReelStore.getState();
     const base = videoNumber ? `video-${String(videoNumber).padStart(3, "0")}-${word.trim().replace(/\s+/g, "-")}` : "hangman";
-    const fileName = `${base}-f${String(f).padStart(3, "0")}`;
+    const fileName = `${base}${inputProps.ctaStyle === "pops" ? "-B" : ""}-f${String(f).padStart(3, "0")}`;
     setShooting(true);
     setShotError(null);
     try {
@@ -170,19 +172,21 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
           <div key={s} className={cn("absolute bottom-0 w-px bg-white/10", s % 5 === 0 ? "h-3" : "h-1.5")} style={{ left: `${(s / DURATION_SECONDS) * 100}%` }} />
         ))}
 
-        {/* guess keyframes */}
+        {/* guess keyframes (A/B test B re-spaces them around the CTA beats, so they can't be dragged there) */}
         {timeline.guesses.map((g) => (
           <motion.button
             key={g.letter}
             layout
             type="button"
-            title={`${g.letter} · ${g.time.toFixed(1)}s · ${g.kind} — drag to re-time`}
+            title={ctaBeats ? `${g.letter} · ${g.time.toFixed(1)}s · ${g.kind} · auto-spaced around the CTA beats (test B)` : `${g.letter} · ${g.time.toFixed(1)}s · ${g.kind} — drag to re-time`}
             onPointerDown={(e) => {
+              if (ctaBeats) return;
               const idx = guessIndex(g.letter);
               startMarkerDrag(e, (t) => setGuess(idx, { time: t }));
             }}
             className={cn(
-              "absolute top-1.5 grid h-6 w-6 -translate-x-1/2 cursor-ew-resize place-items-center rounded font-display text-xs",
+              "absolute top-1.5 grid h-6 w-6 -translate-x-1/2 place-items-center rounded font-display text-xs",
+              ctaBeats ? "cursor-pointer" : "cursor-ew-resize",
               g.kind === "correct" ? "bg-primary text-primary-foreground" : "bg-destructive text-white",
               g.frame >= timeline.finalRevealFrame && g.kind === "correct" && "opacity-40",
             )}
@@ -191,6 +195,29 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
             {g.letter}
           </motion.button>
         ))}
+
+        {/* A/B test B: LIKE / SHARE / SUBSCRIBE beats. Click to jump there (their timing is automatic). */}
+        {timeline.ctaPops.map((p) => {
+          const Icon = p.kind === "like" ? ThumbsUp : p.kind === "share" ? Forward : Bell;
+          return (
+            <button
+              key={p.kind}
+              type="button"
+              title={`${p.kind.toUpperCase()} · ${(p.frame / FPS).toFixed(1)}s · CTA pop (automatic) — click to jump here`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                seekTo(p.frame / FPS);
+              }}
+              className={cn(
+                "absolute top-1.5 grid h-6 w-7 -translate-x-1/2 cursor-pointer place-items-center rounded-full ring-2 ring-white/80 [&_svg]:size-3.5",
+                p.kind === "subscribe" ? "bg-[#FF0000] text-white" : "bg-primary text-primary-foreground",
+              )}
+              style={{ left: `${(p.frame / (DURATION_FRAMES - 1)) * 100}%` }}
+            >
+              <Icon strokeWidth={2.75} />
+            </button>
+          );
+        })}
 
         {/* final reveal marker */}
         <button
@@ -207,10 +234,15 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
         <div className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_8px_white]" style={{ left: `${pct}%` }} />
       </div>
       <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
-        <span>Drag the track to scrub · drag a letter to re-time it</span>
+        <span>
+          {ctaBeats ? "Drag the track to scrub · test B spaces the letters around the CTA beats automatically" : "Drag the track to scrub · drag a letter to re-time it"}
+        </span>
         <span className="flex gap-3">
           <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-sm bg-primary" /> correct</span>
           <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-sm bg-destructive" /> wrong</span>
+          {ctaBeats && (
+            <span className="flex items-center gap-1"><i className="inline-block size-2 rounded-full bg-[#FF0000] ring-1 ring-white/80" /> like · share · subscribe</span>
+          )}
         </span>
       </div>
     </div>

@@ -8,7 +8,7 @@ import { resolveTimeline } from "./timeline";
 import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
-import { GuessCallouts } from "./components/GuessCallout";
+import { CtaPops, GuessCallouts } from "./components/GuessCallout";
 import { Pigeons } from "./components/Pigeons";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
@@ -47,6 +47,8 @@ const KEYBOX_SHAKE = KEYBOX_SHAKE_PX_AT_1080 * (DESIGN_WIDTH / 1080);
  *  - Two letters are pre-filled on frame 0 (the hint + the first correct guess); the clue is
  *    sharp under a question line ("ONLY REAL FANS…", until 1.6 s); the clock + "COMMENT BEFORE
  *    0:00" fade in at 1.5 s, the balloons + pawns at 2 s. The keyboard is up from frame 0.
+ *  - A/B test (props.ctaStyle): A = Like / Subscribe balloons on the banner; B = no balloons,
+ *    LIKE / SHARE / SUBSCRIBE are highlighted beats of their own in the letter rhythm (timeline.ctaPops).
  *  - Seamless loop: over the last 0.6 s keys, pawns, timer, answer, banner and
  *    background animate back to their frame-0 state (loop.ts), so the
  *    platform's auto-replay continues straight into the hook.
@@ -75,7 +77,7 @@ function useReelTimeline(props: ReelProps) {
   return useMemo(
     () => resolveTimeline(props, fps),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.word, props.guesses, props.finalRevealAt, props.hintLetter, props.secondLetter, fps],
+    [props.word, props.guesses, props.finalRevealAt, props.hintLetter, props.secondLetter, props.ctaStyle, fps],
   );
 }
 
@@ -147,7 +149,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
-      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} balloons={(props.ctaStyle ?? "balloons") === "balloons"} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       {uiVis > 0.001 && (
         <AbsoluteFill style={uiVis < 1 ? { opacity: uiVis, transform: `translateY(${(80 * (1 - uiVis)).toFixed(1)}px)` } : undefined}>
@@ -164,6 +166,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         shakePx={KEYBOX_SHAKE}
       />
       <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
+      {/* A/B test B: LIKE / SHARE / SUBSCRIBE hero beats between the guesses (empty for A). */}
+      <CtaPops theme={theme} pops={timeline.ctaPops} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
       </AbsoluteFill>
 
       {redFlash > 0.001 && (

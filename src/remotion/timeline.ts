@@ -15,7 +15,7 @@ import {
   STRESS_BELOW_SECONDS,
 } from "./constants";
 import { resolveHook, type HookPlan } from "./hook";
-import type { Guess, ReelProps } from "./types";
+import type { CtaStyle, Guess, ReelProps } from "./types";
 
 export type GuessKind = "correct" | "wrong";
 export type ResolvedGuess = Guess & { frame: number; kind: GuessKind; index: number };
@@ -141,7 +141,67 @@ export type Timeline = {
   hasFinalReveal: boolean;
   /** Frames at which the countdown display changes (for tick SFX + stress pulse). */
   tickFrames: number[];
+  /** A/B test B ("pops"): LIKE / SHARE / SUBSCRIBE beats in the letter rhythm (guesses re-timed around them). Empty for A. */
+  ctaPops: CtaPop[];
 };
+
+export type { CtaStyle };
+export type CtaPopKind = "like" | "share" | "subscribe";
+export type CtaPop = { kind: CtaPopKind; frame: number; durationInFrames: number };
+
+/** Deterministic shuffle (hash-sorted with a per-word salt). */
+const shuffled = <T,>(items: readonly T[], salt: string) =>
+  [...items].map((item, i) => ({ item, k: hash(`${salt}-${i}`) })).sort((a, b) => a.k - b.k).map((x) => x.item);
+
+/** Longest a CTA beat stays on screen (s): longer than a letter (1.15 s), it is the hero beat. */
+const CTA_MAX_SECONDS = 1.6;
+/** A CTA is gone this long (s) before the next beat lands. */
+const CTA_CLEAR = 0.2;
+/** The last beat lands at least this long (s) before the final reveal. */
+const CTA_LAST_BEAT_BEFORE_REVEAL = 3;
+
+/**
+ * A/B test B: LIKE / SHARE / SUBSCRIBE are beats of their own in the letter rhythm. Each is
+ * inserted after a guess (random per word, from the middle of the sequence when it is long
+ * enough; order shuffled per word), then every beat (guesses + CTAs) is spread evenly from the
+ * first guess to 3 s before the final reveal, so every guess still lands. Returns the re-timed
+ * guesses and the CTA beats. Guesses after the reveal are left alone.
+ */
+export function planCtaBeats(word: string, guesses: readonly ResolvedGuess[], finalRevealFrame: number, fps: number): { guesses: ResolvedGuess[]; pops: CtaPop[] } {
+  const live = guesses.filter((g) => g.frame < finalRevealFrame).sort((a, b) => a.frame - b.frame);
+  const late = guesses.filter((g) => g.frame >= finalRevealFrame);
+  const n = live.length;
+  if (!n) return { guesses: [...guesses], pops: [] };
+
+  // Slot s = "after the s-th guess" (1..n). Prefer slots between guesses, away from both ends.
+  const between = Array.from({ length: n - 1 }, (_, i) => i + 1);
+  const preferred = between.length >= 5 ? between.slice(1, -1) : between;
+  const pool = preferred.length >= 3 ? preferred : [...between, n];
+  const slots = new Set(shuffled(pool, `cta-slots-${word}`).slice(0, 3));
+  const kinds = shuffled(["like", "share", "subscribe"] as const, `cta-order-${word}`);
+
+  type Beat = { guess: ResolvedGuess } | { kind: CtaPopKind };
+  const beats: Beat[] = [];
+  let k = 0;
+  live.forEach((g, i) => {
+    beats.push({ guess: g });
+    if (slots.has(i + 1)) beats.push({ kind: kinds[k++] });
+  });
+
+  const first = live[0].frame;
+  const last = Math.max(live[n - 1].frame, finalRevealFrame - Math.round(CTA_LAST_BEAT_BEFORE_REVEAL * fps));
+  const step = beats.length > 1 ? (last - first) / (beats.length - 1) : 0;
+  const duration = Math.max(1, Math.min(Math.round(CTA_MAX_SECONDS * fps), Math.round(step - CTA_CLEAR * fps)));
+
+  const retimed: ResolvedGuess[] = [];
+  const pops: CtaPop[] = [];
+  beats.forEach((b, j) => {
+    const frame = Math.round(first + step * j);
+    if ("guess" in b) retimed.push({ ...b.guess, frame, time: frame / fps });
+    else pops.push({ kind: b.kind, frame, durationInFrames: duration });
+  });
+  return { guesses: [...retimed, ...late], pops };
+}
 
 /** Frames between letters popping in at the final reveal (~0.1 s at any fps). */
 export const finalRevealStagger = (fps: number) => Math.max(1, Math.round(fps / 12));
@@ -178,7 +238,7 @@ export function scheduleWithSecondLetter(input: AutoScheduleInput & { secondLett
 }
 
 export function resolveTimeline(
-  props: Pick<ReelProps, "word" | "guesses" | "finalRevealAt"> & Partial<Pick<ReelProps, "hintLetter" | "secondLetter">>,
+  props: Pick<ReelProps, "word" | "guesses" | "finalRevealAt"> & Partial<Pick<ReelProps, "hintLetter" | "secondLetter" | "ctaStyle">>,
   fps: number,
 ): Timeline {
   const word = normalizeWord(props.word);
@@ -192,7 +252,7 @@ export function resolveTimeline(
 
   // Pre-filled letters are on the board from frame 0, so their guesses are skipped like the hint's.
   const seen = new Set<string>([...(hintLetter ? [hintLetter] : []), ...hook.prefilled]);
-  const guesses: ResolvedGuess[] = props.guesses
+  const resolvedGuesses: ResolvedGuess[] = props.guesses
     .map((g) => ({ letter: g.letter.toUpperCase().slice(0, 1), time: g.time }))
     .filter((g) => /^[A-Z]$/.test(g.letter) && Number.isFinite(g.time))
     .sort((a, b) => a.time - b.time)
@@ -208,6 +268,10 @@ export function resolveTimeline(
       kind: letters.has(g.letter) ? ("correct" as const) : ("wrong" as const),
       index,
     }));
+
+  // A/B test B: LIKE / SHARE / SUBSCRIBE take beats of their own; the guesses are re-spaced around them.
+  const cta = (props.ctaStyle ?? "balloons") === "pops" ? planCtaBeats(word, resolvedGuesses, finalRevealFrame, fps) : { guesses: resolvedGuesses, pops: [] };
+  const guesses = cta.guesses;
 
   const correctKeyFrames = new Map<string, number>();
   const wrongKeyFrames = new Map<string, number>();
@@ -249,6 +313,7 @@ export function resolveTimeline(
     finalRevealFrame,
     hasFinalReveal: finalOrder.size > 0,
     tickFrames,
+    ctaPops: cta.pops,
   };
 }
 

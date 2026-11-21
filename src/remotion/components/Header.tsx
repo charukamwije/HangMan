@@ -176,7 +176,9 @@ export const Header: React.FC<{
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress }) => {
+  /** A/B test A: Like / Subscribe balloon clusters on the banner. Off for test B (CTA pops instead). */
+  balloons: boolean;
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, balloons }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -227,8 +229,8 @@ export const Header: React.FC<{
 
   return (
     <>
-      {/* The banner is up from frame 0; its balloons fade in with the pawns at 2 s. */}
-      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} balloons={stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.uiIn)} />
+      {/* The banner is up from frame 0; its balloons (test A only) fade in with the pawns at 2 s. */}
+      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} balloons={balloons ? stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.uiIn) : 0} />
       {/* The clock fades + scales in at 1.5 s, with "COMMENT BEFORE 0:00" under it. */}
       <StagedClock>
         <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />

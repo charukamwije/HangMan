@@ -4,7 +4,7 @@ import { LOWER_SAFE_CENTER_X as SAFE_CENTER_X } from "../constants";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { ramp } from "../motion";
 import { shadeA, type Theme } from "../themes";
-import type { ResolvedGuess } from "../timeline";
+import type { CtaPop, CtaPopKind, ResolvedGuess } from "../timeline";
 
 const LETTER = 480;
 /** How long each callout stays mounted. */
@@ -40,9 +40,11 @@ export const GuessCallouts: React.FC<{
           <Sequence key={g.letter} name={`callout-${g.kind}-${g.letter}`} from={g.frame} durationInFrames={Math.min(len, finalRevealFrame - g.frame)} layout="none">
             <Callout
               theme={theme}
-              letter={g.letter}
-              correct={g.kind === "correct"}
               centerY={centerY}
+              seed={`${g.letter}-${g.kind === "correct" ? "c" : "w"}`}
+              color={g.kind === "correct" ? theme.accent : theme.wrong}
+              ink={g.kind === "correct" ? theme.onAccent : "#ffffff"}
+              glyph={g.letter}
               verdict={g.kind === "correct" ? PRAISE[guesses.filter((p) => p.kind === "correct" && p.frame < g.frame).length % PRAISE.length] : missWord(g)}
             />
           </Sequence>
@@ -50,6 +52,74 @@ export const GuessCallouts: React.FC<{
     </>
   );
 };
+
+/** YouTube's red, for the SUBSCRIBE splat. */
+const YT_RED = "#FF0000";
+const CTA_WORD: Record<CtaPopKind, string> = { like: "LIKE", share: "SHARE", subscribe: "SUBSCRIBE" };
+
+/**
+ * A/B test B: LIKE / SHARE / SUBSCRIBE pop like a letter (same splat), with an icon in place of
+ * the letter, as beats of their own in the letter rhythm (planCtaBeats, timeline.ts). They are the
+ * hero beats: bigger, a colour flash + pulsing halo, a bigger pill, and they hold on screen
+ * longer than a letter. Like + Share take the theme accent, Subscribe YouTube red.
+ */
+export const CtaPops: React.FC<{ theme: Theme; pops: CtaPop[]; centerY: number }> = ({ theme, pops, centerY }) => {
+  const { fps } = useVideoConfig();
+  return (
+  <>
+    {pops.map((p) => {
+      const red = p.kind === "subscribe";
+      const color = red ? YT_RED : theme.accent;
+      const ink = red ? "#ffffff" : theme.onAccent;
+      return (
+        <Sequence key={p.kind} name={`cta-${p.kind}`} from={p.frame} durationInFrames={p.durationInFrames} layout="none">
+          <Callout
+            theme={theme}
+            centerY={centerY}
+            seed={`cta-${p.kind}`}
+            color={color}
+            ink={ink}
+            glyph={<CtaIcon kind={p.kind} ink={ink} cut={color} />}
+            verdict={CTA_WORD[p.kind]}
+            // a letter splat is gone ~0.8 s in; the CTA holds still (pulsing) for the rest of its beat first
+            hold={Math.max(0, p.durationInFrames - Math.round(HERO_NATURAL_SECONDS * fps))}
+          />
+        </Sequence>
+      );
+    })}
+  </>
+  );
+};
+
+/** Hero callouts: how long (s) the splat takes to land + dissolve without a hold. */
+const HERO_NATURAL_SECONDS = 0.85;
+/** Hero callouts: the splat freezes (and pulses) at this point (s), after it has settled, before it dissolves. */
+const HERO_HOLD_AT = 0.4;
+/** Hero callouts: overall scale vs a letter splat. */
+const HERO_SCALE = 1.22;
+
+/** Thumbs-up / share arrow / bell, drawn in the splat's ink colour (`cut` = details in the paint colour). */
+const CtaIcon: React.FC<{ kind: CtaPopKind; ink: string; cut: string }> = ({ kind, ink, cut }) => (
+  <svg viewBox="0 0 24 24" width={LETTER * 0.78} height={LETTER * 0.78} style={{ overflow: "visible" }}>
+    {kind === "like" && (
+      <path
+        d="M2 10.2h4.2V21H2z M8 21V10.4l4.6-7.1c1.3 0 2.3 1.1 2.1 2.4L14 9.4h6.1c1.3 0 2.2 1.2 1.9 2.4l-1.6 7.3c-.3 1.1-1.2 1.9-2.4 1.9z"
+        fill={ink}
+        strokeLinejoin="round"
+      />
+    )}
+    {kind === "share" && (
+      // YouTube-style share: a curved arrow pointing right
+      <path d="M13.6 3.6v4.9C7.3 9.2 3.3 13.4 2.3 20.4c2.6-3.8 6.3-5.6 11.3-5.6v4.9l8.1-8z" fill={ink} strokeLinejoin="round" />
+    )}
+    {kind === "subscribe" && (
+      <path
+        d="M12 1.8c.9 0 1.6.7 1.6 1.6v.8a6.6 6.6 0 0 1 5 6.4v4.3l2 2.9v1.2H3.4v-1.2l2-2.9v-4.3a6.6 6.6 0 0 1 5-6.4v-.8c0-.9.7-1.6 1.6-1.6z M9.3 20.2h5.4a2.7 2.7 0 0 1-5.4 0z"
+        fill={ink}
+      />
+    )}
+  </svg>
+);
 
 const shade = (hex: string, amt: number) => {
   const n = parseInt(hex.slice(1, 7), 16);
@@ -270,21 +340,47 @@ const PRAISE = ["NICE!", "SMART!", "YES!", "GENIUS!"] as const;
 /** Verdict pill text for misses: shuffled per puzzle, no repeats within a video. */
 const MISS = ["NOPE!", "OOPS!", "UH-OH!", "NOT IT!", "MISSED!", "SO CLOSE!", "YIKES!", "NAH!"] as const;
 
-const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; centerY: number; verdict: string }> = ({ theme, letter, correct, centerY: CALLOUT_Y, verdict }) => {
-  const f = useCurrentFrame();
+/**
+ * One splat callout. `glyph` is the big thing painted on it (a letter, or a CTA icon), `verdict`
+ * the pill under it; `color` is the paint, `ink` what is painted on it. `seed` fixes the splat shape.
+ */
+const Callout: React.FC<{
+  theme: Theme;
+  centerY: number;
+  seed: string;
+  color: string;
+  ink: string;
+  glyph: React.ReactNode;
+  verdict: string;
+  /**
+   * Hero callout (CTA beats): frames to hold the settled splat on screen before it dissolves.
+   * Any value (even 0) turns on the hero look: bigger, colour flash, pulsing halo, bigger pill.
+   */
+  hold?: number;
+}> = ({ theme, centerY: CALLOUT_Y, seed, color, ink, glyph, verdict, hold }) => {
+  const raw = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const hero = hold !== undefined;
+  // Hero: the splat's own clock stops at HERO_HOLD_AT for `hold` frames, then resumes into its dissolve.
+  const holdAt = Math.round(HERO_HOLD_AT * fps);
+  const holding = hero && raw >= holdAt && raw < holdAt + (hold ?? 0);
+  const f = !hero || raw < holdAt ? raw : holding ? holdAt : raw - (hold ?? 0);
   const t = f / fps;
-  const color = correct ? theme.accent : theme.wrong;
 
   // The letter and tag are painted on the splat: they spread in with it, tilt with it, and sag +
   // fade away with it. No entrance or exit of their own.
-  const seed = `${letter}-${correct ? "c" : "w"}`;
   const m = splatMotion(seed, f, fps);
   const spread = 0.15 + 0.85 * m.body;
   const inked = ramp(f, [0, 2], [0, 1]); // paint comes first, the letter shows as it spreads
 
-  const backdrop = ramp(t, [0, 0.05, 0.6, 1.05], [0, 0.85, 0.6, 0]);
-  const ink = correct ? theme.onAccent : "#ffffff";
+  const backdrop = ramp(t, [0, 0.05, 0.6, 1.05], [0, hero ? 0.95 : 0.85, hero ? 0.8 : 0.6, 0]);
+  const isText = typeof glyph === "string";
+  // Hero extras: a full-frame flash of the paint colour on impact, a heartbeat pulse while it holds,
+  // and a glowing halo behind the splat that fades with the dissolve.
+  const flash = hero ? ramp(raw, [0, 2, 10], [0, 0.32, 0]) : 0;
+  const pulse = holding ? 0.5 + 0.5 * Math.sin(((raw - holdAt) / fps) * Math.PI * 2 * 2.2) : 0;
+  const halo = hero ? ramp(raw, [0, 3], [0, 1]) * (1 - ramp(t, [0.45, 0.75], [0, 1])) * (0.7 + 0.3 * pulse) : 0;
+  const heroScale = hero ? HERO_SCALE * (1 + 0.035 * pulse) : 1;
 
   return (
     // zIndex 5: above the pawn row (3 while a pawn falls), its speech bubbles (4) and lit keys (2)
@@ -295,10 +391,26 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
           position: "absolute",
           inset: 0,
           opacity: backdrop,
-          background: `radial-gradient(900px 700px at ${SAFE_CENTER_X}px ${CALLOUT_Y}px, ${shadeA(theme, 0.85)}, transparent 75%)`,
+          background: `radial-gradient(${hero ? "1200px 950px" : "900px 700px"} at ${SAFE_CENTER_X}px ${CALLOUT_Y}px, ${shadeA(theme, 0.85)}, transparent 75%)`,
         }}
       />
-      <div style={{ position: "absolute", left: SAFE_CENTER_X, top: CALLOUT_Y, width: 0, height: 0 }}>
+      {flash > 0.001 && <div style={{ position: "absolute", inset: 0, background: color, opacity: flash, mixBlendMode: "screen" }} />}
+      {halo > 0.001 && (
+        <div
+          style={{
+            position: "absolute",
+            left: SAFE_CENTER_X - 850,
+            top: CALLOUT_Y + SPLAT_LIFT - 850,
+            width: 1700,
+            height: 1700,
+            borderRadius: "50%",
+            opacity: halo,
+            background: `radial-gradient(circle, ${color}cc 0%, ${color}55 38%, transparent 68%)`,
+            mixBlendMode: "screen",
+          }}
+        />
+      )}
+      <div style={{ position: "absolute", left: SAFE_CENTER_X, top: CALLOUT_Y, width: 0, height: 0, transform: heroScale !== 1 ? `scale(${heroScale.toFixed(4)})` : undefined }}>
         {/* one wrapper for the paint and everything painted on it: same lift, tilt, sag, stretch and fade */}
         <div
           style={{
@@ -340,9 +452,13 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
             // Sits on the paint, so it takes the contrasting colour: dark-on-lime / white-on-red.
             color: ink,
             textShadow: `0 12px 0 ${shade(color, -0.5)}, 0 24px 40px rgba(0,0,0,0.45)`,
+            // An icon glyph gets the same extruded shadow as a filter, centred in the letter box.
+            ...(isText
+              ? {}
+              : { height: LETTER, display: "flex", alignItems: "center", justifyContent: "center", filter: `drop-shadow(0 12px 0 ${shade(color, -0.5)}) drop-shadow(0 24px 40px rgba(0,0,0,0.45))` }),
           }}
         >
-          {letter}
+          {glyph}
         </div>
         {/* verdict tag */}
         <div
@@ -357,16 +473,16 @@ const Callout: React.FC<{ theme: Theme; letter: string; correct: boolean; center
         >
           <span
             style={{
-              padding: "14px 44px 12px 56px",
+              padding: hero ? "18px 56px 16px 70px" : "14px 44px 12px 56px",
               borderRadius: 999,
               background: color,
-              border: "4px solid rgba(255,255,255,0.85)",
-              boxShadow: `0 0 50px ${color}, 0 14px 30px ${shadeA(theme, 0.8)}`,
+              border: hero ? "6px solid #ffffff" : "4px solid rgba(255,255,255,0.85)",
+              boxShadow: hero ? `0 0 ${70 + 40 * pulse}px ${color}, 0 0 0 6px ${color}66, 0 14px 30px ${shadeA(theme, 0.8)}` : `0 0 50px ${color}, 0 14px 30px ${shadeA(theme, 0.8)}`,
               fontFamily: BODY_FONT,
               fontWeight: 900,
-              fontSize: 72,
+              fontSize: hero ? 88 : 72,
               letterSpacing: "0.3em",
-              color: correct ? theme.onAccent : "#ffffff",
+              color: ink,
             }}
           >
             {verdict}
