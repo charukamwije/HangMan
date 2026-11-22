@@ -27,6 +27,8 @@ export const FPS = 30;
 /** Full length of the letter pattern (guesses, clock, reveal). The video may be cut shorter (durationSeconds). */
 export const DURATION_SECONDS = 30;
 export const DURATION_FRAMES = FPS * DURATION_SECONDS; // 900
+/** Pictures uploaded in the studio (test B's frame-1 background) live here under public/. */
+export const UPLOADS_DIR = "backgrounds/uploads/";
 /** Shortest video length (s) the studio offers. */
 export const MIN_DURATION_SECONDS = 10;
 /** Video length in whole seconds: durationSeconds clamped to 10–30, default the full 30. */

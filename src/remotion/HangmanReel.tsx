@@ -202,6 +202,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
           hintLetter={timeline.hintLetter}
           secondLetter={timeline.hook.prefilled.find((l) => l !== timeline.hintLetter) ?? ""}
           category={props.category ?? ""}
+          backgroundImage={props.coldOpenBackground ?? ""}
           holdSeconds={giantHold}
         />
       )}

@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Img, staticFile, useVideoConfig } from "remotion";
-import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_WIDTH } from "./constants";
+import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_WIDTH, UPLOADS_DIR } from "./constants";
 import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { getTheme, shadeA, type ThemeId } from "./themes";
 import { normalizeWord, resolveHintLetter } from "./timeline";
@@ -74,6 +74,20 @@ const FullBleedBackground: React.FC<{ image: string }> = ({ image }) => (
     {/* soft blossom-pink glow behind the headline, and a faint night-sky blue at the band's edges */}
     <AbsoluteFill style={{ background: "radial-gradient(ellipse 52% 20% at 50% 50%, rgba(255,156,200,0.18), transparent 75%)" }} />
     <AbsoluteFill style={{ background: "radial-gradient(ellipse 90% 30% at 50% 46%, transparent 55%, rgba(40,46,110,0.25) 100%)" }} />
+  </AbsoluteFill>
+);
+
+
+/**
+ * An uploaded picture, full-bleed: cover-cropped, dimmed, with a dark vignette and a darker band
+ * behind the headline + board so the text stays readable on any photo.
+ */
+const CoverBackground: React.FC<{ image: string }> = ({ image }) => (
+  <AbsoluteFill style={{ background: "#07070c" }}>
+    <Img src={staticFile(image)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+    <AbsoluteFill style={{ background: "rgba(0,0,0,0.38)" }} />
+    <AbsoluteFill style={{ background: "radial-gradient(ellipse 85% 60% at 50% 48%, transparent 25%, rgba(0,0,0,0.75) 100%)" }} />
+    <AbsoluteFill style={{ background: "linear-gradient(180deg, transparent 18%, rgba(0,0,0,0.45) 32%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.45) 68%, transparent 82%)" }} />
   </AbsoluteFill>
 );
 
@@ -175,7 +189,13 @@ const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
       {layer !== "content" &&
         (backgroundImage ? (
         <>
-          {backgroundImage === CHARACTERS_PICTURE ? <PanelBackground image={backgroundImage} /> : <FullBleedBackground image={backgroundImage} />}
+          {backgroundImage === CHARACTERS_PICTURE ? (
+            <PanelBackground image={backgroundImage} />
+          ) : backgroundImage.startsWith(UPLOADS_DIR) ? (
+            <CoverBackground image={backgroundImage} />
+          ) : (
+            <FullBleedBackground image={backgroundImage} />
+          )}
         </>
       ) : (
         <>

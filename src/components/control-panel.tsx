@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Loader2, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type, Upload, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +62,7 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
             <Slider min={0.1} max={3} step={0.05} value={s.giantHookSeconds ?? 0.25} onValueChange={(v) => s.update({ giantHookSeconds: v })} />
           </Field>
         )}
+        {s.openingStyle === "giant" && <ColdOpenBackgroundField />}
         <p className="text-xs text-muted-foreground">
           {s.openingStyle === "giant"
             ? "Frame 1 is the plain thumbnail (category, giant headline, board, “N LETTERS · 30 SECONDS”); it fades into the reel after the time above, so the Short opens exactly like its thumbnail. Renders are named …-B."
@@ -335,6 +336,60 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <Label>{label}</Label>
       {children}
     </div>
+  );
+}
+
+/** Test B: upload a picture for the frame-1 card's background (saved under public/backgrounds/uploads/). */
+function ColdOpenBackgroundField() {
+  const image = useReelStore((s) => s.coldOpenBackground);
+  const update = useReelStore((s) => s.update);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload-background", { method: "POST", body: form });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Upload failed");
+      update({ coldOpenBackground: body.path });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Field label="Thumbnail frame background">
+      <div className="flex items-center gap-3">
+        <div className="relative grid h-24 w-[54px] shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-muted/60 text-[10px] text-muted-foreground">
+          {image ? <img src={`/${image}`} alt="" className="absolute inset-0 h-full w-full object-cover" /> : "Shelves"}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" disabled={busy} asChild>
+              <label className="cursor-pointer">
+                {busy ? <Loader2 className="animate-spin" /> : <Upload />}
+                {busy ? "Uploading…" : image ? "Replace" : "Upload picture"}
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} />
+              </label>
+            </Button>
+            {image && (
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => update({ coldOpenBackground: "" })}>
+                <X /> Remove
+              </Button>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground">PNG, JPG or WebP, up to 15 MB. Shown full-bleed and dimmed behind the card; kept for every video.</span>
+          {error && <span className="text-xs text-destructive">{error}</span>}
+        </div>
+      </div>
+    </Field>
   );
 }
 

@@ -38,6 +38,8 @@ export type ReelState = {
   openingStyle: OpeningStyle;
   /** Test B: seconds the giant hook stays up before it flies into the banner. */
   giantHookSeconds: number;
+  /** Test B: uploaded picture behind the frame-1 card ("" = the shelves). Kept while you step through videos. */
+  coldOpenBackground: string;
   /** Video length (s, 10–30): the video is cut there and loops; the pattern keeps its 30 s timing. */
   durationSeconds: number;
   /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
@@ -86,6 +88,7 @@ const INITIAL: ReelState = {
   durationSeconds: 30,
   openingStyle: "standard",
   giantHookSeconds: 0.25,
+  coldOpenBackground: "",
   libraryId: DEFAULT_LIBRARY_ID,
   videoNumber: null,
   backgroundImage: DEFAULT_BACKGROUND_IMAGE,
@@ -201,7 +204,7 @@ export const useReelStore = create<ReelState & Actions>()(
     }),
     {
       name: "hangman-reel-studio",
-      version: 9,
+      version: 10,
       // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
       // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
@@ -254,6 +257,7 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   durationSeconds: s.durationSeconds ?? 30,
   openingStyle: s.openingStyle ?? "standard",
   giantHookSeconds: s.giantHookSeconds ?? 0.25,
+  ...(s.coldOpenBackground ? { coldOpenBackground: s.coldOpenBackground } : {}),
   category: s.videoNumber ? (getLibrary(s.libraryId).entries.find((v) => v.n === s.videoNumber)?.category ?? "") : "",
   // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });

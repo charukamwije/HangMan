@@ -41,6 +41,8 @@ export type ReelProps = {
   openingStyle?: OpeningStyle;
   /** Test B: library category tag shown on the frame-1 card (e.g. "K-DRAMA PLACE"). Empty = none. */
   category?: string;
+  /** Test B: picture behind the frame-1 card (uploaded, under public/backgrounds/uploads/). Empty = the shelves. */
+  coldOpenBackground?: string;
   /** Test B: how long (s) the frame-1 card stays up before it fades into the reel. Default 0.25. */
   giantHookSeconds?: number;
   /**

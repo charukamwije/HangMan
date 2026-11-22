@@ -6,3 +6,5 @@ renders/*.png
 .remotion-bundle
 next-env.d.ts
 *.tsbuildinfo
+# pictures uploaded in the studio (test B frame-1 background)
+public/backgrounds/uploads/

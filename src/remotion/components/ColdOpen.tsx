@@ -63,8 +63,10 @@ export const ColdOpen: React.FC<{
   hintLetter: string;
   secondLetter: string;
   category: string;
+  /** Picture behind the card (uploaded in the studio); "" = the shelves, like the plain thumbnail. */
+  backgroundImage: string;
   holdSeconds: number;
-}> = ({ themeId, hookText, word, hintLetter, secondLetter, category, holdSeconds }) => {
+}> = ({ themeId, hookText, word, hintLetter, secondLetter, category, backgroundImage, holdSeconds }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const bg = coldOpenCover(frame, fps, durationInFrames, holdSeconds);
@@ -80,7 +82,7 @@ export const ColdOpen: React.FC<{
   const textScale = leaving ? 1 + 0.45 * zoom : 1.2 - 0.2 * drop;
   const textBlur = leaving ? 14 * zoom : 10 * (1 - drop);
 
-  const card = { hookText, word, hintLetter, secondLetter, themeId, category };
+  const card = { hookText, word, hintLetter, secondLetter, themeId, category, backgroundImage: backgroundImage || undefined };
   const layer: React.CSSProperties = { position: "absolute", left: 0, top: 0, width: DESIGN_WIDTH, height: DESIGN_HEIGHT };
   return (
     // zIndex 10: above the question plate (zIndex 5), which escapes the camera layer whenever the camera is still.
