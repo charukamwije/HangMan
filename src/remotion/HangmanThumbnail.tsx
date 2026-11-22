@@ -139,6 +139,9 @@ export const HangmanThumbnail: React.FC<ThumbnailProps> = (props) => {
   );
 };
 
+/** The thumbnail layout on the 2160×3840 design canvas. Also test B's frame 1 in the reel (ColdOpen), without a picture. */
+export const ThumbnailCard: React.FC<ThumbnailProps> = (props) => <ThumbnailStage {...props} />;
+
 const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hintLetter, secondLetter = "", themeId, category, backgroundImage }) => {
   const theme = getTheme(themeId);
   const word = normalizeWord(rawWord) || "GUESS";

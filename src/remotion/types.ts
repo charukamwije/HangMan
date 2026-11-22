@@ -34,12 +34,14 @@ export type ReelProps = {
   /** Preview-only overlay of platform UI safe zones. Forced off for renders. */
   showSafeZones: boolean;
   /**
-   * A/B test, frame 1: "standard" (A, default) = the current opening; "giant" (B) = a giant
-   * spelling-challenge title card (the banner text + "N LETTERS · 29 SECONDS") over a dimmed stage
-   * that flies up into the banner after `giantHookSeconds`.
+   * A/B test, frame 1: "standard" (A, default) = the current opening; "giant" (B) = the plain
+   * thumbnail as frame 1 (category tag, giant headline, board, "N LETTERS · 30 SECONDS"), which
+   * fades into the reel after `giantHookSeconds`.
    */
   openingStyle?: OpeningStyle;
-  /** Test B: how long (s) the giant hook stays up before it flies into the banner. Default 0.25. */
+  /** Test B: library category tag shown on the frame-1 card (e.g. "K-DRAMA PLACE"). Empty = none. */
+  category?: string;
+  /** Test B: how long (s) the frame-1 card stays up before it fades into the reel. Default 0.25. */
   giantHookSeconds?: number;
   /**
    * Video length in whole seconds (10–30, default 30). The video is cut there and loops back to

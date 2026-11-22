@@ -21,7 +21,7 @@ const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
  * in the Remotion Player). Only the two beds below use (memoised) envelopes; every
  * cue uses a static number.
  */
-export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings; coldOpen?: { stampFrame: number; exitFrame: number } }> = ({ timeline, audio, coldOpen }) => {
+export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings; coldOpen?: { exitFrame: number } }> = ({ timeline, audio, coldOpen }) => {
   const { fps, durationInFrames } = useVideoConfig();
   const [xfadeFrom, xfadeTo] = timeline.hook.musicInFrames;
   const musicFrames = durationInFrames - xfadeFrom;

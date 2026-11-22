@@ -30,8 +30,8 @@ export function buildAudioCues(
   audio: ReelAudioSettings,
   fps: number,
   durationFrames: number,
-  /** A/B test B: frame the giant hook's stakes stamp lands (a thud), and when the card flies up (a whoosh). */
-  coldOpen?: { stampFrame: number; exitFrame: number },
+  /** A/B test B: when the frame-1 card starts to clear (a whoosh). */
+  coldOpen?: { exitFrame: number },
 ): AudioCue[] {
   if (!audio.enabled) return [];
   const { sfx } = audio;
@@ -44,9 +44,8 @@ export function buildAudioCues(
   // 1a'. Pattern interrupt on the first clock tick (1 s): the same pop under the camera kick + flash + banner re-slam.
   cues.push({ id: "hook-pulse", src: AUDIO.slapPop, from: timeline.hook.pulseFrame, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.7) });
 
-  // 1a''. A/B test B: the giant hook's stakes stamp lands with a deep thud; a whoosh as the card flies up.
+  // 1a''. A/B test B: a whoosh as the frame-1 card clears into the reel.
   if (coldOpen) {
-    cues.push({ id: "cold-stamp", src: AUDIO.thud, from: coldOpen.stampFrame, durationInFrames: seconds(AUDIO_SECONDS.thud, fps), volume: clamp01(sfx * 0.9) });
     cues.push({ id: "cold-exit", src: AUDIO.whoosh, from: coldOpen.exitFrame, durationInFrames: seconds(AUDIO_SECONDS.whoosh, fps), volume: clamp01(sfx * 0.45) });
   }
 

@@ -28,6 +28,7 @@ export const reelPropsSchema = z.object({
   }),
   showSafeZones: z.boolean(),
   openingStyle: z.enum(["standard", "giant"]).optional(),
+  category: z.string().max(60).optional(),
   giantHookSeconds: z.number().min(0.05).max(5).optional(),
   durationSeconds: z.number().int().min(10).max(DURATION_SECONDS).optional(),
   backgroundImage: z.string().regex(/^[A-Za-z0-9_\-/.]*$/).refine((p) => !p.includes(".."), "Invalid path").optional(),

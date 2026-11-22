@@ -54,17 +54,17 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
         <Field label="Frame 1 hook">
           <NativeSelect value={s.openingStyle ?? "standard"} onChange={(e) => s.update({ openingStyle: e.target.value as OpeningStyle })}>
             <option value="standard">A · Current opening</option>
-            <option value="giant">B · Giant spelling-challenge hook</option>
+            <option value="giant">B · Giant spelling hook (thumbnail frame)</option>
           </NativeSelect>
         </Field>
         {s.openingStyle === "giant" && (
-          <Field label={`Giant hook on screen · ${(s.giantHookSeconds ?? 0.25).toFixed(2)}s`}>
+          <Field label={`Thumbnail frame on screen · ${(s.giantHookSeconds ?? 0.25).toFixed(2)}s`}>
             <Slider min={0.1} max={3} step={0.05} value={s.giantHookSeconds ?? 0.25} onValueChange={(v) => s.update({ giantHookSeconds: v })} />
           </Field>
         )}
         <p className="text-xs text-muted-foreground">
           {s.openingStyle === "giant"
-            ? "Frame 1: the banner text giant over a dimmed stage, with “N LETTERS · 29 SECONDS” under it; it flies up into the banner after the time above. Renders are named …-B."
+            ? "Frame 1 is the plain thumbnail (category, giant headline, board, “N LETTERS · 30 SECONDS”); it fades into the reel after the time above, so the Short opens exactly like its thumbnail. Renders are named …-B."
             : "The current opening: banner, question line and scrambling board from frame 0."}{" "}
           Metric: viewed vs swiped. Target ≥55% → keep B as the new standard.
         </p>

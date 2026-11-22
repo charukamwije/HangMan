@@ -138,7 +138,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const tension = frame < rattleTo ? Easing.in(Easing.quad)(ramp(frame, [rattleFrom, rattleTo], [0, 1])) : ramp(frame, [rattleTo, hookEnd], [1, 0]);
   const camScale = 1 + 0.035 * punch + 0.08 * slap + 0.04 * kick + 0.025 * tension + overscan;
   const camera = camX || camY || punch || slap || kick || tension ?`translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
-  // A/B test B: giant spelling-challenge hook on frame 1; the banner sits under it until it flies up.
+  // A/B test B: frame 1 is the plain thumbnail card; the banner sits under it until it fades out.
   const giant = props.openingStyle === "giant";
   const giantHold = props.giantHookSeconds ?? DEFAULT_GIANT_HOOK_SECONDS;
   const coldCover = giant ? coldOpenCover(frame, fps, durationInFrames, giantHold) : 0;
@@ -194,7 +194,17 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         />
       )}
 
-      {giant && <ColdOpen theme={theme} hookText={props.hookText} word={timeline.word} spotlightY={WORD_CENTER_Y} holdSeconds={giantHold} />}
+      {giant && (
+        <ColdOpen
+          themeId={props.themeId}
+          hookText={props.hookText}
+          word={timeline.word}
+          hintLetter={timeline.hintLetter}
+          secondLetter={timeline.hook.prefilled.find((l) => l !== timeline.hintLetter) ?? ""}
+          category={props.category ?? ""}
+          holdSeconds={giantHold}
+        />
+      )}
 
       {props.showSafeZones && <SafeZones />}
     </AbsoluteFill>
@@ -208,8 +218,7 @@ const AudioTrackForProps: React.FC<ReelProps> = (props) => {
   const hold = props.giantHookSeconds ?? DEFAULT_GIANT_HOOK_SECONDS;
   const coldOpen = useMemo(() => {
     if (!giant) return undefined;
-    const f = coldOpenFrames(hold, fps);
-    return { stampFrame: f.stamp, exitFrame: f.exit[0] };
+    return { exitFrame: coldOpenFrames(hold, fps).exit[0] };
   }, [giant, hold, fps]);
   return <AudioTrack timeline={timeline} audio={props.audio} coldOpen={coldOpen} />;
 };

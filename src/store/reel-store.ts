@@ -254,6 +254,7 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   durationSeconds: s.durationSeconds ?? 30,
   openingStyle: s.openingStyle ?? "standard",
   giantHookSeconds: s.giantHookSeconds ?? 0.25,
+  category: s.videoNumber ? (getLibrary(s.libraryId).entries.find((v) => v.n === s.videoNumber)?.category ?? "") : "",
   // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });
 
