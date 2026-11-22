@@ -43,10 +43,8 @@ export function ExportPanel({ inputProps }: { inputProps: ReelProps }) {
     poll(body.id);
   };
 
-  /** "video-007-TYRION" while a library video is loaded, so renders can be matched to posts. */
-  const videoFileName = () => {
-    return videoFileBase(useReelStore.getState());
-  };
+  /** "video-007-TYRION" while a library video is loaded, so renders can be matched to posts (+ "-B" / "-20s"). */
+  const videoFileName = () => videoFileBase(useReelStore.getState(), "hangman");
 
   const saveJson = (data: unknown, name: string) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });

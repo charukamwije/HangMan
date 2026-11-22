@@ -46,7 +46,7 @@ export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
 
   /** Renders one version on the server and downloads it: "…-thumbnail.png" / "…-thumbnail-plain.png". */
   const fetchAndSave = async (picture: boolean) => {
-    const base = videoFileBase(useReelStore.getState()) || "hangman";
+    const base = videoFileBase({ ...useReelStore.getState(), durationSeconds: 30, openingStyle: "standard" }) || "hangman";
     const fileName = `${base}-thumbnail${picture ? "" : "-plain"}`;
     const body = { props: { ...props, backgroundImage: picture ? thumbnailPictureFor(props.themeId) : "" }, fileName };
     const res = await fetch("/api/thumbnail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

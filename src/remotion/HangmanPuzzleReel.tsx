@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useVideoConfig, type CalculateMetadataFunction } from "remotion";
 import { HangmanReel } from "./HangmanReel";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "./puzzle";
+import { FPS, videoDurationFrames } from "./constants";
 
 /**
  * Composition that takes raw HangmanPuzzleData as input props, so a puzzle
@@ -17,6 +18,6 @@ export const HangmanPuzzleReel: React.FC<HangmanPuzzleData> = (puzzle) => {
 
 /** Validate before any frame renders, so a bad puzzle fails fast in selectComposition(). */
 export const validatePuzzleMetadata: CalculateMetadataFunction<HangmanPuzzleData> = ({ props }) => {
-  parsePuzzle(props);
-  return {};
+  const puzzle = parsePuzzle(props);
+  return { durationInFrames: videoDurationFrames(puzzle, FPS) };
 };

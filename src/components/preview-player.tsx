@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
-import { DURATION_FRAMES, FPS, HEIGHT, WIDTH } from "@/remotion/constants";
+import { FPS, HEIGHT, WIDTH, videoDurationFrames } from "@/remotion/constants";
 import { HangmanReel } from "@/remotion/HangmanReel";
 import type { ReelProps } from "@/remotion/types";
 
@@ -16,7 +16,7 @@ export const PreviewPlayer = forwardRef<PlayerRef, { inputProps: ReelProps }>(fu
       ref={ref}
       component={HangmanReel}
       inputProps={inputProps}
-      durationInFrames={DURATION_FRAMES}
+      durationInFrames={videoDurationFrames(inputProps, FPS)}
       fps={FPS}
       compositionWidth={WIDTH}
       compositionHeight={HEIGHT}

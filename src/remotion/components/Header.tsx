@@ -176,7 +176,9 @@ export const Header: React.FC<{
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress }) => {
+  /** A/B test B: the banner hides under the giant hook card (0) and fades in as the card flies up. Default 1. */
+  bannerOpacity?: number;
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, bannerOpacity = 1 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -228,7 +230,14 @@ export const Header: React.FC<{
   return (
     <>
       {/* The banner is up from frame 0. */}
-      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
+      {bannerOpacity > 0.001 &&
+        (bannerOpacity < 1 ? (
+          <div style={{ opacity: bannerOpacity }}>
+            <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
+          </div>
+        ) : (
+          <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
+        ))}
       {/* The clock fades + scales in at 1.5 s, with "COMMENT BEFORE 0:00" under it. */}
       <StagedClock>
         <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />

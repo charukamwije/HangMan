@@ -2,7 +2,7 @@ import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 import { countdownAt, formatClock } from "../timeline";
 import { framesSinceLast, ramp, type Stress } from "../motion";
-import { loopReset } from "../loop";
+import { loopReset, loopResetStart } from "../loop";
 import { COUNTDOWN_FROM } from "../constants";
 import type { Theme } from "../themes";
 import { BODY_FONT } from "../fonts";
@@ -20,9 +20,11 @@ export const CountdownTimer: React.FC<{ theme: Theme; tickFrames: number[]; stre
   const S = CLOCK;
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  // Loop reset: 00:00 counts smoothly back up to 00:29 (each new digit pops), so the replay starts on 00:29.
+  // Loop reset: the clock counts smoothly back up from where the video ends (00:00 for the full 30 s,
+  // e.g. 00:10 for a 20 s cut) to 00:29 (each new digit pops), so the replay starts on 00:29.
   const reset = loopReset(frame, durationInFrames, fps, 0.2, 0.95);
-  const remaining = reset > 0 ? Math.round(COUNTDOWN_FROM * reset) : countdownAt(frame, fps);
+  const atCut = countdownAt(loopResetStart(durationInFrames, fps), fps);
+  const remaining = reset > 0 ? Math.round(atCut + (COUNTDOWN_FROM - atCut) * reset) : countdownAt(frame, fps);
   const text = formatClock(remaining);
   const rollPop = reset > 0 && reset < 1 ? 0.06 : 0;
 

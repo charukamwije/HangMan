@@ -5,7 +5,7 @@ import type { PlayerRef } from "@remotion/player";
 import { Camera, Loader2, Pause, Play, SkipBack } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { DURATION_FRAMES, DURATION_SECONDS, FPS } from "@/remotion/constants";
+import { DURATION_FRAMES, DURATION_SECONDS, FPS, videoDurationFrames, videoDurationSeconds } from "@/remotion/constants";
 import { countdownAt, formatClock, resolveTimeline } from "@/remotion/timeline";
 import type { ReelProps } from "@/remotion/types";
 import { useReelStore, videoFileBase } from "@/store/reel-store";
@@ -22,6 +22,10 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
   const setGuess = useReelStore((s) => s.setGuess);
   const update = useReelStore((s) => s.update);
   const timeline = useMemo(() => resolveTimeline(inputProps, FPS), [inputProps]);
+  /** The video may be cut short of the 30 s pattern: it ends (and loops) here. */
+  const videoSeconds = videoDurationSeconds(inputProps);
+  const videoFrames = videoDurationFrames(inputProps, FPS);
+  const cut = videoSeconds < DURATION_SECONDS;
   const [shooting, setShooting] = useState(false);
   const [shotError, setShotError] = useState<string | null>(null);
 
@@ -30,7 +34,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
     const p = playerRef.current;
     p?.pause();
     const f = p?.getCurrentFrame() ?? frame;
-    const base = videoFileBase(useReelStore.getState()) || "hangman";
+    const base = videoFileBase(useReelStore.getState(), "hangman");
     const fileName = `${base}-f${String(f).padStart(3, "0")}`;
     setShooting(true);
     setShotError(null);
@@ -103,11 +107,11 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
 
   const seekTo = useCallback(
     (seconds: number) => {
-      const f = Math.min(DURATION_FRAMES - 1, Math.round(seconds * FPS));
+      const f = Math.max(0, Math.min(videoFrames - 1, Math.round(seconds * FPS)));
       playerRef.current?.seekTo(f);
       setFrame(f);
     },
-    [playerRef],
+    [playerRef, videoFrames],
   );
 
   const startScrub = (e: React.PointerEvent) => {
@@ -151,7 +155,7 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
           {playing ? <Pause /> : <Play />}
         </Button>
         <div className="ml-1 font-mono text-xs tabular-nums text-muted-foreground">
-          {(frame / FPS).toFixed(2)}s / {DURATION_SECONDS}.00s · frame {frame}
+          {(frame / FPS).toFixed(2)}s / {videoSeconds}.00s · frame {frame}
         </div>
         <Button size="sm" variant="outline" className="ml-auto" disabled={shooting} onClick={screenshot} title="Download this frame as a 1080×1920 PNG">
           {shooting ? <Loader2 className="animate-spin" /> : <Camera />}
@@ -169,7 +173,18 @@ export function TimelineScrubber({ playerRef, inputProps }: { playerRef: RefObje
           <div key={s} className={cn("absolute bottom-0 w-px bg-white/10", s % 5 === 0 ? "h-3" : "h-1.5")} style={{ left: `${(s / DURATION_SECONDS) * 100}%` }} />
         ))}
 
-        {/* guess keyframes (A/B test B re-spaces them around the CTA beats, so they can't be dragged there) */}
+        {/* cut: the video ends (and loops back to 0) here; the pattern after it is not in the video */}
+        {cut && (
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 rounded-r-md bg-black/45 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgba(255,255,255,0.05)_6px_12px)]"
+            style={{ left: `${(videoFrames / (DURATION_FRAMES - 1)) * 100}%` }}
+          >
+            <div className="absolute inset-y-0 left-0 w-0.5 bg-sky-400 shadow-[0_0_6px_#38bdf8]" />
+            <span className="absolute bottom-0.5 left-1.5 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-sky-300">↺ loop {videoSeconds}s</span>
+          </div>
+        )}
+
+        {/* guess keyframes */}
         {timeline.guesses.map((g) => (
           <motion.button
             key={g.letter}

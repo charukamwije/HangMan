@@ -4,7 +4,7 @@
  * <AudioTrack> component only maps this list to <Sequence>/<Audio>, so what
  * you hear in the Player is exactly what `npx remotion render` muxes.
  */
-import { AUDIO, AUDIO_SECONDS, COUNTDOWN_FROM, DURATION_SECONDS, FINAL_TICK_SECONDS, LOOP_RESET_SECONDS, SWELL_LEAD_SECONDS } from "./constants";
+import { AUDIO, AUDIO_SECONDS, COUNTDOWN_FROM, FINAL_TICK_SECONDS, LOOP_RESET_SECONDS, SWELL_LEAD_SECONDS } from "./constants";
 
 export const LOOP_REWIND_CUE_ID = "loop-rewind";
 import { stressStartFrame, type Timeline } from "./timeline";
@@ -25,7 +25,14 @@ export type AudioCue = {
 const seconds = (s: number, fps: number) => Math.max(1, Math.ceil(s * fps));
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
-export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps: number): AudioCue[] {
+export function buildAudioCues(
+  timeline: Timeline,
+  audio: ReelAudioSettings,
+  fps: number,
+  durationFrames: number,
+  /** A/B test B: frame the giant hook's stakes stamp lands (a thud), and when the card flies up (a whoosh). */
+  coldOpen?: { stampFrame: number; exitFrame: number },
+): AudioCue[] {
   if (!audio.enabled) return [];
   const { sfx } = audio;
   const cues: AudioCue[] = [];
@@ -36,6 +43,12 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   cues.push({ id: "slap-pop", src: AUDIO.slapPop, from: 0, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx) });
   // 1a'. Pattern interrupt on the first clock tick (1 s): the same pop under the camera kick + flash + banner re-slam.
   cues.push({ id: "hook-pulse", src: AUDIO.slapPop, from: timeline.hook.pulseFrame, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.7) });
+
+  // 1a''. A/B test B: the giant hook's stakes stamp lands with a deep thud; a whoosh as the card flies up.
+  if (coldOpen) {
+    cues.push({ id: "cold-stamp", src: AUDIO.thud, from: coldOpen.stampFrame, durationInFrames: seconds(AUDIO_SECONDS.thud, fps), volume: clamp01(sfx * 0.9) });
+    cues.push({ id: "cold-exit", src: AUDIO.whoosh, from: coldOpen.exitFrame, durationInFrames: seconds(AUDIO_SECONDS.whoosh, fps), volume: clamp01(sfx * 0.45) });
+  }
 
   // 1b. Machine-gun hook (decode 0–30): a sharp click on every decoy pop, click + thud on its ✖,
   //     then a metallic lock on the frame the last hint slot snaps in (4).
@@ -116,7 +129,6 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
   // 6. Loop point: the end of the song rewinds over the last LOOP_RESET_SECONDS and hard-stops
   //    right as frame 0's gavel hits on the replay (everything else ducks under it, see AudioTrack).
   const loopLen = Math.round(LOOP_RESET_SECONDS * fps);
-  const durationFrames = Math.round(DURATION_SECONDS * fps);
   cues.push({ id: LOOP_REWIND_CUE_ID, src: AUDIO.loopRewind, from: durationFrames - loopLen, durationInFrames: loopLen, volume: clamp01(Math.max(audio.music, 0.2) * 2.2) });
 
   return cues.sort((a, b) => a.from - b.from || a.id.localeCompare(b.id));

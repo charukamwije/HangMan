@@ -96,6 +96,9 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
     themeId: puzzle.themeId ?? DEFAULT_REEL_PROPS.themeId,
     audio: { ...DEFAULT_REEL_PROPS.audio, ...puzzle.audio },
     showSafeZones: false,
+    ...(puzzle.durationSeconds ? { durationSeconds: puzzle.durationSeconds } : {}),
+    ...(puzzle.openingStyle ? { openingStyle: puzzle.openingStyle } : {}),
+    ...(puzzle.giantHookSeconds !== undefined ? { giantHookSeconds: puzzle.giantHookSeconds } : {}),
   };
 
   // ---- 3. Resolve with the same engine the composition renders with --------

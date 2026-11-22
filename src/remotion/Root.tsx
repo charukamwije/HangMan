@@ -1,5 +1,5 @@
 import React from "react";
-import { Composition } from "remotion";
+import { Composition, type CalculateMetadataFunction } from "remotion";
 import {
   COMPOSITION_ID,
   COMPOSITION_ID_1080,
@@ -9,9 +9,11 @@ import {
   PUZZLE_COMPOSITION_ID_1080,
   RESOLUTIONS,
   THUMBNAIL_COMPOSITION_ID,
+  videoDurationFrames,
 } from "./constants";
 import { DEFAULT_REEL_PROPS } from "./defaults";
 import { HangmanReel } from "./HangmanReel";
+import type { ReelProps } from "./types";
 import { HangmanPuzzleReel, validatePuzzleMetadata } from "./HangmanPuzzleReel";
 import { EXAMPLE_PUZZLE } from "./puzzle";
 import { HangmanThumbnail, type ThumbnailProps } from "./HangmanThumbnail";
@@ -26,6 +28,9 @@ const DEFAULT_THUMBNAIL_PROPS: ThumbnailProps = {
 
 const common = { durationInFrames: DURATION_FRAMES, fps: FPS } as const;
 
+/** The reel is cut at props.durationSeconds (default 30 s) and loops from there. */
+const reelMetadata: CalculateMetadataFunction<ReelProps> = ({ props }) => ({ durationInFrames: videoDurationFrames(props, FPS) });
+
 /**
  * HangmanReel*   take resolved ReelProps (studio / API).
  * HangmanPuzzle* take raw HangmanPuzzleData (batch JSON files).
@@ -33,8 +38,8 @@ const common = { durationInFrames: DURATION_FRAMES, fps: FPS } as const;
  */
 export const RemotionRoot: React.FC = () => (
   <>
-    <Composition id={COMPOSITION_ID} component={HangmanReel} {...common} {...RESOLUTIONS["4k"]} defaultProps={DEFAULT_REEL_PROPS} />
-    <Composition id={COMPOSITION_ID_1080} component={HangmanReel} {...common} {...RESOLUTIONS["1080p"]} defaultProps={DEFAULT_REEL_PROPS} />
+    <Composition id={COMPOSITION_ID} component={HangmanReel} {...common} {...RESOLUTIONS["4k"]} defaultProps={DEFAULT_REEL_PROPS} calculateMetadata={reelMetadata} />
+    <Composition id={COMPOSITION_ID_1080} component={HangmanReel} {...common} {...RESOLUTIONS["1080p"]} defaultProps={DEFAULT_REEL_PROPS} calculateMetadata={reelMetadata} />
     <Composition
       id={PUZZLE_COMPOSITION_ID}
       component={HangmanPuzzleReel}

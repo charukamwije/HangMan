@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "@/remotion/defaults";
 import type { ThemeId } from "@/remotion/themes";
 import { clampTime, normalizeWord, parseLetters, scheduleWithSecondLetter } from "@/remotion/timeline";
-import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
+import type { Guess, OpeningStyle, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
 import { DEFAULT_LIBRARY_ID, getLibrary, libraryFileBase, type LibraryId } from "@/data/library";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
@@ -34,6 +34,12 @@ export type ReelState = {
   autoTiming: boolean;
   audio: ReelAudioSettings;
   showSafeZones: boolean;
+  /** A/B test, frame 1: "standard" (A) or "giant" (B: giant spelling-challenge hook). */
+  openingStyle: OpeningStyle;
+  /** Test B: seconds the giant hook stays up before it flies into the banner. */
+  giantHookSeconds: number;
+  /** Video length (s, 10–30): the video is cut there and loops; the pattern keeps its 30 s timing. */
+  durationSeconds: number;
   /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
   backgroundImage: string;
   /** Which video library the Video Library section steps through (K-Drama / Other). */
@@ -77,6 +83,9 @@ const INITIAL: ReelState = {
   autoTiming: true,
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
+  durationSeconds: 30,
+  openingStyle: "standard",
+  giantHookSeconds: 0.25,
   libraryId: DEFAULT_LIBRARY_ID,
   videoNumber: null,
   backgroundImage: DEFAULT_BACKGROUND_IMAGE,
@@ -183,13 +192,16 @@ export const useReelStore = create<ReelState & Actions>()(
           audio: t.reelProps.audio,
           guesses: t.reelProps.guesses,
           autoTiming: t.mode === "auto",
+          durationSeconds: puzzle.durationSeconds ?? 30,
+          openingStyle: puzzle.openingStyle ?? "standard",
+          giantHookSeconds: puzzle.giantHookSeconds ?? 0.25,
         });
       },
       reset: () => set(INITIAL),
     }),
     {
       name: "hangman-reel-studio",
-      version: 7,
+      version: 9,
       // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
       // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
@@ -214,10 +226,17 @@ export const useReelStore = create<ReelState & Actions>()(
 
 /**
  * File-name base while a library video is loaded, e.g. "kdrama-007-HONEYCOMB" / "video-012-DEMOGORGON"
- * (so renders, screenshots and thumbnails can be matched to posts); "" for custom content.
+ * (so renders, screenshots and thumbnails can be matched to posts); `fallback` for custom content.
+ * Test B gets "-B" and a cut video its length ("-20s").
  */
-export const videoFileBase = (s: Pick<ReelState, "libraryId" | "videoNumber" | "word">) =>
-  s.videoNumber ? libraryFileBase(s.libraryId, s.videoNumber, s.word.trim().replace(/\s+/g, "-")) : "";
+export const videoFileBase = (s: Pick<ReelState, "libraryId" | "videoNumber" | "word" | "durationSeconds" | "openingStyle">, fallback = "") => {
+  const base = s.videoNumber ? libraryFileBase(s.libraryId, s.videoNumber, s.word.trim().replace(/\s+/g, "-")) : fallback;
+  // Cut videos are tagged with their length, e.g. kdrama-007-HONEYCOMB-20s.
+  // Test B (giant frame-1 hook) is tagged "-B"; cut videos get their length, e.g. kdrama-007-HONEYCOMB-B-20s.
+  const len = s.durationSeconds ?? 30;
+  if (!base) return base;
+  return `${base}${s.openingStyle === "giant" ? "-B" : ""}${len !== 30 ? `-${len}s` : ""}`;
+};
 
 /** Maps editor state to the serializable composition input props. */
 export const toReelProps = (s: ReelState): ReelProps => ({
@@ -232,6 +251,9 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   themeId: s.themeId,
   audio: s.audio,
   showSafeZones: s.showSafeZones,
+  durationSeconds: s.durationSeconds ?? 30,
+  openingStyle: s.openingStyle ?? "standard",
+  giantHookSeconds: s.giantHookSeconds ?? 0.25,
   // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });
 
@@ -257,5 +279,7 @@ export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
     holdBack: s.holdBack,
     themeId: s.themeId,
     audio: s.audio,
+    ...((s.durationSeconds ?? 30) !== 30 ? { durationSeconds: s.durationSeconds } : {}),
+    ...(s.openingStyle === "giant" ? { openingStyle: "giant" as const, giantHookSeconds: s.giantHookSeconds ?? 0.25 } : {}),
   };
 };

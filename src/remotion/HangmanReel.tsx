@@ -9,6 +9,7 @@ import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
 import { GuessCallouts } from "./components/GuessCallout";
+import { ColdOpen, coldOpenCover, coldOpenFrames, DEFAULT_GIANT_HOOK_SECONDS } from "./components/ColdOpen";
 import { Pigeons } from "./components/Pigeons";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
@@ -137,6 +138,10 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const tension = frame < rattleTo ? Easing.in(Easing.quad)(ramp(frame, [rattleFrom, rattleTo], [0, 1])) : ramp(frame, [rattleTo, hookEnd], [1, 0]);
   const camScale = 1 + 0.035 * punch + 0.08 * slap + 0.04 * kick + 0.025 * tension + overscan;
   const camera = camX || camY || punch || slap || kick || tension ?`translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
+  // A/B test B: giant spelling-challenge hook on frame 1; the banner sits under it until it flies up.
+  const giant = props.openingStyle === "giant";
+  const giantHold = props.giantHookSeconds ?? DEFAULT_GIANT_HOOK_SECONDS;
+  const coldCover = giant ? coldOpenCover(frame, fps, durationInFrames, giantHold) : 0;
   const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]) * (1 - loopReset(frame, durationInFrames, fps, 0, 0.6));
 
   return (
@@ -147,7 +152,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
-      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} bannerOpacity={1 - coldCover} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       {uiVis > 0.001 && (
         <AbsoluteFill style={uiVis < 1 ? { opacity: uiVis, transform: `translateY(${(80 * (1 - uiVis)).toFixed(1)}px)` } : undefined}>
@@ -164,7 +169,6 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         shakePx={KEYBOX_SHAKE}
       />
       <GuessCallouts theme={theme} guesses={timeline.guesses} finalRevealFrame={timeline.finalRevealFrame} centerY={keyboardTop + CALLOUT_BELOW_KEYS_TOP} />
-      {/* A/B test B: LIKE / SUBSCRIBE hero beats closing the sequence (empty for A). */}
       </AbsoluteFill>
 
       {redFlash > 0.001 && (
@@ -190,6 +194,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         />
       )}
 
+      {giant && <ColdOpen theme={theme} hookText={props.hookText} word={timeline.word} spotlightY={WORD_CENTER_Y} holdSeconds={giantHold} />}
+
       {props.showSafeZones && <SafeZones />}
     </AbsoluteFill>
   );
@@ -197,7 +203,15 @@ const ReelStage: React.FC<ReelProps> = (props) => {
 
 const AudioTrackForProps: React.FC<ReelProps> = (props) => {
   const timeline = useReelTimeline(props);
-  return <AudioTrack timeline={timeline} audio={props.audio} />;
+  const { fps } = useVideoConfig();
+  const giant = props.openingStyle === "giant";
+  const hold = props.giantHookSeconds ?? DEFAULT_GIANT_HOOK_SECONDS;
+  const coldOpen = useMemo(() => {
+    if (!giant) return undefined;
+    const f = coldOpenFrames(hold, fps);
+    return { stampFrame: f.stamp, exitFrame: f.exit[0] };
+  }, [giant, hold, fps]);
+  return <AudioTrack timeline={timeline} audio={props.audio} coldOpen={coldOpen} />;
 };
 
 const hatch = "repeating-linear-gradient(45deg, rgba(255,0,180,0.30) 0 18px, rgba(255,0,180,0.10) 18px 36px)";

@@ -1,6 +1,8 @@
 import type { ThemeId } from "./themes";
 
 
+export type OpeningStyle = "standard" | "giant";
+
 /** One guess on the timeline. Whether it is correct is derived from the word. */
 export type Guess = { letter: string; time: number };
 
@@ -31,6 +33,19 @@ export type ReelProps = {
   audio: ReelAudioSettings;
   /** Preview-only overlay of platform UI safe zones. Forced off for renders. */
   showSafeZones: boolean;
+  /**
+   * A/B test, frame 1: "standard" (A, default) = the current opening; "giant" (B) = a giant
+   * spelling-challenge title card (the banner text + "N LETTERS · 29 SECONDS") over a dimmed stage
+   * that flies up into the banner after `giantHookSeconds`.
+   */
+  openingStyle?: OpeningStyle;
+  /** Test B: how long (s) the giant hook stays up before it flies into the banner. Default 0.25. */
+  giantHookSeconds?: number;
+  /**
+   * Video length in whole seconds (10–30, default 30). The video is cut there and loops back to
+   * 0 s; the letter pattern keeps its 30 s timing (anything after the cut is not in the video).
+   */
+  durationSeconds?: number;
   /** Picture under public/ used instead of the shelf scene (e.g. "backgrounds/characters.jpg"). Empty / missing = shelves. */
   backgroundImage?: string;
 };

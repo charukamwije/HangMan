@@ -41,6 +41,12 @@ export const hangmanPuzzleSchema = z.object({
   /** Second letter on the board at 0 s. Missing → the first correct guess (its beat is re-timed away). */
   secondPrefilledLetter: letter.optional(),
   holdBack: z.number().int().min(0).max(10).optional(),
+  /** A/B test, frame 1: "standard" (default) or "giant" (giant spelling-challenge hook). */
+  openingStyle: z.enum(["standard", "giant"]).optional(),
+  /** Test B: seconds the giant hook stays up. Default 0.25. */
+  giantHookSeconds: z.number().min(0.05).max(5).optional(),
+  /** Video length (s): cut there and loop; the pattern keeps its 30 s timing. Default 30. */
+  durationSeconds: z.number().int().min(10).max(30).optional(),
   themeId: z.enum(THEME_IDS as [ThemeId, ...ThemeId[]]).optional(),
   audio: z
     .object({

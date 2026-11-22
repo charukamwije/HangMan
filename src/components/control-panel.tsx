@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { FPS } from "@/remotion/constants";
 import { LIBRARIES, getLibrary, type LibraryId } from "@/data/library";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
-import type { ReelProps } from "@/remotion/types";
+import type { OpeningStyle, ReelProps } from "@/remotion/types";
 import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +49,26 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
   return (
     <div className="flex flex-col gap-1 p-3">
       <LibrarySection />
+
+      <Section icon={<FlaskConical />} title="A/B Test">
+        <Field label="Frame 1 hook">
+          <NativeSelect value={s.openingStyle ?? "standard"} onChange={(e) => s.update({ openingStyle: e.target.value as OpeningStyle })}>
+            <option value="standard">A · Current opening</option>
+            <option value="giant">B · Giant spelling-challenge hook</option>
+          </NativeSelect>
+        </Field>
+        {s.openingStyle === "giant" && (
+          <Field label={`Giant hook on screen · ${(s.giantHookSeconds ?? 0.25).toFixed(2)}s`}>
+            <Slider min={0.1} max={3} step={0.05} value={s.giantHookSeconds ?? 0.25} onValueChange={(v) => s.update({ giantHookSeconds: v })} />
+          </Field>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {s.openingStyle === "giant"
+            ? "Frame 1: the banner text giant over a dimmed stage, with “N LETTERS · 29 SECONDS” under it; it flies up into the banner after the time above. Renders are named …-B."
+            : "The current opening: banner, question line and scrambling board from frame 0."}{" "}
+          Metric: viewed vs swiped. Target ≥55% → keep B as the new standard.
+        </p>
+      </Section>
 
       <Section icon={<Type />} title="Content">
         <Field label="Hook banner (frame 0)">
@@ -144,6 +164,21 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
       </Section>
 
       <Section icon={<Timer />} title="Pacing & Keyframes">
+        <Field label="Video length">
+          <NativeSelect value={s.durationSeconds ?? 30} onChange={(e) => s.update({ durationSeconds: Number(e.target.value) })}>
+            {Array.from({ length: 21 }, (_, i) => 30 - i).map((sec) => (
+              <option key={sec} value={sec}>
+                {sec} s{sec === 30 ? " · full" : ""}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        {(s.durationSeconds ?? 30) < 30 && (
+          <p className="text-xs text-muted-foreground">
+            The video ends at {s.durationSeconds} s and loops back to 0. The letter pattern is unchanged: anything after {s.durationSeconds} s
+            (later guesses, the comment prompt, the final reveal) is cut. Renders are named …-{s.durationSeconds}s.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label={`Final reveal · ${s.finalRevealAt.toFixed(1)}s`}>
             <Slider min={10} max={29.5} step={0.5} value={s.finalRevealAt} onValueChange={(v) => s.update({ finalRevealAt: v })} />

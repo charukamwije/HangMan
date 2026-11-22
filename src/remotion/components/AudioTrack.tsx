@@ -21,7 +21,7 @@ const CLAMP = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
  * in the Remotion Player). Only the two beds below use (memoised) envelopes; every
  * cue uses a static number.
  */
-export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings }> = ({ timeline, audio }) => {
+export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings; coldOpen?: { stampFrame: number; exitFrame: number } }> = ({ timeline, audio, coldOpen }) => {
   const { fps, durationInFrames } = useVideoConfig();
   const [xfadeFrom, xfadeTo] = timeline.hook.musicInFrames;
   const musicFrames = durationInFrames - xfadeFrom;
@@ -34,12 +34,12 @@ export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings
     // Cues still sounding at the loop point are cut there (the loud loop-rewind starts on that
     // exact frame and masks the cut), so the replay's frame-0 gavel has nothing hanging over it.
     // Deliberately NOT a volume function: see the note above.
-    return buildAudioCues(timeline, audio, fps).flatMap((cue) => {
+    return buildAudioCues(timeline, audio, fps, durationInFrames, coldOpen).flatMap((cue) => {
       if (cue.id === LOOP_REWIND_CUE_ID || cue.from + cue.durationInFrames <= loopFrom) return [cue];
       const durationInFrames = loopFrom - cue.from;
       return durationInFrames > 0 ? [{ ...cue, durationInFrames }] : [];
     });
-  }, [timeline, audio, fps, loopFrom]);
+  }, [timeline, audio, fps, loopFrom, durationInFrames, coldOpen]);
 
   const ambientVolume = useCallback(
     (f: number) => interpolate(f, [0, fadeIn, xfadeFrom, xfadeTo], [0, audio.music, audio.music, 0], CLAMP),

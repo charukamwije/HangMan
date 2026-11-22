@@ -24,8 +24,19 @@ export const RESOLUTIONS = {
 } as const;
 
 export const FPS = 30;
+/** Full length of the letter pattern (guesses, clock, reveal). The video may be cut shorter (durationSeconds). */
 export const DURATION_SECONDS = 30;
 export const DURATION_FRAMES = FPS * DURATION_SECONDS; // 900
+/** Shortest video length (s) the studio offers. */
+export const MIN_DURATION_SECONDS = 10;
+/** Video length in whole seconds: durationSeconds clamped to 10–30, default the full 30. */
+export const videoDurationSeconds = (props: { durationSeconds?: number }) =>
+  Math.max(MIN_DURATION_SECONDS, Math.min(DURATION_SECONDS, Math.round(props.durationSeconds ?? DURATION_SECONDS)));
+/**
+ * Composition length: the video ends here and the seamless loop reset plays over its last
+ * LOOP_RESET_SECONDS, so a replay restarts at 0 s. The letter pattern itself is never re-timed.
+ */
+export const videoDurationFrames = (props: { durationSeconds?: number }, fps: number) => Math.round(videoDurationSeconds(props) * fps);
 
 /**
  * True 1 Hz clock: 00:29 on frame 0, one change every second (every 30 frames
