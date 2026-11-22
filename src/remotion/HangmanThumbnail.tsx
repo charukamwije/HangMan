@@ -139,10 +139,22 @@ export const HangmanThumbnail: React.FC<ThumbnailProps> = (props) => {
   );
 };
 
-/** The thumbnail layout on the 2160×3840 design canvas. Also test B's frame 1 in the reel (ColdOpen), without a picture. */
-export const ThumbnailCard: React.FC<ThumbnailProps> = (props) => <ThumbnailStage {...props} />;
+/** Which part of the card to draw: both (the thumbnail), or just the background / the text + board (ColdOpen animates them apart). */
+export type ThumbnailLayer = "all" | "background" | "content";
 
-const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hintLetter, secondLetter = "", themeId, category, backgroundImage }) => {
+/** The thumbnail layout on the 2160×3840 design canvas. Also test B's frame 1 in the reel (ColdOpen), without a picture. */
+export const ThumbnailCard: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = (props) => <ThumbnailStage {...props} />;
+
+const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
+  hookText,
+  word: rawWord,
+  hintLetter,
+  secondLetter = "",
+  themeId,
+  category,
+  backgroundImage,
+  layer = "all",
+}) => {
   const theme = getTheme(themeId);
   const word = normalizeWord(rawWord) || "GUESS";
   const hint = resolveHintLetter(word, hintLetter);
@@ -160,7 +172,8 @@ const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hin
 
   return (
     <AbsoluteFill>
-      {backgroundImage ? (
+      {layer !== "content" &&
+        (backgroundImage ? (
         <>
           {backgroundImage === CHARACTERS_PICTURE ? <PanelBackground image={backgroundImage} /> : <FullBleedBackground image={backgroundImage} />}
         </>
@@ -170,8 +183,9 @@ const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hin
           {/* darken the edges so the type pops */}
           <AbsoluteFill style={{ background: `radial-gradient(ellipse 85% 60% at 50% 48%, transparent 30%, ${shadeA(theme, 0.85)} 100%)` }} />
         </>
-      )}
+      ))}
 
+      {layer !== "background" && (
       <AbsoluteFill style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 150, padding: "0 140px" }}>
         {category?.trim() && (
           <div
@@ -270,6 +284,7 @@ const ThumbnailStage: React.FC<ThumbnailProps> = ({ hookText, word: rawWord, hin
           {letters} LETTERS · <span style={{ color: theme.accent }}>30 SECONDS</span>
         </div>
       </AbsoluteFill>
+      )}
     </AbsoluteFill>
   );
 };
