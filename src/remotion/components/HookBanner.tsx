@@ -7,7 +7,7 @@ import { loopReset } from "../loop";
 import { TOP_ROW } from "../constants";
 
 import { CLOCK } from "./CountdownTimer";
-import { BalloonCluster, BANNER_GUTTER, bannerFloat } from "./BannerBalloons";
+import { BANNER_GUTTER, bannerFloat } from "./BannerBalloons";
 
 /** Left end of TOP_ROW, 60 px clear of the clock, leaving a gutter at each end under the balloon strings. */
 const MAX_WIDTH = TOP_ROW.right - TOP_ROW.left - CLOCK.width - 60 - 2 * BANNER_GUTTER;
@@ -88,9 +88,7 @@ export const HookBanner: React.FC<{
   theme: Theme;
   text: string;
   pulseFrame: number;
-  /** 0–1 opacity of the balloon clusters (hook test 4 holds them back until 2 s). Default 1. */
-  balloons?: number;
-}> = ({ theme, text, pulseFrame, balloons = 1 }) => {
+}> = ({ theme, text, pulseFrame }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const t = frame / fps;
@@ -144,7 +142,7 @@ export const HookBanner: React.FC<{
         width: bannerW,
       }}
     >
-      {/* the banner hangs from its two balloon clusters: rides their lift a beat late, tilts with uneven lift, swings below them */}
+      {/* gentle float: the banner bobs, tilts and sways slightly */}
       <div style={{ transform: `translate(${float.dx.toFixed(2)}px, ${float.dy.toFixed(2)}px) rotate(${float.tilt.toFixed(3)}deg)`, transformOrigin: "50% 0%" }}>
     <div
       style={{
@@ -177,17 +175,6 @@ export const HookBanner: React.FC<{
         whiteSpace: "nowrap",
       }}
     >
-      {/* balloon clusters tied to the top corners: blue "Like" (left), red "Subscribe" (right) */}
-      {balloons > 0.001 && (
-        <>
-          <div style={{ position: "absolute", left: 22, top: -RIM, opacity: balloons }}>
-            <BalloonCluster side="left" t={t} lead={float.lead.left} />
-          </div>
-          <div style={{ position: "absolute", right: 22, top: -RIM, opacity: balloons }}>
-            <BalloonCluster side="right" t={t} lead={float.lead.right} />
-          </div>
-        </>
-      )}
       {/* light sheen sweeping across the plate */}
       <span style={{ position: "absolute", inset: 0, borderRadius: RADIUS - RIM, overflow: "hidden", pointerEvents: "none" }}>
         <span

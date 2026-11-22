@@ -7,7 +7,7 @@
  *              slams in at full scale, gavel + slap pop, music bed starts REWINDING.
  *              Two letters (the hint + a second one) are already seated; the clue is
  *              sharp but covered by the question line ("ONLY REAL FANS…"); the keyboard
- *              is up, while the clock, balloons and pawns are still hidden
+ *              is up, while the clock and pawns are still hidden
  *   0 → 26     decoys fire into the empty slots, gaps shrinking 4 → 1 frame (machine-gun
  *              cadence synced to the rewind). Each scrambles, then locks crimson 2 frames later
  *   0 → 30     scan beam ping-pongs across the board
@@ -19,7 +19,7 @@
  *   45 → 54    the clock fades in; "COMMENT BEFORE 0:00" pops under it (until 6 s)
  *   48 → 56    the question line lifts away, uncovering the clue
  *   60         regular reel: the first guess slams down (no guess may land before this
- *              frame); balloons + pawns fade in 60 → 72
+ *              frame); pawns fade in 60 → 72
  *
  * Pure module (no React, no remotion import) so the Next.js control panel and
  * the render API can share it with the composition. Frame numbers are authored

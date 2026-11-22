@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "@/remotion/defaults";
 import type { ThemeId } from "@/remotion/themes";
 import { clampTime, normalizeWord, parseLetters, scheduleWithSecondLetter } from "@/remotion/timeline";
-import type { CtaStyle, Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
+import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
 import { DEFAULT_LIBRARY_ID, getLibrary, libraryFileBase, type LibraryId } from "@/data/library";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
@@ -34,8 +34,6 @@ export type ReelState = {
   autoTiming: boolean;
   audio: ReelAudioSettings;
   showSafeZones: boolean;
-  /** A/B test: "balloons" (A) or "pops" (B: LIKE / SUBSCRIBE splats, no balloons). */
-  ctaStyle: CtaStyle;
   /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
   backgroundImage: string;
   /** Which video library the Video Library section steps through (K-Drama / Other). */
@@ -79,7 +77,6 @@ const INITIAL: ReelState = {
   autoTiming: true,
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
-  ctaStyle: "balloons",
   libraryId: DEFAULT_LIBRARY_ID,
   videoNumber: null,
   backgroundImage: DEFAULT_BACKGROUND_IMAGE,
@@ -186,19 +183,19 @@ export const useReelStore = create<ReelState & Actions>()(
           audio: t.reelProps.audio,
           guesses: t.reelProps.guesses,
           autoTiming: t.mode === "auto",
-          ctaStyle: puzzle.ctaStyle ?? "balloons",
         });
       },
       reset: () => set(INITIAL),
     }),
     {
       name: "hangman-reel-studio",
-      version: 6,
+      version: 7,
       // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
       // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
-        const { hookTests: _dropped, ...rest } = persisted as Partial<ReelState> & { hookTests?: unknown };
+        const { hookTests: _dropped, ctaStyle: _cta, ...rest } = persisted as Partial<ReelState> & { hookTests?: unknown; ctaStyle?: unknown };
         void _dropped;
+        void _cta;
         const p: ReelState = { ...INITIAL, ...rest };
         // v3 → v4: Midnight Noir is the default theme; move anyone still on the old default to it.
         if (version < 4 && p.themeId === "dark-academia") p.themeId = DEFAULT_REEL_PROPS.themeId;
@@ -235,7 +232,6 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   themeId: s.themeId,
   audio: s.audio,
   showSafeZones: s.showSafeZones,
-  ctaStyle: s.ctaStyle ?? "balloons",
   // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });
 
@@ -258,7 +254,6 @@ export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
     viralHookText: s.hookText,
     ...(s.hintLetter ? { prefilledLetter: s.hintLetter } : {}),
     ...(s.secondLetter || s.autoSecondLetter ? { secondPrefilledLetter: s.secondLetter || s.autoSecondLetter } : {}),
-    ...(s.ctaStyle === "pops" ? { ctaStyle: "pops" as const } : {}),
     holdBack: s.holdBack,
     themeId: s.themeId,
     audio: s.audio,

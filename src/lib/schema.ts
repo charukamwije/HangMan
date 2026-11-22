@@ -8,7 +8,6 @@ export const reelPropsSchema = z.object({
   hookText: z.string().max(60).default(DEFAULT_HOOK_TEXT),
   hintLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").default(""),
   secondLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").optional(),
-  ctaStyle: z.enum(["balloons", "pops"]).optional(),
   subtitle: z.string().max(120),
   hint2: z.string().max(120).default(""),
   word: z

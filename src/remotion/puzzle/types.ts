@@ -4,7 +4,7 @@
  * `npm run batch` CLI, the HangmanPuzzle composition and the studio store.
  */
 import type { ThemeId } from "../themes";
-import type { CtaStyle, ReelAudioSettings, ReelProps } from "../types";
+import type { ReelAudioSettings, ReelProps } from "../types";
 
 /** What happens on a reveal frame. */
 export type RevealStatus =
@@ -50,8 +50,6 @@ export type HangmanPuzzleData = {
   prefilledLetter?: string;
   /** Second letter pre-filled on frame 0. Default: the first correct guess (its beat is re-timed away). */
   secondPrefilledLetter?: string;
-  /** A/B test: "balloons" (default) or "pops" (LIKE / SUBSCRIBE splats, no balloons). */
-  ctaStyle?: CtaStyle;
   /** Max correct letters saved for the final reveal (auto mode). Default 2. */
   holdBack?: number;
   themeId?: ThemeId;

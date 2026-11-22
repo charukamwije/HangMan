@@ -1,6 +1,5 @@
 import type { ThemeId } from "./themes";
 
-export type CtaStyle = "balloons" | "pops";
 
 /** One guess on the timeline. Whether it is correct is derived from the word. */
 export type Guess = { letter: string; time: number };
@@ -25,13 +24,6 @@ export type ReelProps = {
   hintLetter: string;
   /** Second letter pre-filled on frame 0. Empty / missing → the first correct guess (see resolveSecondLetter). */
   secondLetter?: string;
-  /**
-   * A/B test: how viewers are asked to like / subscribe.
-   *   "balloons" (A, default): Like + Subscribe balloon clusters on the hook banner.
-   *   "pops" (B): no balloons; LIKE then SUBSCRIBE pop once each on a paint splat as the last two
-   *               highlighted beats before the reveal (guesses re-spaced to fit).
-   */
-  ctaStyle?: CtaStyle;
   guesses: Guess[];
   /** Second at which any letters still hidden are revealed (usually when the clock hits 00:00). */
   finalRevealAt: number;

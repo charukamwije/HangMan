@@ -92,7 +92,6 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
     hintLetter: prefilledLetter,
     secondLetter,
     guesses,
-    ...(puzzle.ctaStyle ? { ctaStyle: puzzle.ctaStyle } : {}),
     finalRevealAt: finalRevealFrame / fps,
     themeId: puzzle.themeId ?? DEFAULT_REEL_PROPS.themeId,
     audio: { ...DEFAULT_REEL_PROPS.audio, ...puzzle.audio },

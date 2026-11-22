@@ -78,9 +78,7 @@ export function getJob(id: string) {
 
 export function createRenderJob(inputProps: ReelProps, options: RenderJobOptions = {}): RenderJob {
   const id = crypto.randomUUID();
-  // A/B test B (CTA pops) is tagged "-B" so its Shorts can be told apart; A keeps the plain name.
-  const variant = inputProps.ctaStyle === "pops" ? "-B" : "";
-  const base = options.fileName ? `${safeName(options.fileName)}${variant}-${id.slice(0, 6)}` : `hangman${variant}-${id.slice(0, 8)}`;
+  const base = options.fileName ? `${safeName(options.fileName)}-${id.slice(0, 6)}` : `hangman-${id.slice(0, 8)}`;
   let resolveFinished!: (job: RenderJob) => void;
   const finished = new Promise<RenderJob>((r) => (resolveFinished = r));
   const job: RenderJob = {

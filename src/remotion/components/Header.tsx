@@ -158,7 +158,7 @@ export function estimateHeaderTextHeight(subtitle: string, hint2 = "") {
  *
  * Opening: the banner shows `hookText` from frame 0 (slam) and re-slams on `bannerPulse`. The clue
  * is sharp from frame 0 but sits under the question line until ~1.6 s; the clock fades in at
- * 1.5 s with "COMMENT BEFORE 0:00" under it, and the banner's balloons fade in at 2 s.
+ * 1.5 s with "COMMENT BEFORE 0:00" under it.
  */
 export const Header: React.FC<{
   theme: Theme;
@@ -176,9 +176,7 @@ export const Header: React.FC<{
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-  /** A/B test A: Like / Subscribe balloon clusters on the banner. Off for test B (CTA pops instead). */
-  balloons: boolean;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, balloons }) => {
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -229,8 +227,8 @@ export const Header: React.FC<{
 
   return (
     <>
-      {/* The banner is up from frame 0; its balloons (test A only) fade in with the pawns at 2 s. */}
-      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} balloons={balloons ? stagedVisibility(frame, fps, durationInFrames, HOOK_UI_TIMING.uiIn) : 0} />
+      {/* The banner is up from frame 0. */}
+      <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
       {/* The clock fades + scales in at 1.5 s, with "COMMENT BEFORE 0:00" under it. */}
       <StagedClock>
         <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />

@@ -102,15 +102,6 @@ export function buildAudioCues(timeline: Timeline, audio: ReelAudioSettings, fps
     }
   }
 
-  // 4b. A/B test B: each LIKE / SUBSCRIBE pop gets the guess whoosh, a crisp pop and a light
-  //     chime, but never the correct / wrong SFX, so it can't be mistaken for a guess.
-  for (const p of timeline.ctaPops) {
-    const len = seconds(AUDIO_SECONDS.whoosh, fps);
-    cues.push({ id: `cta-whoosh-${p.kind}`, src: AUDIO.whoosh, from: Math.max(0, p.frame - len), durationInFrames: len, volume: clamp01(sfx * 0.5) });
-    cues.push({ id: `cta-pop-${p.kind}`, src: AUDIO.slapPop, from: p.frame, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.85) });
-    cues.push({ id: `cta-chime-${p.kind}`, src: AUDIO.chime, from: p.frame, durationInFrames: seconds(AUDIO_SECONDS.chime, fps), volume: clamp01(sfx * 0.25) });
-  }
-
   // Letters popping in at the final reveal get a rapid typewriter run (one click per letter).
   const finalFrames = [...new Set(timeline.charRevealFrames.filter((f) => Number.isFinite(f) && f >= timeline.finalRevealFrame))].sort((a, b) => a - b);
   finalFrames.forEach((frame, k) => {

@@ -15,7 +15,7 @@ const QUESTION_EMPHASIS = /^(REAL|FANS|5|SECONDS)$/;
 const fadeIn = (frame: number, fps: number, [a, b]: readonly [number, number]) => ramp(frame / fps, [a, b], [0, 1]);
 
 /**
- * 0 → 1 visibility of UI held back until `window` (seconds): the clock, balloons and pawns. It fades out
+ * 0 → 1 visibility of UI held back until `window` (seconds): the clock and pawns. It fades out
  * again over the second half of the loop reset, so the replay's frame 0 matches.
  */
 export function stagedVisibility(frame: number, fps: number, durationInFrames: number, window: readonly [number, number]) {

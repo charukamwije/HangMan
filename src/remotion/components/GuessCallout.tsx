@@ -4,7 +4,7 @@ import { LOWER_SAFE_CENTER_X as SAFE_CENTER_X } from "../constants";
 import { BODY_FONT, DISPLAY_FONT } from "../fonts";
 import { ramp } from "../motion";
 import { shadeA, type Theme } from "../themes";
-import type { CtaPop, CtaPopKind, ResolvedGuess } from "../timeline";
+import type { ResolvedGuess } from "../timeline";
 
 const LETTER = 480;
 /** How long each callout stays mounted. */
@@ -53,69 +53,10 @@ export const GuessCallouts: React.FC<{
   );
 };
 
-/** YouTube's red, for the SUBSCRIBE splat. */
-const YT_RED = "#FF0000";
-const CTA_WORD: Record<CtaPopKind, string> = { like: "LIKE", subscribe: "SUBSCRIBE" };
-
-/**
- * A/B test B: LIKE and SUBSCRIBE pop like a letter (same splat), with an icon in place of
- * the letter, as beats of their own in the letter rhythm (planCtaBeats, timeline.ts). They are the
- * hero beats: bigger, a colour flash + pulsing halo, a bigger pill, and they hold on screen
- * longer than a letter. Like takes the theme accent, Subscribe YouTube red. They close the sequence.
- */
-export const CtaPops: React.FC<{ theme: Theme; pops: CtaPop[]; centerY: number }> = ({ theme, pops, centerY }) => {
-  const { fps } = useVideoConfig();
-  return (
-  <>
-    {pops.map((p) => {
-      const red = p.kind === "subscribe";
-      const color = red ? YT_RED : theme.accent;
-      const ink = red ? "#ffffff" : theme.onAccent;
-      return (
-        <Sequence key={p.kind} name={`cta-${p.kind}`} from={p.frame} durationInFrames={p.durationInFrames} layout="none">
-          <Callout
-            theme={theme}
-            centerY={centerY}
-            seed={`cta-${p.kind}`}
-            color={color}
-            ink={ink}
-            glyph={<CtaIcon kind={p.kind} ink={ink} cut={color} />}
-            verdict={CTA_WORD[p.kind]}
-            // a letter splat is gone ~0.8 s in; the CTA holds still (pulsing) for the rest of its beat first
-            hold={Math.max(0, p.durationInFrames - Math.round(HERO_NATURAL_SECONDS * fps))}
-          />
-        </Sequence>
-      );
-    })}
-  </>
-  );
-};
-
-/** Hero callouts: how long (s) the splat takes to land + dissolve without a hold. */
-const HERO_NATURAL_SECONDS = 0.85;
 /** Hero callouts: the splat freezes (and pulses) at this point (s), after it has settled, before it dissolves. */
 const HERO_HOLD_AT = 0.4;
 /** Hero callouts: overall scale vs a letter splat. */
 const HERO_SCALE = 1.22;
-
-/** Thumbs-up / bell, drawn in the splat's ink colour (`cut` = details in the paint colour). */
-const CtaIcon: React.FC<{ kind: CtaPopKind; ink: string; cut: string }> = ({ kind, ink, cut }) => (
-  <svg viewBox="0 0 24 24" width={LETTER * 0.78} height={LETTER * 0.78} style={{ overflow: "visible" }}>
-    {kind === "like" && (
-      <path
-        d="M2 10.2h4.2V21H2z M8 21V10.4l4.6-7.1c1.3 0 2.3 1.1 2.1 2.4L14 9.4h6.1c1.3 0 2.2 1.2 1.9 2.4l-1.6 7.3c-.3 1.1-1.2 1.9-2.4 1.9z"
-        fill={ink}
-        strokeLinejoin="round"
-      />
-    )}
-    {kind === "subscribe" && (
-      <path
-        d="M12 1.8c.9 0 1.6.7 1.6 1.6v.8a6.6 6.6 0 0 1 5 6.4v4.3l2 2.9v1.2H3.4v-1.2l2-2.9v-4.3a6.6 6.6 0 0 1 5-6.4v-.8c0-.9.7-1.6 1.6-1.6z M9.3 20.2h5.4a2.7 2.7 0 0 1-5.4 0z"
-        fill={ink}
-      />
-    )}
-  </svg>
-);
 
 const shade = (hex: string, amt: number) => {
   const n = parseInt(hex.slice(1, 7), 16);
