@@ -9,7 +9,8 @@ import { TOP_ROW } from "../constants";
 import { CLOCK } from "./CountdownTimer";
 
 /** Words of the question line that take the accent. */
-const QUESTION_EMPHASIS = /^(REAL|FANS|5|SECONDS)$/;
+/** Words on the plate that take the accent (punctuation ignored). */
+const QUESTION_EMPHASIS = /^(REAL|FANS|TRUE|ONLY|DESERVE|GENIUS|SECONDS|\d+%?)$/;
 
 /** 0 → 1 across [a, b] seconds. */
 const fadeIn = (frame: number, fps: number, [a, b]: readonly [number, number]) => ramp(frame / fps, [a, b], [0, 1]);
@@ -28,7 +29,7 @@ export function stagedVisibility(frame: number, fps: number, durationInFrames: n
  * guess so the clue takes over. It comes back over the loop reset, matching frame 0.
  * Rendered inside the hint card block: it covers the card and grows upward if needed.
  */
-export const QuestionLine: React.FC<{ theme: Theme; minHeight: number }> = ({ theme, minHeight }) => {
+export const QuestionLine: React.FC<{ theme: Theme; minHeight: number; text?: string }> = ({ theme, minHeight, text }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const [outFrom, outTo] = HOOK_UI_TIMING.questionOut;
@@ -39,7 +40,7 @@ export const QuestionLine: React.FC<{ theme: Theme; minHeight: number }> = ({ th
   const slam = 1 - spring({ frame, fps, config: { damping: 10, stiffness: 280, mass: 0.5 } });
   // Small slam: the plate already fills the safe width, so it must not grow past it.
   const scale = (1 + 0.04 * slam) * (1 - 0.08 * out * (1 - back));
-  const words = QUESTION_LINE.split(" ");
+  const words = ((text ?? "").trim() || QUESTION_LINE).toUpperCase().split(/\s+/);
 
   return (
     <div
@@ -80,7 +81,7 @@ export const QuestionLine: React.FC<{ theme: Theme; minHeight: number }> = ({ th
         {words.map((w, i) => (
           <React.Fragment key={i}>
             {i > 0 && " "}
-            <span style={{ color: QUESTION_EMPHASIS.test(w) ? theme.accent : undefined }}>{w}</span>
+            <span style={{ color: QUESTION_EMPHASIS.test(w.replace(/[^A-Z0-9%]/g, "")) ? theme.accent : undefined }}>{w}</span>
           </React.Fragment>
         ))}
       </div>

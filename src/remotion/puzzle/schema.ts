@@ -26,7 +26,7 @@ export const hangmanPuzzleSchema = z.object({
     .regex(/^[A-Za-z0-9_-]{1,64}$/, "Use letters, digits, - or _ (max 64)")
     .optional(),
   hint: z.string().trim().max(120).default(""),
-  /** Second hint, replaces `hint` at 15 s. Optional. */
+  /** Second hint, replaces `hint` at 10 s (HINT2_AT_SECONDS). Optional. */
   hint2: z.string().trim().max(120).default(""),
   secretWord: z
     .string()

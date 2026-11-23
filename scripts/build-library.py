@@ -67,6 +67,8 @@ def build(csv_name):
                     "guesses": [{"letter": l, "correct": yes} for l, yes in guesses],
                     # "Show" (current CSVs) or "Source" (older CSV): the series the word comes from.
                     "source": (r.get("Show") or r.get("Source") or "").strip(),
+                    # Optional: replaces "ONLY REAL FANS GET THIS IN 5 SECONDS" on the opening plate ("" = default).
+                    "questionLine": (r.get("Question line (0–2 s)") or "").strip().upper(),
                 }
             )
     return rows, errors
@@ -113,7 +115,7 @@ export type LibraryEntry = {{
   hookText: string;
   /** Hint 1 (0 s). */
   hint1: string;
-  /** Hint 2 (15 s). */
+  /** Hint 2 (shown from HINT2_AT_SECONDS, 10 s). */
   hint2: string;
   /** The letter already on the board at 0 s. */
   prefill: string;
@@ -122,6 +124,8 @@ export type LibraryEntry = {{
   /** Reveal order: one guess about every 3 s. */
   guesses: LibraryGuess[];
   source: string;
+  /** Opening plate text (0–2 s); "" = the default "ONLY REAL FANS GET THIS IN 5 SECONDS". */
+  questionLine: string;
 }};
 
 export type LibraryId = {ids};

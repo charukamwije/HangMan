@@ -10,6 +10,7 @@ export const reelPropsSchema = z.object({
   secondLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").optional(),
   subtitle: z.string().max(120),
   hint2: z.string().max(120).default(""),
+  questionLine: z.string().max(80).optional(),
   word: z
     .string()
     .min(1)

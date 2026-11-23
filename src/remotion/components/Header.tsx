@@ -178,7 +178,9 @@ export const Header: React.FC<{
   stress: Stress;
   /** A/B test B: the banner hides under the giant hook card (0) and fades in as the card flies up. Default 1. */
   bannerOpacity?: number;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, bannerOpacity = 1 }) => {
+  /** Opening plate text; "" = the default question line. */
+  questionLine?: string;
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, bannerOpacity = 1, questionLine = "" }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
   const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
@@ -219,7 +221,7 @@ export const Header: React.FC<{
 
   // Space between the banner row and the board: label + hint + gap must fit in it.
   const room = boardTop - (TOP_ROW.top + CLOCK.height + ROW_CLEARANCE);
-  // Sized for the longer hint, so the card never changes size at the 15 s switch.
+  // Sized for the longer hint, so the card never changes size at the hint-2 switch.
   const textH = estimateHeaderTextHeight(subtitle, hint2);
   const textMinHeight = Math.max(hintLines(subtitle), hintLines(hint2)) * SUBTITLE_SIZE * 1.2;
   const gap = Math.max(MIN_HINT_GAP, Math.min(HINT_GAP, room - textH));
@@ -346,7 +348,7 @@ export const Header: React.FC<{
             />
           </div>
         )}
-        <QuestionLine theme={theme} minHeight={Math.max(380, TAB_HEIGHT / 2 + CARD_PAD.top + CARD_PAD.bottom + textMinHeight + 2 * CARD_BORDER)} />
+        <QuestionLine theme={theme} text={questionLine} minHeight={Math.max(380, TAB_HEIGHT / 2 + CARD_PAD.top + CARD_PAD.bottom + textMinHeight + 2 * CARD_BORDER)} />
       </div>
     </>
   );

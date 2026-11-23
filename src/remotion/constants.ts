@@ -63,7 +63,7 @@ export const DECOY_LETTERS = "ETAOINSHRDLCUMWFGYPBVKJXQZ";
 
 // ------------------------------------------------------------- retention ----
 /** Hint 2 replaces hint 1 at this second (blur out → chip flip → word-by-word reveal). */
-export const HINT2_AT_SECONDS = 15;
+export const HINT2_AT_SECONDS = 10;
 
 /** Banner challenge, up and legible from frame 0 (hook.ts). Short = big type; power words take the accent (HookBanner). */
 export const DEFAULT_HOOK_TEXT = "99% FAIL THIS";

@@ -12,6 +12,8 @@ import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/r
 
 export type ReelState = {
   hookText: string;
+  /** Opening plate (0–2 s); "" = "ONLY REAL FANS GET THIS IN 5 SECONDS". Set per video by the library. */
+  questionLine: string;
   subtitle: string;
   hint2: string;
   word: string;
@@ -71,6 +73,7 @@ export const DEFAULT_BACKGROUND_IMAGE = "backgrounds/characters.jpg";
 
 const INITIAL: ReelState = {
   hookText: DEFAULT_INPUT.hookText,
+  questionLine: "",
   subtitle: DEFAULT_INPUT.subtitle,
   hint2: DEFAULT_INPUT.hint2,
   word: DEFAULT_INPUT.word,
@@ -134,6 +137,7 @@ export const useReelStore = create<ReelState & Actions>()(
         set({
           videoNumber: v.n,
           hookText: v.hookText,
+          questionLine: v.questionLine ?? "",
           subtitle: v.hint1,
           hint2: v.hint2,
           word: v.word,
@@ -204,7 +208,7 @@ export const useReelStore = create<ReelState & Actions>()(
     }),
     {
       name: "hangman-reel-studio",
-      version: 10,
+      version: 11,
       // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
       // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
@@ -244,6 +248,7 @@ export const videoFileBase = (s: Pick<ReelState, "libraryId" | "videoNumber" | "
 /** Maps editor state to the serializable composition input props. */
 export const toReelProps = (s: ReelState): ReelProps => ({
   hookText: s.hookText,
+  ...(s.questionLine?.trim() ? { questionLine: s.questionLine.trim() } : {}),
   subtitle: s.subtitle,
   hint2: s.hint2 ?? "",
   word: normalizeWord(s.word),

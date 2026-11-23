@@ -31,7 +31,7 @@ export type HangmanPuzzleData = {
   id?: string;
   /** Subtitle hint (white), e.g. "A TRICKY US & UK CHALLENGE WORD". */
   hint: string;
-  /** Second hint, replaces `hint` at 15 s (blur out → chip flip → word-by-word reveal). "" = keep hint 1. */
+  /** Second hint, replaces `hint` at 10 s (blur out → chip flip → word-by-word reveal). "" = keep hint 1. */
   hint2: string;
   /** The answer. Letters and spaces, ≤ 36 chars. */
   secretWord: string;

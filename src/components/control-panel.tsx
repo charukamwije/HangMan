@@ -13,6 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ExportPanel } from "@/components/export-panel";
 import { FPS } from "@/remotion/constants";
+import { QUESTION_LINE } from "@/remotion/hook";
 import { LIBRARIES, getLibrary, type LibraryId } from "@/data/library";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
@@ -75,7 +76,16 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
         <Field label="Hook banner (frame 0)">
           <Input value={s.hookText} maxLength={60} placeholder="99% FAIL THIS" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
         </Field>
-        <Field label="Hint 1 (0–15 s)">
+        <Field label="Question line (0–2 s)">
+          <Input
+            value={s.questionLine ?? ""}
+            maxLength={80}
+            placeholder={QUESTION_LINE}
+            className="uppercase"
+            onChange={(e) => s.update({ questionLine: e.target.value.toUpperCase() })}
+          />
+        </Field>
+        <Field label="Hint 1 (0–10 s)">
           <Input
             value={s.subtitle}
             maxLength={120}
@@ -84,7 +94,7 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
           />
           <HintLengthGuide length={s.subtitle.trim().length} />
         </Field>
-        <Field label="Hint 2 (15–30 s, optional)">
+        <Field label="Hint 2 (10–30 s, optional)">
           <Input
             value={s.hint2 ?? ""}
             maxLength={120}

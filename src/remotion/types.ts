@@ -17,9 +17,11 @@ export type ReelAudioSettings = {
 export type ReelProps = {
   /** Top banner challenge text, legible from frame 0, e.g. "99% FAIL THIS". Empty → "GUESS THE WORD". */
   hookText: string;
+  /** Opening plate over the hint card (0–1.85 s). Empty / missing = "ONLY REAL FANS GET THIS IN 5 SECONDS". */
+  questionLine?: string;
   /** Hint 1, shown from the start. */
   subtitle: string;
-  /** Hint 2, replaces hint 1 at HINT2_AT_SECONDS (15 s). Empty or missing = hint 1 all the way. */
+  /** Hint 2, replaces hint 1 at HINT2_AT_SECONDS (10 s). Empty or missing = hint 1 all the way. */
   hint2?: string;
   word: string;
   /** Letter pre-filled on frame 0 (every occurrence). Empty → first letter of the word. */
