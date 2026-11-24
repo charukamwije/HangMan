@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
-import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Easing, useCurrentFrame, useVideoConfig } from "remotion";
 import { DESIGN_HEIGHT, DESIGN_WIDTH, HINT2_AT_SECONDS, KEYBOX_SHAKE_PX_AT_1080, RIGHT_RAIL, SAFE_ZONE, TOP_CORNERS } from "./constants";
-import { framesSinceLast, NEVER, ramp, strikeShake, stressAt } from "./motion";
+import { framesSinceLast, ramp, strikeShake, stressAt } from "./motion";
 import { loopReset } from "./loop";
 import { getTheme } from "./themes";
 import { resolveTimeline } from "./timeline";
@@ -9,7 +9,6 @@ import type { ReelProps } from "./types";
 import { AudioTrack } from "./components/AudioTrack";
 import { Background } from "./components/Background";
 import { GuessCallouts } from "./components/GuessCallout";
-import { ColdOpen, coldOpenCover, coldOpenFrames, DEFAULT_GIANT_HOOK_SECONDS } from "./components/ColdOpen";
 import { Pigeons } from "./components/Pigeons";
 import { Header } from "./components/Header";
 import { Keyboard, KEYBOARD_HEIGHT } from "./components/Keyboard";
@@ -101,9 +100,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
 
   // Impact overlays: red edge flash on a strike, accent bloom on a correct reveal.
   const sinceWrong = framesSinceLast(timeline.wrongFrames, frame) / fps;
-  // Opening hook: every ✖ fires a short, sharp crimson edge flash (machine-gun strobe).
-  const sinceHookStrike = frame < timeline.hook.clearFrame ? framesSinceLast(timeline.hook.strikeFrames, frame) : NEVER;
-  const redFlash = Math.max(ramp(sinceWrong, [0, 0.03, 0.5], [0, 0.85, 0]), ramp(sinceHookStrike, [0, 2], [0.4, 0]));
+  // (The opening no longer strobes red: the board stays clean and readable from frame 0.)
+  const redFlash = ramp(sinceWrong, [0, 0.03, 0.5], [0, 0.85, 0]);
   // Full-frame crimson hit on the first 2 frames of a wrong guess.
   const redHit = ramp(sinceWrong, [0, 0.067], [0.28, 0]);
   const correctFrames = useMemo(
@@ -115,10 +113,9 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   );
   const sinceCorrect = framesSinceLast(correctFrames, frame);
   const bloom = ramp(sinceCorrect / fps, [0, 0.05, 0.6], [0, 0.45, 0]);
-  // White exposure pop on the correct impact frame, and a harder one on the hook's pattern interrupt.
-  const { pulseFrame, rattleFrames, endFrame: hookEnd } = timeline.hook;
-  const sincePulse = frame >= pulseFrame ? frame - pulseFrame : NEVER;
-  const whiteHit = Math.max(ramp(sinceCorrect, [0, 2], [0.18, 0]), ramp(sincePulse, [0, 3], [0.24, 0]));
+  // White exposure pop on the correct impact frame.
+  const { endFrame: hookEnd } = timeline.hook;
+  const whiteHit = ramp(sinceCorrect, [0, 2], [0.18, 0]);
 
   // Camera: wrong guesses shake the whole stage (x + y, out of phase); correct ones punch in.
   const wrongSince = framesSinceLast(timeline.wrongFrames, frame);
@@ -128,20 +125,12 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   // Overscan just enough while shaking that the frame edge never shows.
   // (origin is x centre / WORD_CENTER_Y, so the nearest edges are DESIGN_WIDTH/2 and WORD_CENTER_Y away)
   const overscan = 1.1 * Math.max(Math.abs(camX) / (DESIGN_WIDTH / 2), Math.abs(camY) / WORD_CENTER_Y);
-  // Zero-frame punch-in: frame 0 is already cut in tight (1.08×, no ramp), held 3 frames, then released by frame 9.
-  const F = (f: number) => Math.round((f * fps) / 30);
-  const slap = interpolate(frame, [F(3), F(9)], [1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) });
-  // Pattern interrupt (first tick): a hard camera kick that peaks on the pulse frame itself.
-  const kick = ramp(sincePulse, [0, F(7)], [1, 0]);
-  // Tension push-in across the rattle, released over the last frames before the first guess.
-  const [rattleFrom, rattleTo] = rattleFrames;
-  const tension = frame < rattleTo ? Easing.in(Easing.quad)(ramp(frame, [rattleFrom, rattleTo], [0, 1])) : ramp(frame, [rattleTo, hookEnd], [1, 0]);
-  const camScale = 1 + 0.035 * punch + 0.08 * slap + 0.04 * kick + 0.025 * tension + overscan;
-  const camera = camX || camY || punch || slap || kick || tension ?`translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
-  // A/B test B: frame 1 is the plain thumbnail card; the banner sits under it until it fades out.
-  const giant = props.openingStyle === "giant";
-  const giantHold = props.giantHookSeconds ?? DEFAULT_GIANT_HOOK_SECONDS;
-  const coldCover = giant ? coldOpenCover(frame, fps, durationInFrames, giantHold) : 0;
+  // Opening: ONE smooth zoom-in on the board over the first second (frame 0 = 1×, so the loop seam
+  // matches), held, then eased back out before the first guess lands.
+  const zoomIn =
+    Easing.out(Easing.cubic)(ramp(frame, [0, fps], [0, 1])) * (1 - Easing.inOut(Easing.cubic)(ramp(frame, [Math.round(1.6 * fps), hookEnd], [0, 1])));
+  const camScale = 1 + 0.035 * punch + 0.06 * zoomIn + overscan;
+  const camera = camX || camY || punch || zoomIn ? `translate(${camX.toFixed(2)}px, ${camY.toFixed(2)}px) scale(${camScale})` : undefined;
   const finalBloom = ramp((frame - timeline.finalRevealFrame) / fps, [0, 0.1, 1], [0, 0.35, 0.08]) * (1 - loopReset(frame, durationInFrames, fps, 0, 0.6));
 
   return (
@@ -152,7 +141,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
       {/* behind the header: pigeons start tucked behind the timer and fly out from it */}
       <Pigeons />
 
-      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} bannerOpacity={1 - coldCover} questionLine={props.questionLine ?? ""} />
+      <Header theme={theme} hookText={props.hookText} subtitle={props.subtitle} hint2={props.hint2 ?? ""} hint2At={Math.round(HINT2_AT_SECONDS * fps)} bannerPulse={timeline.hook.pulseFrame} wrongFrames={timeline.wrongFrames} boardTop={wordTop} tickFrames={timeline.tickFrames} stress={stress} questionLine={props.questionLine ?? ""} challenge={props.challenge ?? ""} />
       <WordBoard theme={theme} word={timeline.word} revealFrames={timeline.charRevealFrames} finalRevealFrame={timeline.finalRevealFrame} top={wordTop} hook={timeline.hook} />
       {uiVis > 0.001 && (
         <AbsoluteFill style={uiVis < 1 ? { opacity: uiVis, transform: `translateY(${(80 * (1 - uiVis)).toFixed(1)}px)` } : undefined}>
@@ -194,19 +183,6 @@ const ReelStage: React.FC<ReelProps> = (props) => {
         />
       )}
 
-      {giant && (
-        <ColdOpen
-          themeId={props.themeId}
-          hookText={props.hookText}
-          word={timeline.word}
-          hintLetter={timeline.hintLetter}
-          secondLetter={timeline.hook.prefilled.find((l) => l !== timeline.hintLetter) ?? ""}
-          category={props.category ?? ""}
-          backgroundImage={props.coldOpenBackground ?? ""}
-          holdSeconds={giantHold}
-        />
-      )}
-
       {props.showSafeZones && <SafeZones />}
     </AbsoluteFill>
   );
@@ -214,14 +190,7 @@ const ReelStage: React.FC<ReelProps> = (props) => {
 
 const AudioTrackForProps: React.FC<ReelProps> = (props) => {
   const timeline = useReelTimeline(props);
-  const { fps } = useVideoConfig();
-  const giant = props.openingStyle === "giant";
-  const hold = props.giantHookSeconds ?? DEFAULT_GIANT_HOOK_SECONDS;
-  const coldOpen = useMemo(() => {
-    if (!giant) return undefined;
-    return { exitFrame: coldOpenFrames(hold, fps).exit[0] };
-  }, [giant, hold, fps]);
-  return <AudioTrack timeline={timeline} audio={props.audio} coldOpen={coldOpen} />;
+  return <AudioTrack timeline={timeline} audio={props.audio} />;
 };
 
 const hatch = "repeating-linear-gradient(45deg, rgba(255,0,180,0.30) 0 18px, rgba(255,0,180,0.10) 18px 36px)";

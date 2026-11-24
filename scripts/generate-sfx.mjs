@@ -6,6 +6,7 @@
  *
  *   node scripts/generate-sfx.mjs              # (re)generate all
  *   node scripts/generate-sfx.mjs --if-missing # only create missing files
+ *   node scripts/generate-sfx.mjs --only music.wav,loop-rewind.wav  # just these files
  *
  * Replace any file in public/audio with your own licensed asset of the same
  * name and the composition will pick it up automatically.
@@ -17,6 +18,8 @@ import { fileURLToPath } from "node:url";
 const SR = 48000;
 const OUT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public", "audio");
 const IF_MISSING = process.argv.includes("--if-missing");
+const ONLY_ARG = process.argv.indexOf("--only");
+const ONLY = ONLY_ARG > 0 ? new Set((process.argv[ONLY_ARG + 1] ?? "").split(",").filter(Boolean)) : null;
 const TAU = Math.PI * 2;
 
 // ---------------------------------------------------------------- helpers
@@ -65,6 +68,7 @@ function fade([l, r], inSec, outSec) {
 function writeWav(name, [l, r]) {
   const file = path.join(OUT_DIR, name);
   if (IF_MISSING && fs.existsSync(file)) return;
+  if (ONLY && !ONLY.has(name)) return;
   const n = l.length, data = Buffer.alloc(44 + n * 4);
   data.write("RIFF", 0); data.writeUInt32LE(36 + n * 4, 4); data.write("WAVE", 8);
   data.write("fmt ", 12); data.writeUInt32LE(16, 16); data.writeUInt16LE(1, 20); data.writeUInt16LE(2, 22);
@@ -383,16 +387,17 @@ function slapPop() {
 // Keep in sync with HOOK_FRAMES_30 in src/remotion/hook.ts.
 /** The decode (and so the rewind) lasts the whole first second: frames 0 → clear (30). */
 const REWIND_SECONDS = 30 / 30;
-/** music.wav is placed on this frame (hook lock, musicIn[0]). */
-const MUSIC_START_FRAME_30 = 36;
+/** music.wav is placed on this frame (musicIn[0]): frame 0, so the beat runs from the first frame. */
+const MUSIC_START_FRAME_30 = 0;
 
 /**
  * 120 BPM staccato pizzicato cello + woodblock bed (D minor: Dm · Bb · Gm · A).
  * The grid is anchored so that, placed on MUSIC_START_FRAME_30, every bar
- * downbeat lands on a clock tick (frame 60, 120, …; 120 BPM = 2 beats per
- * tick). The 8ths before the first downbeat are an A-chord pickup into Dm.
+ * downbeat lands on a clock tick (frame 0, 60, 120, …; 120 BPM = 2 beats per
+ * tick). Placed on frame 0 the first downbeat is the very first sample, so the
+ * beat runs from the first frame (no silent pickup). 30 s covers the whole reel.
  */
-function music(seconds = 29) {
+function music(seconds = 30) {
   const out = buf(seconds), rnd = mulberry32(71);
   const [l, r] = out;
   const EIGHTH = 0.25;
@@ -428,9 +433,38 @@ function music(seconds = 29) {
   }
   lowpass(cello, 1400);
   highpass(cello, 50);
+
+  // Continuous floor under the staccato plucks (they decay in ~70 ms, which left near-silent gaps
+  // between notes): a soft sustained pad on each bar's chord (root + fifth + octave, slow swell),
+  // and a low kick on every beat so the pulse never drops out.
+  const pad = new Float32Array(l.length);
+  const kick = new Float32Array(l.length);
+  const BAR = 8 * EIGHTH;
+  for (let b = 0; DOWNBEAT + b * BAR < seconds; b++) {
+    const at = DOWNBEAT + b * BAR;
+    const root = roots[mod(b, 4)] / 2;
+    const start = Math.floor(at * SR), len = Math.floor((BAR + 0.15) * SR);
+    for (let j = 0; j < len && start + j < pad.length; j++) {
+      const t = j / SR;
+      const shape = Math.min(1, t / 0.06) * Math.min(1, (BAR + 0.15 - t) / 0.15); // quick swell, overlapping tail
+      const breath = 0.85 + 0.15 * Math.sin(TAU * 2 * t); // gentle movement on the beat
+      pad[start + j] += (Math.sin(TAU * root * t) + 0.55 * Math.sin(TAU * root * 1.5 * t) + 0.35 * Math.sin(TAU * root * 2 * t)) * shape * breath;
+    }
+  }
+  for (let k = 0; DOWNBEAT + k * 2 * EIGHTH < seconds; k++) {
+    const start = Math.floor((DOWNBEAT + k * 2 * EIGHTH) * SR);
+    const accent = k % 4 === 0 ? 1 : 0.7;
+    let ph = 0;
+    for (let j = 0; j < 0.22 * SR && start + j < kick.length; j++) {
+      const t = j / SR;
+      ph += (45 + 75 * Math.exp(-t / 0.03)) / SR; // 120 → 45 Hz drop
+      kick[start + j] += Math.sin(TAU * ph) * env(t, 0.002, 0.09) * accent;
+    }
+  }
+  lowpass(pad, 700);
   for (let i = 0; i < l.length; i++) {
-    l[i] = cello[i] * 0.9 + wood[i] * 0.8;
-    r[i] = cello[i] * 0.8 + wood[i] * 1.0;
+    l[i] = cello[i] * 0.9 + wood[i] * 0.8 + pad[i] * 0.16 + kick[i] * 0.55;
+    r[i] = cello[i] * 0.8 + wood[i] * 1.0 + pad[i] * 0.16 + kick[i] * 0.55;
   }
   fade(out, 0.02, 1.2);
   normalize(out, 0.8);

@@ -30,8 +30,6 @@ export function buildAudioCues(
   audio: ReelAudioSettings,
   fps: number,
   durationFrames: number,
-  /** A/B test B: when the frame-1 card starts to clear (a whoosh). */
-  coldOpen?: { exitFrame: number },
 ): AudioCue[] {
   if (!audio.enabled) return [];
   const { sfx } = audio;
@@ -44,11 +42,6 @@ export function buildAudioCues(
   // 1a'. Pattern interrupt on the first clock tick (1 s): the same pop under the camera kick + flash + banner re-slam.
   cues.push({ id: "hook-pulse", src: AUDIO.slapPop, from: timeline.hook.pulseFrame, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.7) });
 
-  // 1a''. A/B test B: a whoosh as the frame-1 card clears into the reel.
-  if (coldOpen) {
-    cues.push({ id: "cold-exit", src: AUDIO.whoosh, from: coldOpen.exitFrame, durationInFrames: seconds(AUDIO_SECONDS.whoosh, fps), volume: clamp01(sfx * 0.45) });
-  }
-
   // 1b. Machine-gun hook (decode 0–30): a sharp click on every decoy pop, click + thud on its ✖,
   //     then a metallic lock on the frame the last hint slot snaps in (4).
   const { hook } = timeline;
@@ -58,9 +51,7 @@ export function buildAudioCues(
   if (hook.decoys.length) {
     cues.push({ id: "hook-decode", src: AUDIO.hookDecode, from: 0, durationInFrames: Math.min(hook.clearFrame + 2, seconds(AUDIO_SECONDS.hookDecode, fps)), volume: clamp01(sfx) });
   }
-  // Tape rewind of the music bed under the whole decode, speeding up with the decoy cadence.
-  // Its Sequence hard-stops it on the clear frame (30); the same music then plays forward from the lock.
-  cues.push({ id: "hook-rewind", src: AUDIO.rewind, from: 0, durationInFrames: hook.clearFrame, volume: clamp01(Math.max(audio.music, 0.2) * 2) });
+  // (No reversed-music burst any more: the music bed plays forward from frame 0, see AudioTrack.)
   // The pre-filled letters are already seated on frame 0, so normally there is no lock moment
   // (only a one-letter word, with nothing to pre-fill but the hint, still snaps + locks).
   if (timeline.hintLetter && !hook.prefilled.length) {

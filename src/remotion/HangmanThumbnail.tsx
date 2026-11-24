@@ -1,6 +1,6 @@
 import React from "react";
 import { AbsoluteFill, Img, staticFile, useVideoConfig } from "remotion";
-import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_WIDTH, UPLOADS_DIR } from "./constants";
+import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_WIDTH } from "./constants";
 import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { getTheme, shadeA, type ThemeId } from "./themes";
 import { normalizeWord, resolveHintLetter } from "./timeline";
@@ -12,7 +12,7 @@ export type ThumbnailProps = {
   word: string;
   /** Pre-filled letter; "" = the word's first letter (same rule as the reel). */
   hintLetter: string;
-  /** Second letter on the board at frame 0 (the panel passes the reel's resolved value). */
+  /** Other letter(s) on the board at frame 0, e.g. "O" or "IG" (the panel passes the reel's resolved value). */
   secondLetter?: string;
   themeId: ThemeId;
   /** Library category tag, e.g. "TV ANTI-HERO". Empty = no tag. */
@@ -78,19 +78,6 @@ const FullBleedBackground: React.FC<{ image: string }> = ({ image }) => (
 );
 
 
-/**
- * An uploaded picture, full-bleed: cover-cropped, dimmed, with a dark vignette and a darker band
- * behind the headline + board so the text stays readable on any photo.
- */
-const CoverBackground: React.FC<{ image: string }> = ({ image }) => (
-  <AbsoluteFill style={{ background: "#07070c" }}>
-    <Img src={staticFile(image)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-    <AbsoluteFill style={{ background: "rgba(0,0,0,0.38)" }} />
-    <AbsoluteFill style={{ background: "radial-gradient(ellipse 85% 60% at 50% 48%, transparent 25%, rgba(0,0,0,0.75) 100%)" }} />
-    <AbsoluteFill style={{ background: "linear-gradient(180deg, transparent 18%, rgba(0,0,0,0.45) 32%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.45) 68%, transparent 82%)" }} />
-  </AbsoluteFill>
-);
-
 const PanelBackground: React.FC<{ image: string }> = ({ image }) => (
   <AbsoluteFill style={{ background: "#050608" }}>
     {PANEL_ROWS.map((row, r) => {
@@ -153,13 +140,7 @@ export const HangmanThumbnail: React.FC<ThumbnailProps> = (props) => {
   );
 };
 
-/** Which part of the card to draw: both (the thumbnail), or just the background / the text + board (ColdOpen animates them apart). */
-export type ThumbnailLayer = "all" | "background" | "content";
-
-/** The thumbnail layout on the 2160×3840 design canvas. Also test B's frame 1 in the reel (ColdOpen), without a picture. */
-export const ThumbnailCard: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = (props) => <ThumbnailStage {...props} />;
-
-const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
+const ThumbnailStage: React.FC<ThumbnailProps> = ({
   hookText,
   word: rawWord,
   hintLetter,
@@ -167,13 +148,12 @@ const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
   themeId,
   category,
   backgroundImage,
-  layer = "all",
 }) => {
   const theme = getTheme(themeId);
   const word = normalizeWord(rawWord) || "GUESS";
   const hint = resolveHintLetter(word, hintLetter);
   // Lit on the board: the hint + the second pre-filled letter, exactly as on the reel's frame 0.
-  const shown = new Set([hint, secondLetter.toUpperCase()].filter(Boolean));
+  const shown = new Set([hint, ...secondLetter.toUpperCase()].filter(Boolean));
   const headline = (hookText.trim() || "CAN YOU GUESS IT?").toUpperCase();
   const size = headlineSize(headline);
   const letters = word.replace(/ /g, "").length;
@@ -186,13 +166,10 @@ const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
 
   return (
     <AbsoluteFill>
-      {layer !== "content" &&
-        (backgroundImage ? (
+      {backgroundImage ? (
         <>
           {backgroundImage === CHARACTERS_PICTURE ? (
             <PanelBackground image={backgroundImage} />
-          ) : backgroundImage.startsWith(UPLOADS_DIR) ? (
-            <CoverBackground image={backgroundImage} />
           ) : (
             <FullBleedBackground image={backgroundImage} />
           )}
@@ -203,9 +180,8 @@ const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
           {/* darken the edges so the type pops */}
           <AbsoluteFill style={{ background: `radial-gradient(ellipse 85% 60% at 50% 48%, transparent 30%, ${shadeA(theme, 0.85)} 100%)` }} />
         </>
-      ))}
+      )}
 
-      {layer !== "background" && (
       <AbsoluteFill style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 150, padding: "0 140px" }}>
         {category?.trim() && (
           <div
@@ -304,7 +280,6 @@ const ThumbnailStage: React.FC<ThumbnailProps & { layer?: ThumbnailLayer }> = ({
           {letters} LETTERS · <span style={{ color: theme.accent }}>30 SECONDS</span>
         </div>
       </AbsoluteFill>
-      )}
     </AbsoluteFill>
   );
 };

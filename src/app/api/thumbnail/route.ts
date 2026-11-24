@@ -10,7 +10,7 @@ const thumbnailSchema = z.object({
   hookText: z.string().max(60),
   word: z.string().min(1).max(36).regex(/^[A-Za-z ]+$/, "Only letters and spaces"),
   hintLetter: z.string().regex(/^[A-Za-z]?$/).default(""),
-  secondLetter: z.string().regex(/^[A-Za-z]?$/).optional(),
+  secondLetter: z.string().regex(/^[A-Za-z]{0,2}$/).optional(),
   themeId: z.enum(THEME_IDS as [ThemeId, ...ThemeId[]]),
   category: z.string().max(40).optional(),
   backgroundImage: z.string().regex(/^[A-Za-z0-9_\-/.]*$/).refine((p) => !p.includes(".."), "Invalid path").optional(),

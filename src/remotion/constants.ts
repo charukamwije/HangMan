@@ -27,8 +27,6 @@ export const FPS = 30;
 /** Full length of the letter pattern (guesses, clock, reveal). The video may be cut shorter (durationSeconds). */
 export const DURATION_SECONDS = 30;
 export const DURATION_FRAMES = FPS * DURATION_SECONDS; // 900
-/** Pictures uploaded in the studio (test B's frame-1 background) live here under public/. */
-export const UPLOADS_DIR = "backgrounds/uploads/";
 /** Shortest video length (s) the studio offers. */
 export const MIN_DURATION_SECONDS = 10;
 /** Video length in whole seconds: durationSeconds clamped to 10–30, default the full 30. */
@@ -67,6 +65,8 @@ export const HINT2_AT_SECONDS = 10;
 
 /** Banner challenge, up and legible from frame 0 (hook.ts). Short = big type; power words take the accent (HookBanner). */
 export const DEFAULT_HOOK_TEXT = "99% FAIL THIS";
+/** Short challenge on the reel's top banner when none is set (the long hook is for the thumbnail). */
+export const DEFAULT_CHALLENGE = "99% FAIL THIS";
 /** Stress mode (vignette tightens, clock pulses) starts once the clock reads below this. */
 export const STRESS_BELOW_SECONDS = 8;
 /** Key-box shake amplitude, in output px at 1080 wide (scales with resolution: 10 px at 4K). */

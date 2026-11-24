@@ -54,7 +54,7 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
     // Hand-authored: the second letter (if not given) is the first correct guess; that guess is skipped.
     const ordered = [...manual].sort((a, b) => a.frame - b.frame).map((e) => ({ letter: e.letter.toUpperCase(), time: e.frame / fps }));
     secondLetter = resolveSecondLetter(word, prefilledLetter, ordered, COUNTDOWN_ENDS_AT, secondLetter);
-    const seen = new Set<string>([prefilledLetter, secondLetter]);
+    const seen = new Set<string>([prefilledLetter, ...secondLetter]);
     guesses = [];
     for (const e of [...manual].sort((a, b) => a.frame - b.frame)) {
       const l = e.letter.toUpperCase();
@@ -97,8 +97,6 @@ export function calculateFrameTimeline(puzzle: HangmanPuzzleData, fps = 30): Fra
     audio: { ...DEFAULT_REEL_PROPS.audio, ...puzzle.audio },
     showSafeZones: false,
     ...(puzzle.durationSeconds ? { durationSeconds: puzzle.durationSeconds } : {}),
-    ...(puzzle.openingStyle ? { openingStyle: puzzle.openingStyle } : {}),
-    ...(puzzle.giantHookSeconds !== undefined ? { giantHookSeconds: puzzle.giantHookSeconds } : {}),
   };
 
   // ---- 3. Resolve with the same engine the composition renders with --------

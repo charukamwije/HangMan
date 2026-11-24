@@ -1,8 +1,6 @@
 import type { ThemeId } from "./themes";
 
 
-export type OpeningStyle = "standard" | "giant";
-
 /** One guess on the timeline. Whether it is correct is derived from the word. */
 export type Guess = { letter: string; time: number };
 
@@ -17,6 +15,11 @@ export type ReelAudioSettings = {
 export type ReelProps = {
   /** Top banner challenge text, legible from frame 0, e.g. "99% FAIL THIS". Empty → "GUESS THE WORD". */
   hookText: string;
+  /**
+   * Short challenge on the reel's top banner for the whole video, e.g. "99% FAIL THIS". Empty / missing
+   * = DEFAULT_CHALLENGE. The longer `hookText` is the thumbnail / test-B frame-1 headline.
+   */
+  challenge?: string;
   /** Opening plate over the hint card (0–1.85 s). Empty / missing = "ONLY REAL FANS GET THIS IN 5 SECONDS". */
   questionLine?: string;
   /** Hint 1, shown from the start. */
@@ -35,18 +38,6 @@ export type ReelProps = {
   audio: ReelAudioSettings;
   /** Preview-only overlay of platform UI safe zones. Forced off for renders. */
   showSafeZones: boolean;
-  /**
-   * A/B test, frame 1: "standard" (A, default) = the current opening; "giant" (B) = the plain
-   * thumbnail as frame 1 (category tag, giant headline, board, "N LETTERS · 30 SECONDS"), which
-   * fades into the reel after `giantHookSeconds`.
-   */
-  openingStyle?: OpeningStyle;
-  /** Test B: library category tag shown on the frame-1 card (e.g. "K-DRAMA PLACE"). Empty = none. */
-  category?: string;
-  /** Test B: picture behind the frame-1 card (uploaded, under public/backgrounds/uploads/). Empty = the shelves. */
-  coldOpenBackground?: string;
-  /** Test B: how long (s) the frame-1 card stays up before it fades into the reel. Default 0.25. */
-  giantHookSeconds?: number;
   /**
    * Video length in whole seconds (10–30, default 30). The video is cut there and loops back to
    * 0 s; the letter pattern keeps its 30 s timing (anything after the cut is not in the video).

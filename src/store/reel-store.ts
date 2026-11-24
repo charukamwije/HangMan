@@ -4,8 +4,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { DEFAULT_INPUT, DEFAULT_REEL_PROPS } from "@/remotion/defaults";
 import type { ThemeId } from "@/remotion/themes";
-import { clampTime, normalizeWord, parseLetters, scheduleWithSecondLetter } from "@/remotion/timeline";
-import type { Guess, OpeningStyle, ReelAudioSettings, ReelProps } from "@/remotion/types";
+import { clampTime, correctFirst, normalizeWord, parseLetters, scheduleWithSecondLetter } from "@/remotion/timeline";
+import type { Guess, ReelAudioSettings, ReelProps } from "@/remotion/types";
 import { FPS } from "@/remotion/constants";
 import { DEFAULT_LIBRARY_ID, getLibrary, libraryFileBase, type LibraryId } from "@/data/library";
 import { calculateFrameTimeline, parsePuzzle, type HangmanPuzzleData } from "@/remotion/puzzle";
@@ -14,6 +14,8 @@ export type ReelState = {
   hookText: string;
   /** Opening plate (0–2 s); "" = "ONLY REAL FANS GET THIS IN 5 SECONDS". Set per video by the library. */
   questionLine: string;
+  /** Short challenge on the top banner ("" = "99% FAIL THIS"). Set per video by the library (its CSV column, or the default). */
+  challenge: string;
   subtitle: string;
   hint2: string;
   word: string;
@@ -36,12 +38,6 @@ export type ReelState = {
   autoTiming: boolean;
   audio: ReelAudioSettings;
   showSafeZones: boolean;
-  /** A/B test, frame 1: "standard" (A) or "giant" (B: giant spelling-challenge hook). */
-  openingStyle: OpeningStyle;
-  /** Test B: seconds the giant hook stays up before it flies into the banner. */
-  giantHookSeconds: number;
-  /** Test B: uploaded picture behind the frame-1 card ("" = the shelves). Kept while you step through videos. */
-  coldOpenBackground: string;
   /** Video length (s, 10–30): the video is cut there and loops; the pattern keeps its 30 s timing. */
   durationSeconds: number;
   /** Thumbnail background picture under public/; "" = the shelf scene. The video always uses the shelves. */
@@ -74,6 +70,7 @@ export const DEFAULT_BACKGROUND_IMAGE = "backgrounds/characters.jpg";
 const INITIAL: ReelState = {
   hookText: DEFAULT_INPUT.hookText,
   questionLine: "",
+  challenge: "",
   subtitle: DEFAULT_INPUT.subtitle,
   hint2: DEFAULT_INPUT.hint2,
   word: DEFAULT_INPUT.word,
@@ -89,9 +86,6 @@ const INITIAL: ReelState = {
   audio: DEFAULT_REEL_PROPS.audio,
   showSafeZones: false,
   durationSeconds: 30,
-  openingStyle: "standard",
-  giantHookSeconds: 0.25,
-  coldOpenBackground: "",
   libraryId: DEFAULT_LIBRARY_ID,
   videoNumber: null,
   backgroundImage: DEFAULT_BACKGROUND_IMAGE,
@@ -131,13 +125,15 @@ export const useReelStore = create<ReelState & Actions>()(
         const lib = getLibrary(get().libraryId);
         const v = lib.entries.find((e) => e.n === n);
         if (!v) return;
-        // Second letter on frame 0: the CSV's own second pre-filled letter when it has one, else the
+        // Other letter(s) on frame 0: the CSV's own extra pre-filled letters when it has them, else the
         // first correct guess (taken out of the guesses). The rest keep one guess every 3 s from 2 s.
         const second = v.prefill2 || (v.guesses.find((g) => g.correct && g.letter !== v.prefill)?.letter ?? "");
         set({
           videoNumber: v.n,
           hookText: v.hookText,
           questionLine: v.questionLine ?? "",
+          // The CSV's own top-banner challenge, or "" (= the default "99% FAIL THIS").
+          challenge: v.challenge ?? "",
           subtitle: v.hint1,
           hint2: v.hint2,
           word: v.word,
@@ -146,10 +142,13 @@ export const useReelStore = create<ReelState & Actions>()(
           autoSecondLetter: second,
           wrongLetters: v.guesses.filter((g) => !g.correct).map((g) => g.letter).join(", "),
           finalRevealAt: LIBRARY_FINAL_REVEAL,
-          guesses: v.guesses
-            .filter((g) => g.letter !== second)
-            .map((g, i) => ({ letter: g.letter, time: LIBRARY_FIRST_GUESS + LIBRARY_GUESS_GAP * i })),
-          // Keep the CSV's exact reveal order: editing the word / pacing must not re-time it.
+          // CSV reveal order, except that the first guess is always a correct one (progress at 2.0 s,
+          // not "OOPS!"): the first correct letter moves to the front, the rest keep their order.
+          guesses: correctFirst(
+            v.guesses.filter((g) => !second.includes(g.letter)),
+            (g) => g.correct,
+          ).map((g, i) => ({ letter: g.letter, time: LIBRARY_FIRST_GUESS + LIBRARY_GUESS_GAP * i })),
+          // Keep that reveal order: editing the word / pacing must not re-time it.
           autoTiming: false,
           themeId: lib.themeId,
         });
@@ -200,21 +199,24 @@ export const useReelStore = create<ReelState & Actions>()(
           guesses: t.reelProps.guesses,
           autoTiming: t.mode === "auto",
           durationSeconds: puzzle.durationSeconds ?? 30,
-          openingStyle: puzzle.openingStyle ?? "standard",
-          giantHookSeconds: puzzle.giantHookSeconds ?? 0.25,
         });
       },
       reset: () => set(INITIAL),
     }),
     {
       name: "hangman-reel-studio",
-      version: 11,
+      version: 13,
       // v1 → v2: 30 fps beat grid + hook fields. v2 → v3: second pre-filled letter (re-timed if auto;
       // with manual timing it is re-derived from the first correct guess). Keeps the user's content.
       migrate: (persisted, version) => {
-        const { hookTests: _dropped, ctaStyle: _cta, ...rest } = persisted as Partial<ReelState> & { hookTests?: unknown; ctaStyle?: unknown };
-        void _dropped;
-        void _cta;
+        const { hookTests: _dropped, ctaStyle: _cta, openingStyle: _o, giantHookSeconds: _g, coldOpenBackground: _c, ...rest } = persisted as Partial<ReelState> & {
+          hookTests?: unknown;
+          ctaStyle?: unknown;
+          openingStyle?: unknown;
+          giantHookSeconds?: unknown;
+          coldOpenBackground?: unknown;
+        };
+        void [_dropped, _cta, _o, _g, _c];
         const p: ReelState = { ...INITIAL, ...rest };
         // v3 → v4: Midnight Noir is the default theme; move anyone still on the old default to it.
         if (version < 4 && p.themeId === "dark-academia") p.themeId = DEFAULT_REEL_PROPS.themeId;
@@ -234,21 +236,22 @@ export const useReelStore = create<ReelState & Actions>()(
 /**
  * File-name base while a library video is loaded, e.g. "kdrama-007-HONEYCOMB" / "video-012-DEMOGORGON"
  * (so renders, screenshots and thumbnails can be matched to posts); `fallback` for custom content.
- * Test B gets "-B" and a cut video its length ("-20s").
+ * A cut video gets its length ("-20s").
  */
-export const videoFileBase = (s: Pick<ReelState, "libraryId" | "videoNumber" | "word" | "durationSeconds" | "openingStyle">, fallback = "") => {
+export const videoFileBase = (s: Pick<ReelState, "libraryId" | "videoNumber" | "word" | "durationSeconds">, fallback = "") => {
   const base = s.videoNumber ? libraryFileBase(s.libraryId, s.videoNumber, s.word.trim().replace(/\s+/g, "-")) : fallback;
   // Cut videos are tagged with their length, e.g. kdrama-007-HONEYCOMB-20s.
-  // Test B (giant frame-1 hook) is tagged "-B"; cut videos get their length, e.g. kdrama-007-HONEYCOMB-B-20s.
+  // Cut videos get their length, e.g. kdrama-007-HONEYCOMB-20s.
   const len = s.durationSeconds ?? 30;
   if (!base) return base;
-  return `${base}${s.openingStyle === "giant" ? "-B" : ""}${len !== 30 ? `-${len}s` : ""}`;
+  return `${base}${len !== 30 ? `-${len}s` : ""}`;
 };
 
 /** Maps editor state to the serializable composition input props. */
 export const toReelProps = (s: ReelState): ReelProps => ({
   hookText: s.hookText,
   ...(s.questionLine?.trim() ? { questionLine: s.questionLine.trim() } : {}),
+  ...(s.challenge?.trim() ? { challenge: s.challenge.trim() } : {}),
   subtitle: s.subtitle,
   hint2: s.hint2 ?? "",
   word: normalizeWord(s.word),
@@ -260,10 +263,6 @@ export const toReelProps = (s: ReelState): ReelProps => ({
   audio: s.audio,
   showSafeZones: s.showSafeZones,
   durationSeconds: s.durationSeconds ?? 30,
-  openingStyle: s.openingStyle ?? "standard",
-  giantHookSeconds: s.giantHookSeconds ?? 0.25,
-  ...(s.coldOpenBackground ? { coldOpenBackground: s.coldOpenBackground } : {}),
-  category: s.videoNumber ? (getLibrary(s.libraryId).entries.find((v) => v.n === s.videoNumber)?.category ?? "") : "",
   // The video keeps the shelf scene; the picture (backgroundImage) is used by the thumbnail only.
 });
 
@@ -290,6 +289,5 @@ export const toPuzzleData = (s: ReelState): HangmanPuzzleData => {
     themeId: s.themeId,
     audio: s.audio,
     ...((s.durationSeconds ?? 30) !== 30 ? { durationSeconds: s.durationSeconds } : {}),
-    ...(s.openingStyle === "giant" ? { openingStyle: "giant" as const, giantHookSeconds: s.giantHookSeconds ?? 0.25 } : {}),
   };
 };

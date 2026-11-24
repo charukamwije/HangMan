@@ -5,8 +5,8 @@ import type { Stress } from "../motion";
 import { BODY_FONT } from "../fonts";
 import { HookBanner } from "./HookBanner";
 import { CLOCK, CountdownTimer } from "./CountdownTimer";
-import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW } from "../constants";
-import { HintOwl, OWL_ABOVE, THROW_HIT_SECONDS } from "./HintOwl";
+import { DESIGN_HEIGHT, DESIGN_WIDTH, SAFE_ZONE, TOP_ROW, DEFAULT_CHALLENGE } from "../constants";
+import { HintOwl, OWL_ABOVE } from "./HintOwl";
 import { ramp } from "../motion";
 import { loopReset, loopResetStart } from "../loop";
 import { HOOK_UI_TIMING } from "../hook";
@@ -170,47 +170,53 @@ export const Header: React.FC<{
   hint2At: number;
   /** Pattern-interrupt frame: the banner re-slams. */
   bannerPulse: number;
-  /** Every wrong guess re-blurs the hint, which then reveals word by word again. */
+  /** Wrong-guess frames: the owl throws water at the card (the hint text itself stays sharp). */
   wrongFrames: readonly number[];
   /** y of the word board's top edge. */
   boardTop: number;
   tickFrames: number[];
   stress: Stress;
-  /** A/B test B: the banner hides under the giant hook card (0) and fades in as the card flies up. Default 1. */
-  bannerOpacity?: number;
   /** Opening plate text; "" = the default question line. */
   questionLine?: string;
-}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, bannerOpacity = 1, questionLine = "" }) => {
+  /** Short challenge on the top banner; "" = DEFAULT_CHALLENGE. */
+  challenge?: string;
+}> = ({ theme, hookText, subtitle, hint2 = "", hint2At, bannerPulse, wrongFrames, boardTop, tickFrames, stress, questionLine = "", challenge = "" }) => {
+  // The top banner carries a SHORT challenge (one line), not the long hook: less to read before the puzzle.
+  const bannerText = challenge.trim() || DEFAULT_CHALLENGE;
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
-  const wrongBlurIn = Math.max(2, Math.round(fps * 0.1));
-  // Hint 2 switch: hint 1 blurs out from hint2At like a wrong-guess hit, the text swaps once it is
-  // fully blurred, then hint 2 reveals word by word with the same timing.
+  // The hints are never blurred: they stay sharp and readable. Wrong guesses (the owl's water throw)
+  // leave the text alone. Text only changes by fading / sliding in, word by word.
+  const fadeOut = Math.max(2, Math.round(fps * 0.1));
+  // Hint 2 switch: hint 1 fades out from hint2At, the text swaps once it has gone, then hint 2 comes in
+  // word by word (sharp) with the same timing.
   const hasHint2 = hint2.trim() !== "";
-  const current = hasHint2 && frame >= hint2At + wrongBlurIn ? hint2 : subtitle;
-  // On a wrong guess the owl throws water: the hint blurs when the splash lands, not on the guess.
-  const splashFrames = wrongFrames.map((f) => f + Math.round(THROW_HIT_SECONDS * fps));
-  const blurEvents = hasHint2 ? [...splashFrames, hint2At] : splashFrames;
-  // Water on the card: ripple distortion + running ink, strongest right after the splash.
-  const lastSplash = splashFrames.reduce((acc, f) => (f <= frame && f > acc ? f : acc), -Infinity);
-  const wet = Number.isFinite(lastSplash) ? ramp((frame - lastSplash) / fps, [0, 0.05, 1.4], [0, 1, 0]) : 0;
-  // Word-by-word reveal; each word takes WORD_FRAMES to sharpen, starts spread across the window.
+  const current = hasHint2 && frame >= hint2At + fadeOut ? hint2 : subtitle;
+  const switchEvents = hasHint2 ? [hint2At] : [];
   const words = current.trim().split(/\s+/).filter(Boolean);
   const WORD_FRAMES = Math.max(3, Math.round(fps * 0.2));
-  // Wrong guess: all words blur in ~0.1 s on the strike, then re-reveal word by word from +0.2 s to +1.0 s.
-  const lastWrong = blurEvents.reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
-  const wrongFrom = Math.round(fps * 0.2);
-  const wrongStagger = words.length > 1 ? Math.max(1, (Math.round(fps * 1.0) - wrongFrom - WORD_FRAMES) / (words.length - 1)) : 0;
-  const wrongHidden = (i: number) => {
-    if (!Number.isFinite(lastWrong)) return 0;
-    const start = lastWrong + wrongFrom + i * wrongStagger;
-    return ramp(frame, [lastWrong, lastWrong + wrongBlurIn], [0, 1]) * (1 - ramp(frame, [start, start + WORD_FRAMES], [0, 1]));
+  const lastSwitch = switchEvents.reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
+  const switchFrom = Math.round(fps * 0.2);
+  const switchStagger = words.length > 1 ? Math.max(1, (Math.round(fps * 1.0) - switchFrom - WORD_FRAMES) / (words.length - 1)) : 0;
+  // Opening: hint 1 stays hidden under the question line, then reveals word by word once the plate has
+  // cleared (end of HOOK_UI_TIMING.questionOut), over ~0.6 s, so the two texts never overlap.
+  const revealAt = Math.round(HOOK_UI_TIMING.questionOut[1] * fps);
+  const openStagger = words.length > 1 ? Math.max(1, (Math.round(fps * 0.6) - WORD_FRAMES) / (words.length - 1)) : 0;
+  const openingHidden = (i: number) => {
+    if (frame >= hint2At) return 0;
+    const start = revealAt + i * openStagger;
+    return 1 - ramp(frame, [start, start + WORD_FRAMES], [0, 1]);
   };
-  // "HINT" chip does a full 3D flip whenever the hint blurs: on every wrong guess and as the
-  // loop reset starts (that flip ends before the last frame, so the replay starts on a still chip).
+  const switchHidden = (i: number) => {
+    if (!Number.isFinite(lastSwitch)) return 0;
+    const start = lastSwitch + switchFrom + i * switchStagger;
+    return ramp(frame, [lastSwitch, lastSwitch + fadeOut], [0, 1]) * (1 - ramp(frame, [start, start + WORD_FRAMES], [0, 1]));
+  };
+  // "HINT" chip does a full 3D flip when the clue changes: as hint 1 comes in, at the hint-2 switch and as
+  // the loop reset starts (that flip ends before the last frame, so the replay starts on a still chip).
   const FLIP = Math.round(fps / 3);
   const loopStart = loopResetStart(durationInFrames, fps);
-  const flipFrom = [...blurEvents, loopStart].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
+  const flipFrom = [...switchEvents, revealAt, loopStart].reduce((last, f) => (f <= frame && f > last ? f : last), -Infinity);
   const flip = Number.isFinite(flipFrom) ? interpolate(frame - flipFrom, [0, FLIP], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.cubic) }) : 1;
   const flipping = flip > 0 && flip < 1;
   const t = frame / fps;
@@ -232,15 +238,8 @@ export const Header: React.FC<{
   return (
     <>
       {/* The banner is up from frame 0. */}
-      {bannerOpacity > 0.001 &&
-        (bannerOpacity < 1 ? (
-          <div style={{ opacity: bannerOpacity }}>
-            <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
-          </div>
-        ) : (
-          <HookBanner theme={theme} text={hookText} pulseFrame={bannerPulse} />
-        ))}
-      {/* The clock fades + scales in at 1.5 s, with "COMMENT BEFORE 0:00" under it. */}
+      <HookBanner theme={theme} text={bannerText} pulseFrame={bannerPulse} />
+      {/* The clock is up and ticking from frame 0, with "COMMENT BEFORE 0:00" under it. */}
       <StagedClock>
         <CountdownTimer theme={theme} tickFrames={tickFrames} stress={stress} />
       </StagedClock>
@@ -297,18 +296,9 @@ export const Header: React.FC<{
               {HINT_LABEL}
             </div>
             {hasHint2 && <NextHintChip theme={theme} frame={frame} fps={fps} hint2At={hint2At} back={loopReset(frame, durationInFrames, fps, 0.4, 1)} />}
-            {wet > 0.01 && (
-              <svg width={0} height={0} style={{ position: "absolute" }}>
-                <filter id="hintWater" x="-10%" y="-20%" width="120%" height="160%">
-                  <feTurbulence type="fractalNoise" baseFrequency="0.006 0.018" numOctaves={1} seed={Math.floor(frame / 4) % 97} result="noise" />
-                  <feDisplacementMap in="SourceGraphic" in2="noise" scale={(34 * wet).toFixed(1)} xChannelSelector="R" yChannelSelector="G" />
-                </filter>
-              </svg>
-            )}
             <div style={{ minHeight: textMinHeight, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div
               style={{
-                filter: wet > 0.01 ? "url(#hintWater)" : undefined,
                 fontFamily: BODY_FONT,
                 fontWeight: 800,
                 fontSize: SUBTITLE_SIZE,
@@ -321,16 +311,15 @@ export const Header: React.FC<{
               }}
             >
               {words.map((w, i) => {
-                // Sharp from frame 0; wrong-guess splashes / the hint-2 switch re-blur it, then it reveals word by word.
-                const p = Math.max(1 - wrongHidden(i), 0);
+                // Comes in word by word as the question line clears, and again at the hint-2 switch. Never blurred.
+                const p = Math.max(Math.min(1 - switchHidden(i), 1 - openingHidden(i)), 0);
                 return (
                   <React.Fragment key={i}>
                     {i > 0 && " "}
                     <span
                       style={{
                         display: "inline-block",
-                        filter: p < 1 ? `blur(${(1 - p) * 26}px)` : undefined,
-                        opacity: 0.45 + 0.55 * p,
+                        opacity: p,
                         transform: p < 1 ? `translateY(${(1 - p) * 14}px) scale(${1.06 - 0.06 * p})` : undefined,
                       }}
                     >
@@ -359,7 +348,7 @@ const hex2 = (a: number) =>
     .toString(16)
     .padStart(2, "0");
 
-/** Wraps the clock so it fades and scales in over HOOK_UI_TIMING.timerIn. */
+/** Wraps the clock so it fades and scales in over HOOK_UI_TIMING.timerIn (now frame 0: always up). */
 const StagedClock: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();

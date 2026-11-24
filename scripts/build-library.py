@@ -6,7 +6,7 @@ Builds the studio's video libraries from the CSVs in puzzles/:
 
 and src/data/library.ts (types + the LIBRARIES list the studio's dropdown uses).
 Checks every row (prefill letter, yes/miss against the answer, end board). Rows that fail are
-skipped and listed (e.g. three letters pre-filled; the reel seats two); the video keeps its CSV number so numbering never shifts.
+skipped and listed (e.g. more than three letters pre-filled); the video keeps its CSV number so numbering never shifts.
 
     python scripts/build-library.py
 """
@@ -32,14 +32,15 @@ def build(csv_name):
             n = int(r["#"])
             word = r["Answer"].strip().upper()
             board0 = r["Board at 0 s"].split()
-            prefill = sorted({c for c in board0 if c != "_"})
+            # In board order (left → right): the first pre-filled letter is the hint, the others follow.
+            prefill = list(dict.fromkeys(c for c in board0 if c != "_"))
             guesses = [(m[0], m[1] == "yes") for m in re.findall(r"\d+\.\s*([A-Z])\((yes|miss)\)", r["Reveal order (one guess about every 3 s)"])]
             bad = []
             if len(board0) != len(word):
                 bad.append(f"board at 0 s has {len(board0)} slots, answer has {len(word)}")
-            # One letter on the board at 0 s, or two (hint + 2nd letter): the reel seats at most two.
-            if len(prefill) not in (1, 2):
-                bad.append(f"expected one or two pre-filled letters, got {prefill}")
+            # One to three letters on the board at 0 s: the hint + up to two more.
+            if not 1 <= len(prefill) <= 3:
+                bad.append(f"expected one to three pre-filled letters, got {prefill}")
             for i, c in enumerate(board0):
                 if c != "_" and (i >= len(word) or word[i] != c):
                     bad.append(f"board at 0 s letter {c} is not at slot {i + 1}")
@@ -62,13 +63,16 @@ def build(csv_name):
                     "hint1": r["Hint 1 (0 s)"].strip(),
                     "hint2": r["Hint 2 (at 15 s)"].strip(),
                     "prefill": prefill[0],
-                    # Second letter already on the board at 0 s ("" = none: the first correct guess is used).
-                    "prefill2": prefill[1] if len(prefill) > 1 else "",
+                    # Other letter(s) already on the board at 0 s ("" = none: the first correct guess is used).
+                    "prefill2": "".join(prefill[1:]),
                     "guesses": [{"letter": l, "correct": yes} for l, yes in guesses],
                     # "Show" (current CSVs) or "Source" (older CSV): the series the word comes from.
                     "source": (r.get("Show") or r.get("Source") or "").strip(),
                     # Optional: replaces "ONLY REAL FANS GET THIS IN 5 SECONDS" on the opening plate ("" = default).
-                    "questionLine": (r.get("Question line (0–2 s)") or "").strip().upper(),
+                    # ("Question line (0–2 s)" is the column's old name, still accepted.)
+                    "questionLine": (r.get("Confusion line (0–3 s)") or r.get("Question line (0–2 s)") or "").strip().upper(),
+                    # Optional: the short challenge on the reel's top banner ("" = "99% FAIL THIS").
+                    "challenge": (r.get("Top banner challenge") or "").strip().upper(),
                 }
             )
     return rows, errors
@@ -119,13 +123,15 @@ export type LibraryEntry = {{
   hint2: string;
   /** The letter already on the board at 0 s. */
   prefill: string;
-  /** A second letter already on the board at 0 s ("" = none; the first correct guess is pre-filled instead). */
+  /** Other letter(s) already on the board at 0 s, e.g. "O" or "GI" ("" = none; the first correct guess is pre-filled instead). */
   prefill2: string;
   /** Reveal order: one guess about every 3 s. */
   guesses: LibraryGuess[];
   source: string;
   /** Opening plate text (0–2 s); "" = the default "ONLY REAL FANS GET THIS IN 5 SECONDS". */
   questionLine: string;
+  /** Short challenge on the top banner for the whole video; "" = the default "99% FAIL THIS". */
+  challenge: string;
 }};
 
 export type LibraryId = {ids};

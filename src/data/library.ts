@@ -19,13 +19,15 @@ export type LibraryEntry = {
   hint2: string;
   /** The letter already on the board at 0 s. */
   prefill: string;
-  /** A second letter already on the board at 0 s ("" = none; the first correct guess is pre-filled instead). */
+  /** Other letter(s) already on the board at 0 s, e.g. "O" or "GI" ("" = none; the first correct guess is pre-filled instead). */
   prefill2: string;
   /** Reveal order: one guess about every 3 s. */
   guesses: LibraryGuess[];
   source: string;
   /** Opening plate text (0–2 s); "" = the default "ONLY REAL FANS GET THIS IN 5 SECONDS". */
   questionLine: string;
+  /** Short challenge on the top banner for the whole video; "" = the default "99% FAIL THIS". */
+  challenge: string;
 };
 
 export type LibraryId = "kdrama" | "other";

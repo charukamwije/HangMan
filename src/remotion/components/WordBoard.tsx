@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
-import { interpolate, random, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { shadeA, type Theme } from "../themes";
 import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, NEVER, ramp, strikeShake } from "../motion";
 import { loopReset } from "../loop";
 import { SAFE_WIDTH, SAFE_ZONE } from "../constants";
-import type { HookPlan } from "../hook";
+import { CLEAN_OPENING, type HookPlan } from "../hook";
 import { DecodeScan, HookDecoys, HookRattle } from "./OpeningHook";
 
 const MAX_LINE = 12;
@@ -68,14 +68,18 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
 
   // Each hook ✖ kicks the whole board sideways and punches it down a touch.
   const sinceStrike = frame < hook.clearFrame ? framesSinceLast(hook.strikeFrames, frame) : NEVER;
-  // Rattle (30 → 57): a fine, growing tremor keeps the board alive between the wipe and the first guess.
-  const [rattleFrom, rattleTo] = hook.rattleFrames;
-  const rattling = frame >= rattleFrom && frame < rattleTo;
-  const tremor = rattling ? (random(`tremor-${frame}`) - 0.5) * tile * (0.015 + 0.035 * ramp(frame, [rattleFrom, rattleTo], [0, 1])) : 0;
-  const kickX = strikeShake(sinceStrike, fps, tile * 0.12) + tremor;
-  // Strikes dip the board; the pattern-interrupt frame dips it harder.
+  // Clean opening: no ghost-glyph rattle or tremor; the board holds still and readable.
+  const [, rattleTo] = hook.rattleFrames;
+  const rattling = !CLEAN_OPENING && frame >= hook.rattleFrames[0] && frame < rattleTo;
+  const kickX = strikeShake(sinceStrike, fps, tile * 0.12);
   const sincePulse = frame >= hook.pulseFrame ? frame - hook.pulseFrame : NEVER;
-  const kickScale = 1 - 0.025 * ramp(sinceStrike, [0, 4], [1, 0]) - 0.04 * ramp(sincePulse, [0, 5], [1, 0]);
+  const kickScale = 1 - 0.025 * ramp(sinceStrike, [0, 4], [1, 0]);
+  // Pulsing blanks (frame 0 → first guess): the empty slots breathe an accent outline + glow at ~2 Hz,
+  // starting from rest on frame 0 (so the loop seam matches) and fading out into the first guess.
+  const blankPulse =
+    frame < hook.endFrame
+      ? (0.5 - 0.5 * Math.cos((frame / fps) * Math.PI * 2 * 2)) * (1 - ramp(frame, [hook.endFrame - Math.round((6 * fps) / 30), hook.endFrame], [0, 1]))
+      : 0;
   // Hook snaps start this many frames into their spring, so the lock frame already shows the letter seated ~75 %.
   const snapLead = Math.round((2 * fps) / 30);
 
@@ -143,7 +147,9 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
             const hintHalo = snap && shown && frame < hook.endFrame ? (1 - ramp(frame, [hook.endFrame - Math.round((6 * fps) / 30), hook.endFrame], [0, 1])) * (0.7 + 0.3 * Math.cos((frame / fps) * Math.PI * 2 * 2)) : 0;
             const decoys = decoysBySlot.get(idx);
             const wave = (solved ? Math.max(0, Math.sin(sinceSolved * 6.7 - idx * 0.5)) * 0.25 : 0) * settle;
-            const lift = shown ? loopReset(frame, durationInFrames, fps, 0.45 + 0.35 * (idx / Math.max(1, word.length - 1)), 0.65 + 0.35 * (idx / Math.max(1, word.length - 1))) : 0;
+            // Letters pre-filled on frame 0 (seated from a negative frame) stay in their slots through the
+            // loop reset, so the last frame matches frame 0; every other letter lifts out.
+            const lift = shown && at >= 0 ? loopReset(frame, durationInFrames, fps, 0.45 + 0.35 * (idx / Math.max(1, word.length - 1)), 0.65 + 0.35 * (idx / Math.max(1, word.length - 1))) : 0;
             // Settled glow is kept tight so it doesn't haze the slot outline; the flash still blooms.
             const glow = 8 + 60 * flash + 24 * wave + 34 * hintHalo;
 
@@ -173,19 +179,20 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                     // Filled slots: solid, slightly thicker accent outline with a crisp dark keyline
                     // either side, so the edge stays sharp under the letter's glow.
                     // Once its letter is in, the outline dims (bright as it lands, settling to a soft accent) so the letter stands out.
-                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, ramp(since / fps, [0, 0.25, 0.75], [1, 1, FILLED_OUTLINE_ALPHA]), lift, theme.emptyRgb) : `rgba(${theme.emptyRgb},0.45)`}`,
+                    border: `${Math.max(3, Math.round(tile * (shown ? 0.03 : 0.022)))}px solid ${shown ? slotBorder(theme.accent, ramp(since / fps, [0, 0.25, 0.75], [1, 1, FILLED_OUTLINE_ALPHA]), lift, theme.emptyRgb) : blankPulse > 0.001 ? blankBorder(theme.accent, blankPulse, theme.emptyRgb) : `rgba(${theme.emptyRgb},0.45)`}`,
                     boxShadow: [
                       shown
                         ? `inset 0 0 0 2px ${shadeA(theme, 0.75)}, 0 0 0 2px ${shadeA(theme, 0.75)}, 0 4px 14px ${shadeA(theme, 0.6)}`
                         : `inset 0 0 0 1px ${shadeA(theme, 0.5)}, 0 4px 14px ${shadeA(theme, 0.6)}`,
                       flash ? `0 0 ${80 * flash}px ${theme.accent}66, inset 0 0 ${60 * flash}px ${theme.accent}55` : "",
+                      !shown && blankPulse > 0.001 ? `0 0 ${(tile * 0.35 * blankPulse).toFixed(1)}px ${theme.accent}55, inset 0 0 ${(tile * 0.22 * blankPulse).toFixed(1)}px ${theme.accent}33` : "",
                     ]
                       .filter(Boolean)
                       .join(", "),
                   }}
                 />
                 {decoys && frame < hook.clearFrame && <HookDecoys decoys={decoys} tile={tile} />}
-                {rattling && !shown && <HookRattle slot={idx} tile={tile} from={rattleFrom} to={rattleTo} />}
+                {rattling && !shown && <HookRattle slot={idx} tile={tile} from={hook.rattleFrames[0]} to={rattleTo} />}
                 {/* letter */}
                 {shown && (
                   <div
@@ -212,10 +219,18 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
           })}
         </div>
       ))}
-      <DecodeScan clearFrame={hook.clearFrame} tile={tile} />
+      {!CLEAN_OPENING && <DecodeScan clearFrame={hook.clearFrame} tile={tile} />}
     </div>
   );
 };
+
+/** Empty-slot outline during the opening pulse: the empty outline blended towards the accent as `p` → 1. */
+function blankBorder(accent: string, p: number, emptyRgb: string) {
+  const n = parseInt(accent.slice(1, 7), 16);
+  const [er, eg, eb] = emptyRgb.split(",").map(Number);
+  const mix = (from: number, to: number) => Math.round(from + (to - from) * p * 0.85);
+  return `rgba(${mix(er, (n >> 16) & 255)}, ${mix(eg, (n >> 8) & 255)}, ${mix(eb, n & 255)}, ${(0.45 + 0.45 * p).toFixed(3)})`;
+}
 
 /** Outline strength of a filled slot once its letter has settled (accent alpha). */
 const FILLED_OUTLINE_ALPHA = 0.32;

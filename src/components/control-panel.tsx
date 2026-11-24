@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import type { PlayerRef } from "@remotion/player";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FlaskConical, Loader2, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type, Upload, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Music2, Palette, Plus, RotateCcw, Sparkles, Timer, Trash2, Type } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +12,12 @@ import { NativeSelect } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { ExportPanel } from "@/components/export-panel";
-import { FPS } from "@/remotion/constants";
+import { DEFAULT_CHALLENGE, FPS } from "@/remotion/constants";
 import { QUESTION_LINE } from "@/remotion/hook";
 import { LIBRARIES, getLibrary, type LibraryId } from "@/data/library";
 import { THEMES, type ThemeId } from "@/remotion/themes";
 import { normalizeWord, parseLetters, resolveHintLetter, resolveTimeline, uniqueLetters } from "@/remotion/timeline";
-import type { OpeningStyle, ReelProps } from "@/remotion/types";
+import type { ReelProps } from "@/remotion/types";
 import { useReelStore } from "@/store/reel-store";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +26,11 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
   const word = normalizeWord(s.word);
   const wordLetters = useMemo(() => new Set(uniqueLetters(s.word)), [s.word]);
   // The second letter actually on the board at frame 0 (same resolver as the render).
-  const second = useMemo(() => resolveTimeline(inputProps, FPS).hook.prefilled[0] ?? "", [inputProps]);
+  // Pre-filled letters besides the hint (hook.prefilled starts with the hint).
+  const second = useMemo(() => {
+    const t = resolveTimeline(inputProps, FPS);
+    return t.hook.prefilled.filter((l) => l !== t.hintLetter).join("");
+  }, [inputProps]);
 
   const warnings = useMemo(() => {
     const w: string[] = [];
@@ -40,8 +44,11 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
     if (hint && s.guesses.some((g) => g.letter === hint)) w.push(`${hint} is pre-filled on frame 0, so its guess is skipped.`);
     const typed2 = s.secondLetter.toUpperCase();
     if (typed2 && (!wordLetters.has(typed2) || typed2 === hint)) w.push(`2nd letter ${typed2} is ${typed2 === hint ? "already the hint letter" : `not in "${word}"`}, so the first correct guess is used.`);
-    if (second && second !== s.autoSecondLetter && s.guesses.some((g) => g.letter === second)) w.push(`${second} is pre-filled on frame 0, so its guess is skipped (re-time to close the gap).`);
+    const skipped = s.guesses.filter((g) => second.includes(g.letter)).map((g) => g.letter);
+    if (second && second !== s.autoSecondLetter && skipped.length) w.push(`${skipped.join(", ")} ${skipped.length > 1 ? "are" : "is"} pre-filled on frame 0, so ${skipped.length > 1 ? "their guesses are" : "its guess is"} skipped (re-time to close the gap).`);
     if (late.length) w.push(`${late.join(", ")} fall after the final reveal and will show up at the reveal instead.`);
+    const first = [...s.guesses].filter((g) => g.time < s.finalRevealAt && !second.includes(g.letter) && g.letter !== hint).sort((a, b) => a.time - b.time)[0];
+    if (first && !wordLetters.has(first.letter)) w.push(`The first guess (${first.letter}) is a miss. Start with a correct letter so 2.0 s shows progress, not "OOPS!".`);
     return w;
   }, [s.wrongLetters, s.guesses, s.finalRevealAt, s.hintLetter, s.secondLetter, s.autoSecondLetter, second, word, wordLetters]);
 
@@ -51,32 +58,20 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
     <div className="flex flex-col gap-1 p-3">
       <LibrarySection />
 
-      <Section icon={<FlaskConical />} title="A/B Test">
-        <Field label="Frame 1 hook">
-          <NativeSelect value={s.openingStyle ?? "standard"} onChange={(e) => s.update({ openingStyle: e.target.value as OpeningStyle })}>
-            <option value="standard">A · Current opening</option>
-            <option value="giant">B · Giant spelling hook (thumbnail frame)</option>
-          </NativeSelect>
-        </Field>
-        {s.openingStyle === "giant" && (
-          <Field label={`Thumbnail frame on screen · ${(s.giantHookSeconds ?? 0.25).toFixed(2)}s`}>
-            <Slider min={0.1} max={3} step={0.05} value={s.giantHookSeconds ?? 0.25} onValueChange={(v) => s.update({ giantHookSeconds: v })} />
-          </Field>
-        )}
-        {s.openingStyle === "giant" && <ColdOpenBackgroundField />}
-        <p className="text-xs text-muted-foreground">
-          {s.openingStyle === "giant"
-            ? "Frame 1 is the plain thumbnail (category, giant headline, board, “N LETTERS · 30 SECONDS”); it fades into the reel after the time above, so the Short opens exactly like its thumbnail. Renders are named …-B."
-            : "The current opening: banner, question line and scrambling board from frame 0."}{" "}
-          Metric: viewed vs swiped. Target ≥55% → keep B as the new standard.
-        </p>
-      </Section>
-
       <Section icon={<Type />} title="Content">
-        <Field label="Hook banner (frame 0)">
+        <Field label="Hook headline (thumbnail)">
           <Input value={s.hookText} maxLength={60} placeholder="99% FAIL THIS" className="uppercase" onChange={(e) => s.update({ hookText: e.target.value.toUpperCase() })} />
         </Field>
-        <Field label="Question line (0–2 s)">
+        <Field label="Top banner challenge (short, whole video)">
+          <Input
+            value={s.challenge ?? ""}
+            maxLength={30}
+            placeholder={DEFAULT_CHALLENGE}
+            className="uppercase"
+            onChange={(e) => s.update({ challenge: e.target.value.toUpperCase() })}
+          />
+        </Field>
+        <Field label="Confusion line (0–3 s)">
           <Input
             value={s.questionLine ?? ""}
             maxLength={80}
@@ -124,10 +119,10 @@ export function ControlPanel({ inputProps, playerRef }: { inputProps: ReelProps;
           <Field label={`2nd letter · ${second || "—"} on frame 0`}>
             <Input
               value={s.secondLetter}
-              maxLength={1}
+              maxLength={2}
               placeholder="auto (1st correct guess)"
               className="font-display tracking-widest uppercase"
-              onChange={(e) => s.update({ secondLetter: e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(-1) })}
+              onChange={(e) => s.update({ secondLetter: e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2) })}
             />
           </Field>
           <Field label="Wrong Guesses">
@@ -346,60 +341,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <Label>{label}</Label>
       {children}
     </div>
-  );
-}
-
-/** Test B: upload a picture for the frame-1 card's background (saved under public/backgrounds/uploads/). */
-function ColdOpenBackgroundField() {
-  const image = useReelStore((s) => s.coldOpenBackground);
-  const update = useReelStore((s) => s.update);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const upload = async (file: File | undefined) => {
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/upload-background", { method: "POST", body: form });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Upload failed");
-      update({ coldOpenBackground: body.path });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Field label="Thumbnail frame background">
-      <div className="flex items-center gap-3">
-        <div className="relative grid h-24 w-[54px] shrink-0 place-items-center overflow-hidden rounded-md border border-border bg-muted/60 text-[10px] text-muted-foreground">
-          {image ? <img src={`/${image}`} alt="" className="absolute inset-0 h-full w-full object-cover" /> : "Shelves"}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" disabled={busy} asChild>
-              <label className="cursor-pointer">
-                {busy ? <Loader2 className="animate-spin" /> : <Upload />}
-                {busy ? "Uploading…" : image ? "Replace" : "Upload picture"}
-                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} />
-              </label>
-            </Button>
-            {image && (
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => update({ coldOpenBackground: "" })}>
-                <X /> Remove
-              </Button>
-            )}
-          </div>
-          <span className="text-xs text-muted-foreground">PNG, JPG or WebP, up to 15 MB. Shown full-bleed and dimmed behind the card; kept for every video.</span>
-          {error && <span className="text-xs text-destructive">{error}</span>}
-        </div>
-      </div>
-    </Field>
   );
 }
 

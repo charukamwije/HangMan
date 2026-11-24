@@ -1,23 +1,20 @@
 /**
- * "Machine Gun" opening hook. Every frame of the first 2 s carries scripted
- * motion; nothing waits on a preamble (frames @ 30 fps).
+ * Opening hook: a CLEAN, readable board from frame 0, so the viewer gets "I can solve this"
+ * at the moment they decide to stay (frames @ 30 fps).
  *
- *   0          zero-frame camera punch-in (stage opens at 1.08×, held 3 frames, then
- *              released), the challenge banner ("99% FAIL THIS") is already up and
- *              slams in at full scale, gavel + slap pop, music bed starts REWINDING.
- *              Two letters (the hint + a second one) are already seated; the clue is
- *              sharp but covered by the question line ("ONLY REAL FANS…"); the keyboard
- *              is up, while the clock and pawns are still hidden
- *   0 → 26     decoys fire into the empty slots, gaps shrinking 4 → 1 frame (machine-gun
- *              cadence synced to the rewind). Each scrambles, then locks crimson 2 frames later
- *   0 → 30     scan beam ping-pongs across the board
- *   30         PATTERN INTERRUPT on the first clock tick: decoys wiped, rewind hard-stops,
- *              camera kick + white flash, banner re-slam, hint re-flash, slap pop
- *   30 → 57    rattle: the empty slots flicker ghost glyphs at an accelerating cadence
- *              (3 → 1 frame) under a slow tension push-in; cut 3 frames before the guess
- *   36 → 42    the same music now plays FORWARD, its downbeats on the clock ticks
- *   45 → 54    the clock fades in; "COMMENT BEFORE 0:00" pops under it (until 6 s)
- *   48 → 56    the question line lifts away, uncovering the clue
+ *   0          the challenge banner ("99% FAIL THIS") is already up and slams in at full
+ *              scale, gavel + slap pop, and the music bed starts playing FORWARD with its
+ *              beat on the clock ticks (no reversed burst, no near-silent gap). The pre-filled letters
+ *              (the hint + one or two more) are seated; every other slot is a clean blank.
+ *              The clue is sharp but covered by the question line ("ONLY REAL FANS…"); the
+ *              keyboard is up, and so is the 00:29 clock with "COMMENT BEFORE 0:00" under it
+ *              (ticking from frame 0); only the pawns are still hidden
+ *   0 → 30     ONE smooth camera zoom-in on the board; the empty slots pulse (accent
+ *              outline + glow, ~2 Hz) until the first guess. No decoy letters, no red
+ *              flashes, no glitch glyphs: nothing that makes the board look broken
+ *   30         first clock tick: banner re-slam, hint re-flash, slap pop
+ *   48 → 60    the zoom eases back out before the first guess
+ *   84 → 93    the question line (the joke / challenge, held ~3 s) clears; hint 1 comes in word by word
  *   60         regular reel: the first guess slams down (no guess may land before this
  *              frame); pawns fade in 60 → 72
  *
@@ -47,7 +44,8 @@ export const HOOK_FRAMES_30 = {
   pulse: 30,
   /** Ghost-glyph rattle in the empty slots, cut just before the first guess. */
   rattle: [30, 57],
-  musicIn: [36, 42],
+  /** Music bed: forward from frame 0 (a 3-frame fade-in under the gavel), the beat on the clock ticks. */
+  musicIn: [0, 3],
   end: 60,
 } as const;
 
@@ -56,16 +54,22 @@ export const QUESTION_LINE = "ONLY REAL FANS GET THIS IN 5 SECONDS";
 
 /** Hook UI beats, in seconds. */
 export const HOOK_UI_TIMING = {
-  /** The question line holds until here, then clears before the first guess (2.0 s). */
-  questionOut: [1.6, 1.85],
-  /** Clock fade-in. */
-  timerIn: [1.5, 1.8],
+  /**
+   * The question line clears before the first guess (2.0 s): its text fades first, then the empty plate
+   * settles into the hint card; hint 1 then reveals word by word from the end of this window.
+   */
+  questionOut: [2.8, 3.1],
+  /** Clock: up and ticking from frame 0 (a visible countdown is a strong reason to stay). */
+  timerIn: [0, 0],
   /** Balloons + pawns fade-in (the first guess lands on 2.0 s). */
   uiIn: [2.0, 2.4],
-  /** "COMMENT BEFORE 0:00" in / out. */
-  ctaIn: [1.5, 1.7],
+  /** "COMMENT BEFORE 0:00" in (frame 0) / out. */
+  ctaIn: [0, 0],
   ctaOut: [5.7, 6.0],
 } as const;
+
+/** Clean opening (no decoys / red strike flashes / ghost glyphs in the first 2 s). */
+export const CLEAN_OPENING = true;
 
 /** A 30 fps hook frame expressed at `fps`. */
 export const hookFrame = (f: number, fps: number) => Math.round((f * fps) / 30);
@@ -147,7 +151,9 @@ export function resolveHook(word: string, hintLetter: string, fps: number, { pre
     return options.length ? options[(k + hash(`${word}-${slot}`)) % options.length] : fallback;
   };
 
-  const decoys: HookDecoy[] = count
+  // Clean opening: decoy letters are no longer fired into the empty slots (they made the board read as
+  // a glitch, "DQ_I_G", right when the viewer decides). Kept behind CLEAN_OPENING for an easy A/B back.
+  const decoys: HookDecoy[] = count && !CLEAN_OPENING
     ? decoyPopFrames30().map((pop, k) => ({
         id: `d${k}`,
         slot: zigzag[k % count],

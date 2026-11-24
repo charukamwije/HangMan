@@ -4,7 +4,7 @@
  * `npm run batch` CLI, the HangmanPuzzle composition and the studio store.
  */
 import type { ThemeId } from "../themes";
-import type { OpeningStyle, ReelAudioSettings, ReelProps } from "../types";
+import type { ReelAudioSettings, ReelProps } from "../types";
 
 /** What happens on a reveal frame. */
 export type RevealStatus =
@@ -52,10 +52,6 @@ export type HangmanPuzzleData = {
   secondPrefilledLetter?: string;
   /** Max correct letters saved for the final reveal (auto mode). Default 2. */
   holdBack?: number;
-  /** A/B test, frame 1: "standard" (default) or "giant" (giant spelling-challenge hook). */
-  openingStyle?: OpeningStyle;
-  /** Test B: seconds the giant hook stays up. Default 0.25. */
-  giantHookSeconds?: number;
   /** Video length (s): cut there and loop; the pattern keeps its 30 s timing. Default 30. */
   durationSeconds?: number;
   themeId?: ThemeId;

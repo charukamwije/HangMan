@@ -14,8 +14,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Side panel next to the player: a live preview of the custom thumbnail (HangmanThumbnail),
- * a With picture / Plain toggle (the characters picture vs the theme's shelf scene, or in test B
- * the picture uploaded for the frame-1 card, so the thumbnail matches frame 1), and
+ * a With picture / Plain toggle (the characters picture vs the theme's shelf scene), and
  * downloads rendered on the server as 1080×1920 PNGs: the version shown, or both.
  */
 export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
@@ -24,20 +23,16 @@ export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
   const backgroundImage = useReelStore((s) => s.backgroundImage);
   const update = useReelStore((s) => s.update);
   const withPicture = !!backgroundImage;
-  // Test B: "Plain" uses the picture uploaded for the frame-1 card, so the thumbnail and frame 1 stay identical.
-  const giant = useReelStore((s) => s.openingStyle === "giant");
-  const coldOpenBackground = useReelStore((s) => s.coldOpenBackground);
-  const plainBackground = giant && coldOpenBackground ? coldOpenBackground : "";
   // Which picture "With picture" uses depends on the theme (K-Drama scene for Seoul Cherry Blossom Night).
   const picture = thumbnailPictureFor(inputProps.themeId);
   const [busy, setBusy] = useState<"one" | "both" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // The reel's second pre-filled letter, resolved by the same engine, so the board matches frame 0.
-  // (hook.prefilled starts with the hint letter, so take the first one that isn't it.)
+  // (hook.prefilled starts with the hint letter, so take the others.)
   const secondLetter = useMemo(() => {
     const t = resolveTimeline(inputProps, FPS);
-    return t.hook.prefilled.find((l) => l !== t.hintLetter) ?? "";
+    return t.hook.prefilled.filter((l) => l !== t.hintLetter).join("");
   }, [inputProps]);
 
   const props: ThumbnailProps = useMemo(
@@ -48,16 +43,16 @@ export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
       secondLetter,
       themeId: inputProps.themeId,
       category: getLibrary(libraryId).entries.find((v) => v.n === videoNumber)?.category ?? "",
-      backgroundImage: withPicture ? picture : plainBackground,
+      backgroundImage: withPicture ? picture : "",
     }),
-    [inputProps.hookText, inputProps.word, inputProps.hintLetter, secondLetter, inputProps.themeId, withPicture, picture, plainBackground, videoNumber, libraryId],
+    [inputProps.hookText, inputProps.word, inputProps.hintLetter, secondLetter, inputProps.themeId, withPicture, picture, videoNumber, libraryId],
   );
 
   /** Renders one version on the server and downloads it: "…-thumbnail.png" / "…-thumbnail-plain.png". */
   const fetchAndSave = async (picture: boolean) => {
-    const base = videoFileBase({ ...useReelStore.getState(), durationSeconds: 30, openingStyle: "standard" }) || "hangman";
+    const base = videoFileBase({ ...useReelStore.getState(), durationSeconds: 30 }) || "hangman";
     const fileName = `${base}-thumbnail${picture ? "" : "-plain"}`;
-    const body = { props: { ...props, backgroundImage: picture ? thumbnailPictureFor(props.themeId) : plainBackground }, fileName };
+    const body = { props: { ...props, backgroundImage: picture ? thumbnailPictureFor(props.themeId) : "" }, fileName };
     const res = await fetch("/api/thumbnail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
     const url = URL.createObjectURL(await res.blob());
@@ -122,7 +117,6 @@ export function ThumbnailPanel({ inputProps }: { inputProps: ReelProps }) {
       </Button>
       <p className="text-[11px] text-muted-foreground">
         1080×1920 PNG. Upload it as the Short&apos;s custom thumbnail.
-        {plainBackground && " Plain uses the test B picture, so it matches frame 1."}
       </p>
       {error && <p className="rounded-md bg-destructive/10 px-2 py-1 text-[11px] text-destructive">{error}</p>}
     </div>

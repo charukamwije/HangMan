@@ -66,6 +66,17 @@ export type AutoScheduleInput = {
 };
 
 /**
+ * Puts a correct guess first: the opening guess (2.0 s) should show progress, not "OOPS!". The first
+ * item for which `isCorrect` holds moves to the front; everything else keeps its order (so a planned
+ * decider, e.g. the 4th guess, stays where it was). Unchanged when there is no correct guess.
+ */
+export function correctFirst<T>(items: readonly T[], isCorrect: (item: T) => boolean): T[] {
+  const i = items.findIndex(isCorrect);
+  if (i <= 0) return [...items];
+  return [items[i], ...items.slice(0, i), ...items.slice(i + 1)];
+}
+
+/**
  * Builds a guess sequence on a fixed beat grid: common letters first (they
  * reveal the most tiles), rarest letters held back for the 00:00 reveal, wrong
  * guesses interleaved evenly, one sequence change every 2.0–2.5 s.
@@ -112,10 +123,13 @@ export function autoSchedule({
   }
 
   const correct = ordered.slice(0, ordered.length - held);
-  const seq = [
-    ...correct.map((letter, i) => ({ letter, pos: (i + 0.5) / correct.length })),
-    ...wrong.map((letter, i) => ({ letter, pos: (i + 1) / (wrong.length + 1) - 0.001 })),
-  ].sort((a, b) => a.pos - b.pos);
+  const seq = correctFirst(
+    [
+      ...correct.map((letter, i) => ({ letter, pos: (i + 0.5) / correct.length })),
+      ...wrong.map((letter, i) => ({ letter, pos: (i + 1) / (wrong.length + 1) - 0.001 })),
+    ].sort((a, b) => a.pos - b.pos),
+    (s) => !notInWord(s.letter),
+  );
 
   // Step snapped down to 0.1 s so every beat lands on an exact frame (3 frames @ 30 fps).
   const raw = seq.length > 1 ? span / (seq.length - 1) : 0;
@@ -149,17 +163,21 @@ export const finalRevealStagger = (fps: number) => Math.max(1, Math.round(fps / 
 export const FINAL_REVEAL_STAGGER = 3;
 
 /**
- * The second letter pre-filled on frame 0, next to the hint. `requested` wins when it is in
- * the word (and not the hint); otherwise the first correct guess before the reveal, otherwise
- * any other letter of the word. "" for a one-letter word.
+ * The extra letter(s) pre-filled on frame 0, next to the hint (usually one: the "second letter").
+ * `requested` wins when its letters are in the word (and not the hint): one letter, or up to two
+ * for a word that opens with three on the board (e.g. "IG" for D _ _ _ I _ G). Otherwise the first
+ * correct guess before the reveal, otherwise any other letter of the word. "" for a one-letter word.
  *
  * The store / batch path pick the first correct guess and then re-schedule WITHOUT it (see
  * scheduleWithSecondLetter), so its beat is not lost; with manual timing its guess is skipped.
  */
+/** Most letters pre-filled on frame 0 besides the hint. */
+export const MAX_EXTRA_PREFILL = 2;
+
 export function resolveSecondLetter(word: string, hintLetter: string, guesses: readonly Guess[], finalRevealAt: number, requested = ""): string {
   const w = normalizeWord(word).replace(/ /g, "");
-  const r = requested.toUpperCase().slice(0, 1);
-  if (r && r !== hintLetter && w.includes(r)) return r;
+  const r = [...new Set(requested.toUpperCase().replace(/[^A-Z]/g, ""))].filter((c) => c !== hintLetter && w.includes(c)).slice(0, MAX_EXTRA_PREFILL).join("");
+  if (r) return r;
   const first = [...guesses]
     .filter((g) => g.time < finalRevealAt && g.letter.toUpperCase() !== hintLetter && w.includes(g.letter.toUpperCase()))
     .sort((a, b) => a.time - b.time)[0];
@@ -174,7 +192,7 @@ export function resolveSecondLetter(word: string, hintLetter: string, guesses: r
 export function scheduleWithSecondLetter(input: AutoScheduleInput & { secondLetter?: string }): { guesses: Guess[]; secondLetter: string } {
   const hint = resolveHintLetter(input.word, input.hintLetter ?? "");
   const secondLetter = resolveSecondLetter(input.word, hint, autoSchedule(input), input.finalRevealAt, input.secondLetter ?? "");
-  return { guesses: autoSchedule({ ...input, prefilled: secondLetter ? [secondLetter] : [] }), secondLetter };
+  return { guesses: autoSchedule({ ...input, prefilled: [...secondLetter] }), secondLetter };
 }
 
 export function resolveTimeline(
@@ -188,7 +206,7 @@ export function resolveTimeline(
   const toFrame = (s: number) => Math.max(0, Math.min(durationFrames - 1, Math.round(s * fps)));
   const finalRevealFrame = toFrame(props.finalRevealAt);
   const second = resolveSecondLetter(word, hintLetter, props.guesses, props.finalRevealAt, props.secondLetter ?? "");
-  const hook = resolveHook(word, hintLetter, fps, { prefill: second ? [second] : [] });
+  const hook = resolveHook(word, hintLetter, fps, { prefill: [...second] });
 
   // Pre-filled letters are on the board from frame 0, so their guesses are skipped like the hint's.
   const seen = new Set<string>([...(hintLetter ? [hintLetter] : []), ...hook.prefilled]);

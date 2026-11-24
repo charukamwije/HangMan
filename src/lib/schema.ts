@@ -7,10 +7,11 @@ export const reelPropsSchema = z.object({
   // Defaults keep older props files (pre-hook) valid.
   hookText: z.string().max(60).default(DEFAULT_HOOK_TEXT),
   hintLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").default(""),
-  secondLetter: z.string().regex(/^[A-Za-z]?$/, "One letter or empty").optional(),
+  secondLetter: z.string().regex(/^[A-Za-z]{0,2}$/, "Up to two letters").optional(),
   subtitle: z.string().max(120),
   hint2: z.string().max(120).default(""),
   questionLine: z.string().max(80).optional(),
+  challenge: z.string().max(30).optional(),
   word: z
     .string()
     .min(1)
@@ -28,10 +29,6 @@ export const reelPropsSchema = z.object({
     sfx: z.number().min(0).max(1),
   }),
   showSafeZones: z.boolean(),
-  openingStyle: z.enum(["standard", "giant"]).optional(),
-  category: z.string().max(60).optional(),
-  coldOpenBackground: z.string().regex(/^[A-Za-z0-9_\-/.]*$/).refine((p) => !p.includes(".."), "Invalid path").optional(),
-  giantHookSeconds: z.number().min(0.05).max(5).optional(),
   durationSeconds: z.number().int().min(10).max(DURATION_SECONDS).optional(),
   backgroundImage: z.string().regex(/^[A-Za-z0-9_\-/.]*$/).refine((p) => !p.includes(".."), "Invalid path").optional(),
 });
