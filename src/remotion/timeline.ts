@@ -229,8 +229,8 @@ export function resolveTimeline(
 
   const correctKeyFrames = new Map<string, number>();
   const wrongKeyFrames = new Map<string, number>();
-  if (hintLetter) correctKeyFrames.set(hintLetter, hook.lockFrame);
-  for (const l of hook.prefilled) correctKeyFrames.set(l, hook.lockFrame);
+  if (hintLetter) correctKeyFrames.set(hintLetter, hook.seatFrames.get(hintLetter) ?? hook.lockFrame);
+  for (const l of hook.prefilled) correctKeyFrames.set(l, hook.seatFrames.get(l) ?? hook.lockFrame);
   for (const g of guesses) {
     if (g.kind === "correct" && g.frame < finalRevealFrame) correctKeyFrames.set(g.letter, g.frame);
     if (g.kind === "wrong") wrongKeyFrames.set(g.letter, g.frame);

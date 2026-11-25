@@ -45,17 +45,19 @@ export const AudioTrack: React.FC<{ timeline: Timeline; audio: ReelAudioSettings
   // Opening (0 → first guess, while viewers decide): the bed plays ~6 dB hotter so there is no
   // near-silence, easing back to the normal level by 2.4 s once the first guess has landed.
   const hookEnd = timeline.hook.endFrame;
-  const boostOff = hookEnd + Math.round(0.4 * fps);
+  // Eases off around the first guess (from 0.2 s before it), so its impact never stacks on the boosted bed.
+  const boostFrom = hookEnd - Math.round(0.2 * fps);
+  const boostOff = hookEnd + Math.round(0.3 * fps);
   const musicVolume = useCallback(
     (f: number) =>
       Math.min(
         1, // a high music setting × the opening boost must not exceed full volume
         interpolate(f, [0, xfadeTo - xfadeFrom, musicFrames - fps], [0, audio.music, audio.music], CLAMP) *
-          interpolate(xfadeFrom + f, [hookEnd, boostOff], [OPENING_MUSIC_BOOST, 1], CLAMP) *
+          interpolate(xfadeFrom + f, [boostFrom, boostOff], [OPENING_MUSIC_BOOST, 1], CLAMP) *
           // the song itself is "rewound" by loop-rewind.wav, so it drops out as the rewind starts
           interpolate(xfadeFrom + f, [Math.min(musicCut, loopFrom), Math.min(musicCut, loopFrom) + 2], [1, 0], CLAMP),
       ),
-    [xfadeFrom, xfadeTo, musicFrames, fps, audio.music, loopFrom, musicCut, hookEnd, boostOff],
+    [xfadeFrom, xfadeTo, musicFrames, fps, audio.music, loopFrom, musicCut, boostFrom, boostOff],
   );
 
   if (!audio.enabled) return null;

@@ -119,6 +119,12 @@ export const AUDIO = {
   whoosh: "audio/whoosh.wav",
   /** Opening hook: every decoy click / strike / thud pre-mixed into one 1 s file (see generate-sfx.mjs). */
   hookDecode: "audio/hook-decode.wav",
+  /** Start screen: a blip on every card blink, pre-mixed into one 2 s file (see generate-sfx.mjs). */
+  hookBlinks: "audio/hook-blinks.wav",
+  /** Frame 0: big glass break as the pre-filled letters' glass shatters (crack → smash → tinkles). */
+  glassBreak: "audio/glass-break.wav",
+  /** Frame 0: loud attention-grabbing hit (sub boom + crack + bright stab + shimmer). */
+  openingHit: "audio/opening-hit.wav",
   /** Opening hook: geiger/typewriter click per decoy pop + strike. */
   click: "audio/click.wav",
   /** Opening hook: metallic lock as the hint letter lands (frame 25). */
@@ -146,6 +152,9 @@ export const AUDIO_SECONDS = {
   reveal: 3.2,
   click: 0.05,
   hookDecode: 1.05,
+  hookBlinks: 2.0,
+  openingHit: 0.75,
+  glassBreak: 1.3,
   correct: 0.9,
   wrong: 0.55,
   whoosh: 0.3,

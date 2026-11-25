@@ -64,9 +64,7 @@ export const Keyboard: React.FC<{
             const since = state === "correct" ? frame - cf! : state === "wrong" ? frame - wf! : -1;
             // Loop reset: lit / struck keys fade back to idle in an A → Z sweep (first ~85 % of the reset).
             const k = letter.charCodeAt(0) - 65;
-            // Keys of letters pre-filled on frame 0 (lit from a negative frame) stay lit, so the replay seam matches.
-            const seated = state === "correct" && cf! < 0;
-            const reset = state === "idle" || seated ? 0 : loopReset(frame, durationInFrames, fps, 0.45 * (k / 25), 0.45 * (k / 25) + 0.4);
+            const reset = state === "idle" ? 0 : loopReset(frame, durationInFrames, fps, 0.45 * (k / 25), 0.45 * (k / 25) + 0.4);
             if (reset <= 0) return <Key key={letter} letter={letter} state={state} since={since} theme={theme} fps={fps} />;
             return (
               <div key={letter} style={{ position: "relative", width: KEY_W, height: KEY_H }}>

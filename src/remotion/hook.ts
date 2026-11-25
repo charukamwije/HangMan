@@ -5,7 +5,9 @@
  *   0          the challenge banner ("99% FAIL THIS") is already up and slams in at full
  *              scale, gavel + slap pop, and the music bed starts playing FORWARD with its
  *              beat on the clock ticks (no reversed burst, no near-silent gap). The pre-filled letters
- *              (the hint + one or two more) are seated; every other slot is a clean blank.
+ *              (the hint + one or two more) are TRAPPED BEHIND GLASS in their cards; cracks run
+ *              out on frame 1 and the glass SHATTERS on frame 2 with a big glass-break sound, the
+ *              letters breaking out bright; every other slot is a clean blank
  *              The clue is sharp but covered by the question line ("ONLY REAL FANS…"); the
  *              keyboard is up, and so is the 00:29 clock with "COMMENT BEFORE 0:00" under it
  *              (ticking from frame 0); only the pawns are still hidden
@@ -68,6 +70,26 @@ export const HOOK_UI_TIMING = {
   ctaOut: [5.7, 6.0],
 } as const;
 
+/**
+ * Start-screen blinks (frames @ 30 fps): on each, one random empty card flashes fully filled with
+ * colour, with a blip (all blips pre-mixed into hook-blinks.wav on this same schedule; keep in sync
+ * with HOOK_BLINKS_30 in scripts/generate-sfx.mjs). Irregular gaps so it reads as random; the last
+ * one has faded before the first guess (frame 60).
+ */
+export const HOOK_BLINKS_30 = [3, 7, 10, 15, 18, 22, 27, 30, 34, 38, 41, 46, 49, 53] as const;
+/** A blink's flash: full colour on its frame, faded out over this many frames (@ 30 fps). */
+export const HOOK_BLINK_FADE_30 = 6;
+
+/**
+ * Glass breach (frames @ 30 fps): the pre-filled letters start trapped behind glass in their cards
+ * (frame 0, intact), cracks run out on GLASS_CRACK_30 and the panes shatter on GLASS_BREAK_30, when the
+ * letters break out (and their keys light). The shards fly for GLASS_SHATTER_30 frames. The glass-break
+ * sound (glass-break.wav) starts on frame 0, its smash baked in on the break frame.
+ */
+export const GLASS_CRACK_30 = 1;
+export const GLASS_BREAK_30 = 2;
+export const GLASS_SHATTER_30 = 18;
+
 /** Clean opening (no decoys / red strike flashes / ghost glyphs in the first 2 s). */
 export const CLEAN_OPENING = true;
 
@@ -86,14 +108,27 @@ export type HookDecoy = {
   endFrame: number;
 };
 
+export type HookBlink = {
+  /** Character index into the (normalized) word: always an empty (not pre-filled) card. */
+  slot: number;
+  frame: number;
+};
+
 export type HookPlan = {
   decoys: HookDecoy[];
+  /** Start screen: empty cards flashing full colour at random, one per beat of HOOK_BLINKS_30. */
+  blinks: HookBlink[];
   /** Every ✖ frame, sorted (board kick + red flash). */
   strikeFrames: number[];
   /** Character index → frame that hint-letter slot snaps in. */
   snapFrames: Map<number, number>;
-  /** Frame the pre-filled keys count as lit: negative (already lit on frame 0). Without pre-filled letters, the lock snap. */
+  /** Frame the hint letter locks in (its first seat). */
   lockFrame: number;
+  /** Pre-filled letter → the frame it breaks out of its glass (GLASS_BREAK_30). */
+  seatFrames: Map<string, number>;
+  /** Glass breach frames: cracks appear, then the panes shatter. */
+  glassCrackFrame: number;
+  glassBreakFrame: number;
   clearFrame: number;
   /** Pattern-interrupt frame (first clock tick). */
   pulseFrame: number;
@@ -174,16 +209,34 @@ export function resolveHook(word: string, hintLetter: string, fps: number, { pre
   const span = HOOK_FRAMES_30.snapEnd - HOOK_FRAMES_30.snapStart;
   const first = HOOK_FRAMES_30.snapEnd - Math.min(span, Math.max(0, hintSlots.length - 1));
   const snapFrames = new Map<number, number>();
-  // Pre-filled: the snap is set far enough in the past that frame 0 shows the letters seated, no flash.
-  const seated = -2 * fps;
-  if (prefilled.length) chars.forEach((c, idx) => prefilled.includes(c) && snapFrames.set(idx, seated));
+  // Pre-filled: trapped behind glass on frame 0; every one breaks out together when the glass shatters.
+  const glassBreakFrame = Math.max(1, F(GLASS_BREAK_30));
+  const seatFrames = new Map<string, number>();
+  prefilled.forEach((l) => seatFrames.set(l, glassBreakFrame));
+  if (prefilled.length) chars.forEach((c, idx) => seatFrames.has(c) && snapFrames.set(idx, seatFrames.get(c)!));
   else hintSlots.forEach((idx, k) => snapFrames.set(idx, F(Math.min(HOOK_FRAMES_30.snapEnd, first + k))));
+
+  // Start-screen blinks: a random empty card per blink (stable per word), never the same card twice in a row.
+  const blinks: HookBlink[] = [];
+  if (empty.length) {
+    let prev = -1;
+    HOOK_BLINKS_30.forEach((f, k) => {
+      let pick = empty[hash(`${word}-blink-${k}`) % empty.length];
+      if (pick === prev && empty.length > 1) pick = empty[(empty.indexOf(pick) + 1 + (hash(`${word}-b2-${k}`) % (empty.length - 1))) % empty.length];
+      blinks.push({ slot: pick, frame: F(f) });
+      prev = pick;
+    });
+  }
 
   return {
     decoys,
+    blinks,
     strikeFrames: decoys.filter((d) => d.strikeFrame < d.endFrame).map((d) => d.strikeFrame).sort((a, b) => a - b),
     snapFrames,
-    lockFrame: prefilled.length ? seated : F(HOOK_FRAMES_30.snapEnd),
+    lockFrame: prefilled.length ? seatFrames.get(prefilled[0])! : F(HOOK_FRAMES_30.snapEnd),
+    seatFrames,
+    glassCrackFrame: F(GLASS_CRACK_30),
+    glassBreakFrame,
     clearFrame,
     pulseFrame: F(HOOK_FRAMES_30.pulse),
     rattleFrames: [F(HOOK_FRAMES_30.rattle[0]), F(HOOK_FRAMES_30.rattle[1])],

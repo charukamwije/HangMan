@@ -106,7 +106,8 @@ const ReelStage: React.FC<ReelProps> = (props) => {
   const redHit = ramp(sinceWrong, [0, 0.067], [0.28, 0]);
   const correctFrames = useMemo(
     () => [
-      timeline.hook.lockFrame, // accent bloom as the hint locks in (frame 4)
+      timeline.hook.lockFrame, // accent bloom as the hint locks in
+      ...timeline.hook.seatFrames.values(), // ... and as the pre-filled letters break out of the glass
       ...timeline.guesses.filter((g) => g.kind === "correct" && g.frame < timeline.finalRevealFrame).map((g) => g.frame),
     ],
     [timeline],

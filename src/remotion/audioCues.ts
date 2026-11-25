@@ -35,12 +35,20 @@ export function buildAudioCues(
   const { sfx } = audio;
   const cues: AudioCue[] = [];
 
-  // 1. Frame-0 impact: heavy hardwood gavel + sub drop. The hook lands with a hit, not silence.
-  cues.push({ id: "gavel", src: AUDIO.gavel, from: 0, durationInFrames: seconds(AUDIO_SECONDS.gavel, fps), volume: clamp01(sfx) });
+  // 1. Frame-0 attention grabber: a loud, bright hit (sub boom + crack + D-minor stab + shimmer) over the
+  //    gavel, so the very first frame demands attention instead of opening on a soft knock.
+  cues.push({ id: "opening-hit", src: AUDIO.openingHit, from: 0, durationInFrames: seconds(AUDIO_SECONDS.openingHit, fps), volume: clamp01(sfx * 0.3) });
+  cues.push({ id: "gavel", src: AUDIO.gavel, from: 0, durationInFrames: seconds(AUDIO_SECONDS.gavel, fps), volume: clamp01(sfx * 0.25) });
   // 1a. Scroll-stopper slap: crisp digital pop on frame 0, synced to the zero-frame 1.08× punch-in (HangmanReel).
-  cues.push({ id: "slap-pop", src: AUDIO.slapPop, from: 0, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx) });
+  cues.push({ id: "slap-pop", src: AUDIO.slapPop, from: 0, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.3) });
   // 1a'. Pattern interrupt on the first clock tick (1 s): the same pop under the camera kick + flash + banner re-slam.
   cues.push({ id: "hook-pulse", src: AUDIO.slapPop, from: timeline.hook.pulseFrame, durationInFrames: seconds(AUDIO_SECONDS.slapPop, fps), volume: clamp01(sfx * 0.7) });
+
+  // 1c. Start screen: a blip on each random card blink (one pre-mixed file on the HOOK_BLINKS_30 schedule,
+  //       so ~14 separate <Audio> tags don't mount in the first 2 s).
+  if (timeline.hook.blinks.length) {
+    cues.push({ id: "hook-blinks", src: AUDIO.hookBlinks, from: 0, durationInFrames: Math.min(timeline.hook.endFrame, seconds(AUDIO_SECONDS.hookBlinks, fps)), volume: clamp01(sfx * 0.55) });
+  }
 
   // 1b. Machine-gun hook (decode 0–30): a sharp click on every decoy pop, click + thud on its ✖,
   //     then a metallic lock on the frame the last hint slot snaps in (4).
@@ -52,8 +60,13 @@ export function buildAudioCues(
     cues.push({ id: "hook-decode", src: AUDIO.hookDecode, from: 0, durationInFrames: Math.min(hook.clearFrame + 2, seconds(AUDIO_SECONDS.hookDecode, fps)), volume: clamp01(sfx) });
   }
   // (No reversed-music burst any more: the music bed plays forward from frame 0, see AudioTrack.)
-  // The pre-filled letters are already seated on frame 0, so normally there is no lock moment
+  // (Without pre-filled letters, e.g. a one-letter word, the hint still snaps + locks on its own.)
   // (only a one-letter word, with nothing to pre-fill but the hint, still snaps + locks).
+  // Glass breach: the pre-filled letters' glass cracks and shatters on the first frames: one big glass-break
+  // (initial crack on frame 0, the smash on the break frame, then a long tail of tinkles and debris).
+  if (hook.seatFrames.size) {
+    cues.push({ id: "glass-break", src: AUDIO.glassBreak, from: 0, durationInFrames: seconds(AUDIO_SECONDS.glassBreak, fps), volume: clamp01(sfx * 0.85) });
+  }
   if (timeline.hintLetter && !hook.prefilled.length) {
     cues.push({ id: "hook-lock", src: AUDIO.lock, from: hook.lockFrame, durationInFrames: seconds(AUDIO_SECONDS.lock, fps), volume: clamp01(sfx * 0.9) });
   }

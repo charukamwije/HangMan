@@ -5,7 +5,8 @@ import { DISPLAY_FONT } from "../fonts";
 import { framesSinceLast, NEVER, ramp, strikeShake } from "../motion";
 import { loopReset } from "../loop";
 import { SAFE_WIDTH, SAFE_ZONE } from "../constants";
-import { CLEAN_OPENING, type HookPlan } from "../hook";
+import { CLEAN_OPENING, GLASS_SHATTER_30, HOOK_BLINK_FADE_30, type HookPlan } from "../hook";
+import { GlassPane } from "./GlassPane";
 import { DecodeScan, HookDecoys, HookRattle } from "./OpeningHook";
 
 const MAX_LINE = 12;
@@ -76,6 +77,19 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
   const kickScale = 1 - 0.025 * ramp(sinceStrike, [0, 4], [1, 0]);
   // Pulsing blanks (frame 0 → first guess): the empty slots breathe an accent outline + glow at ~2 Hz,
   // starting from rest on frame 0 (so the loop seam matches) and fading out into the first guess.
+  // Glass breach: intact on frame 0 (and re-formed over the last part of the loop reset, so the replay's
+  // frame 0 matches), cracked from glassCrackFrame, shattering from glassBreakFrame.
+  const glassIntact = frame < hook.glassBreakFrame ? 1 : loopReset(frame, durationInFrames, fps, 0.55, 1);
+  const glassCracked = frame >= hook.glassCrackFrame && frame < hook.glassBreakFrame;
+  const shatterLen = Math.max(4, Math.round((GLASS_SHATTER_30 * fps) / 30));
+  const glassShatter = frame >= hook.glassBreakFrame && frame < hook.glassBreakFrame + shatterLen ? (frame - hook.glassBreakFrame) / shatterLen : null;
+  // Start-screen blinks: frame → slot of each blink, so a card can find its latest flash.
+  const blinkFade = Math.max(2, Math.round((HOOK_BLINK_FADE_30 * fps) / 30));
+  const blinkAt = (slot: number) => {
+    let latest = -Infinity;
+    for (const b of hook.blinks) if (b.slot === slot && b.frame <= frame && b.frame > latest) latest = b.frame;
+    return Number.isFinite(latest) ? ramp(frame - latest, [0, blinkFade], [1, 0]) : 0;
+  };
   const blankPulse =
     frame < hook.endFrame
       ? (0.5 - 0.5 * Math.cos((frame / fps) * Math.PI * 2 * 2)) * (1 - ramp(frame, [hook.endFrame - Math.round((6 * fps) / 30), hook.endFrame], [0, 1]))
@@ -147,9 +161,8 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
             const hintHalo = snap && shown && frame < hook.endFrame ? (1 - ramp(frame, [hook.endFrame - Math.round((6 * fps) / 30), hook.endFrame], [0, 1])) * (0.7 + 0.3 * Math.cos((frame / fps) * Math.PI * 2 * 2)) : 0;
             const decoys = decoysBySlot.get(idx);
             const wave = (solved ? Math.max(0, Math.sin(sinceSolved * 6.7 - idx * 0.5)) * 0.25 : 0) * settle;
-            // Letters pre-filled on frame 0 (seated from a negative frame) stay in their slots through the
-            // loop reset, so the last frame matches frame 0; every other letter lifts out.
-            const lift = shown && at >= 0 ? loopReset(frame, durationInFrames, fps, 0.45 + 0.35 * (idx / Math.max(1, word.length - 1)), 0.65 + 0.35 * (idx / Math.max(1, word.length - 1))) : 0;
+            // Loop reset: every letter (the pre-filled ones too: they slam in again after frame 0) lifts out.
+            const lift = shown ? loopReset(frame, durationInFrames, fps, 0.45 + 0.35 * (idx / Math.max(1, word.length - 1)), 0.65 + 0.35 * (idx / Math.max(1, word.length - 1))) : 0;
             // Settled glow is kept tight so it doesn't haze the slot outline; the flash still blooms.
             const glow = 8 + 60 * flash + 24 * wave + 34 * hintHalo;
 
@@ -191,6 +204,25 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                       .join(", "),
                   }}
                 />
+                {/* start screen: the empty card flashes fully filled with colour, then fades back */}
+                {!shown && frame < hook.endFrame && (() => {
+                  const b = blinkAt(idx);
+                  if (b <= 0.001) return null;
+                  return (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: `${tile * 0.06}px 0 ${tile * 0.16}px`,
+                        borderRadius: tile * 0.14,
+                        background: `linear-gradient(180deg, ${theme.accent}, ${theme.accent}cc)`,
+                        opacity: Math.min(1, b * 1.15),
+                        boxShadow: `0 0 ${(tile * 0.6 * b).toFixed(1)}px ${theme.accent}, inset 0 0 ${(tile * 0.25).toFixed(1)}px rgba(255,255,255,${(0.45 * b).toFixed(2)})`,
+                        transform: `scale(${(1 + 0.06 * b).toFixed(4)})`,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  );
+                })()}
                 {decoys && frame < hook.clearFrame && <HookDecoys decoys={decoys} tile={tile} />}
                 {rattling && !shown && <HookRattle slot={idx} tile={tile} from={hook.rattleFrames[0]} to={rattleTo} />}
                 {/* letter */}
@@ -213,6 +245,23 @@ export const WordBoard: React.FC<{ theme: Theme; word: string; revealFrames: num
                   >
                     {ch}
                   </div>
+                )}
+                {/* opening: the pre-filled letter trapped behind glass, which shatters on the first frames */}
+                {hook.seatFrames.has(ch) && (glassIntact > 0.001 || glassShatter !== null) && (
+                  <GlassPane
+                    width={tile}
+                    height={lineHeight - tile * 0.22}
+                    left={0}
+                    top={tile * 0.06}
+                    letter={ch}
+                    fontSize={tile * 1.08}
+                    bottom={tile * 0.26}
+                    accent={theme.accent}
+                    intact={glassIntact}
+                    cracked={glassCracked}
+                    shatter={glassShatter}
+                    seed={`${word}-${idx}`}
+                  />
                 )}
               </div>
             );

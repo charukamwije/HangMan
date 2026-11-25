@@ -574,6 +574,133 @@ function whoosh() {
  * nested-update limit. Pop schedule mirrors decoyPopFrames30() in src/remotion/hook.ts
  * (keep in sync): gaps ease 4 → 1 frame across frames 0 → 26 @ 30 fps.
  */
+/**
+ * Frame-0 attention grabber (~0.7 s): a loud, bright "event" hit rather than a knock. Layers:
+ * a sub boom dropping 110 → 38 Hz, a sharp noise crack on the attack, a wide detuned D-minor
+ * stab (D4 F4 A4 D5, fits the music bed) and a high shimmer on top. Normalised hot (0.97).
+ */
+function openingHit() {
+  const out = buf(0.75), rnd = mulberry32(33);
+  const [l, r] = out;
+  const n = l.length;
+  const crack = new Float32Array(n);
+  for (let i = 0; i < n; i++) crack[i] = (rnd() * 2 - 1) * env(i / SR, 0.0004, 0.025);
+  highpass(crack, 1800);
+  let ph = 0;
+  const chord = [293.66, 349.23, 440.0, 587.33];
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    ph += (38 + 72 * Math.exp(-t / 0.06)) / SR;
+    const boom = Math.sin(TAU * ph) * env(t, 0.003, 0.28) * 1.0;
+    let stabL = 0, stabR = 0;
+    for (const f of chord) {
+      // two slightly detuned saws per note, one per side, for width
+      const a = ((t * f * 1.004) % 1) * 2 - 1, b = ((t * f * 0.996) % 1) * 2 - 1;
+      stabL += a; stabR += b;
+    }
+    const stabEnv = env(t, 0.002, 0.16) * 0.16;
+    const shimmer = (Math.sin(TAU * 2349.3 * t) + 0.5 * Math.sin(TAU * 3520 * t)) * env(t, 0.001, 0.22) * 0.18;
+    l[i] = boom + crack[i] * 0.9 + stabL * stabEnv + shimmer;
+    r[i] = boom + crack[i] * 0.9 + stabR * stabEnv + shimmer;
+  }
+  // tame the saw fizz a little, keep the crack bright
+  const [sl, sr] = [new Float32Array(l), new Float32Array(r)];
+  lowpass(sl, 6000); lowpass(sr, 6000);
+  for (let i = 0; i < n; i++) { l[i] = sl[i]; r[i] = sr[i]; }
+  fade(out, 0, 0.12);
+  normalize(out, 0.97);
+  return out;
+}
+
+/**
+ * Big glass break for the opening breach (~1.3 s, keep the smash in sync with GLASS_BREAK_30 = frame 2
+ * in src/remotion/hook.ts): a sharp crack on frame 0, the SMASH at 2/30 s (broadband burst + low thump),
+ * then a dense, decaying shower of high glass tinkles and grainy debris, spread across the stereo field.
+ */
+function glassBreak() {
+  const out = buf(1.3), rnd = mulberry32(404);
+  const [l, r] = out;
+  const n = l.length;
+  const SMASH = 2 / 30;
+  // initial crack (frame 0)
+  const crack = new Float32Array(n);
+  for (let i = 0; i < Math.round(0.05 * SR); i++) crack[i] = (rnd() * 2 - 1) * env(i / SR, 0.0002, 0.006);
+  highpass(crack, 2500);
+  // smash: broadband noise burst + low thump
+  const burst = new Float32Array(n);
+  const s0 = Math.round(SMASH * SR);
+  for (let i = s0; i < n; i++) burst[i] = (rnd() * 2 - 1) * env((i - s0) / SR, 0.0008, 0.13);
+  highpass(burst, 900);
+  // grainy debris: sparse noise grains, thinning out
+  const debris = new Float32Array(n);
+  for (let g = 0; g < 260; g++) {
+    const at = SMASH + 0.02 + Math.pow(rnd(), 1.8) * 1.1;
+    const start = Math.round(at * SR), len = Math.round((0.002 + rnd() * 0.01) * SR);
+    const amp = (0.25 + rnd() * 0.5) * Math.exp(-(at - SMASH) / 0.45);
+    for (let j = 0; j < len && start + j < n; j++) debris[start + j] += (rnd() * 2 - 1) * amp * env(j / SR, 0.0002, 0.003);
+  }
+  highpass(debris, 3000);
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    const thump = t >= SMASH ? Math.sin(TAU * (70 + 50 * Math.exp(-(t - SMASH) / 0.03)) * (t - SMASH)) * env(t - SMASH, 0.002, 0.12) * 0.9 : 0;
+    const v = crack[i] * 1.1 + burst[i] * 1.2 + debris[i] + thump;
+    l[i] = v; r[i] = v;
+  }
+  // tinkles: many short high sine pings (glass resonances), denser right after the smash
+  for (let k = 0; k < 140; k++) {
+    const at = SMASH + 0.005 + Math.pow(rnd(), 2.2) * 1.15;
+    const f = 2200 + rnd() * 7000;
+    const start = Math.round(at * SR), len = Math.round(0.09 * SR);
+    const amp = (0.18 + rnd() * 0.35) * Math.exp(-(at - SMASH) / 0.5);
+    const decay = 0.006 + rnd() * 0.03;
+    const pan = rnd();
+    for (let j = 0; j < len && start + j < n; j++) {
+      const t = j / SR;
+      const v = (Math.sin(TAU * f * t) + 0.4 * Math.sin(TAU * f * 2.71 * t)) * env(t, 0.0003, decay) * amp;
+      l[start + j] += v * (1 - pan) * 1.4;
+      r[start + j] += v * pan * 1.4;
+    }
+  }
+  // Loud and big: soft-saturate (tanh) to lift the body of the smash, then normalise.
+  normalize(out, 1);
+  const DRIVE = 3.2, norm = Math.tanh(DRIVE);
+  for (let i = 0; i < n; i++) { l[i] = Math.tanh(DRIVE * l[i]) / norm; r[i] = Math.tanh(DRIVE * r[i]) / norm; }
+  fade(out, 0, 0.25);
+  normalize(out, 0.95);
+  return out;
+}
+
+// Keep in sync with HOOK_BLINKS_30 in src/remotion/hook.ts.
+const HOOK_BLINKS_30 = [3, 7, 10, 15, 18, 22, 27, 30, 34, 38, 41, 46, 49, 53];
+
+/**
+ * Start-screen card blinks pre-mixed into ONE file: a bright, short sine-and-square blip on every
+ * blink, pitched on a D-minor pentatonic (fits the music bed), in a fixed pseudo-random order,
+ * with a tiny click on the attack so each flash "pops".
+ */
+function hookBlinks() {
+  const out = buf(2.0), rnd = mulberry32(57);
+  const [l, r] = out;
+  const scale = [587.33, 698.46, 783.99, 880.0, 1046.5, 1174.66]; // D5 F5 G5 A5 C6 D6
+  let last = -1;
+  for (const f of HOOK_BLINKS_30) {
+    let k = Math.floor(rnd() * scale.length);
+    if (k === last) k = (k + 1 + Math.floor(rnd() * (scale.length - 1))) % scale.length;
+    last = k;
+    const freq = scale[k], start = Math.round((f / 30) * SR), len = Math.round(0.14 * SR);
+    const pan = 0.5 + (rnd() - 0.5) * 0.5;
+    for (let j = 0; j < len && start + j < l.length; j++) {
+      const t = j / SR;
+      const tone = Math.sin(TAU * freq * t) * 0.7 + Math.sign(Math.sin(TAU * freq * t)) * 0.12 + Math.sin(TAU * freq * 2 * t) * 0.15;
+      const v = tone * env(t, 0.002, 0.045) + (rnd() * 2 - 1) * env(t, 0.0003, 0.002) * 0.3;
+      l[start + j] += v * (1 - pan) * 1.4;
+      r[start + j] += v * pan * 1.4;
+    }
+  }
+  normalize(out, 0.75);
+  return out;
+}
+
 function hookDecode() {
   const pops = [];
   for (let t = 0; t <= 26; ) {
@@ -624,6 +751,9 @@ writeWav("whoosh.wav", whoosh());
 writeWav("lock.wav", lock());
 writeWav("slap-pop.wav", slapPop());
 writeWav("hook-decode.wav", hookDecode());
+writeWav("hook-blinks.wav", hookBlinks());
+writeWav("opening-hit.wav", openingHit());
+writeWav("glass-break.wav", glassBreak());
 const musicBed = music();
 writeWav("music.wav", musicBed);
 writeWav("rewind.wav", rewind(musicBed));
